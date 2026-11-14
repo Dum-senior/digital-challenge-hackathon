@@ -173,7 +173,7 @@ function _apiRequireAgent(array $user): void
 }
 
 /**
- * Decode the JSON request body. Returns an array (may be empty).
+ * Decode an optional JSON object. Reject invalid nonempty bodies before writes.
  */
 function _apiInput(): array
 {
@@ -182,7 +182,22 @@ function _apiInput(): array
         return [];
     }
     $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+    if (!is_array($data) || !str_starts_with(ltrim($raw), '{')) {
+        _apiJson(['error' => 'Expected a JSON object'], 400);
+    }
+    return $data;
+}
+
+function _apiNullableId(mixed $value, string $field): ?int
+{
+    if ($value === null) {
+        return null;
+    }
+    if ((!is_int($value) && !is_string($value))
+        || filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
+        _apiJson(['error' => 'Invalid ' . $field], 422);
+    }
+    return (int) $value;
 }
 
 /**
@@ -265,23 +280,27 @@ function _apiLoginRecordAttempt(PDO $db, string $email, string $ip, bool $succee
 }
 
 /**
- * Block API access to confidential tickets for users who are not in the type's group.
- * Call after _apiEnforceTicketAccess().
+ * API clients cannot complete web re-authentication. Confidential tickets
+ * therefore require membership in the type's group on every REST surface.
+ * The caller supplies the user ID for this predicate's single placeholder.
  */
+function _apiConfidentialVisibilitySql(string $typeId): string
+{
+    return "NOT EXISTS (
+        SELECT 1 FROM ticket_types private_type
+        WHERE private_type.id = $typeId AND private_type.is_confidential = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM group_user_map membership
+              WHERE membership.group_id = private_type.group_id AND membership.user_id = ?
+          )
+    )";
+}
+
 function _apiEnforceConfidential(PDO $db, array $user, array $ticket): void
 {
-    if (empty($ticket['type_id'])) {
-        return;
-    }
-    $stmt = $db->prepare('SELECT is_confidential, group_id FROM ticket_types WHERE id = ?');
-    $stmt->execute([$ticket['type_id']]);
-    $type = $stmt->fetch();
-    if (!$type || !$type['is_confidential'] || !$type['group_id']) {
-        return;
-    }
-    $gs = $db->prepare('SELECT 1 FROM group_user_map WHERE group_id = ? AND user_id = ? LIMIT 1');
-    $gs->execute([$type['group_id'], $user['id']]);
-    if (!$gs->fetchColumn()) {
+    $stmt = $db->prepare('SELECT 1 FROM tickets t WHERE t.id = ? AND ' . _apiConfidentialVisibilitySql('t.type_id'));
+    $stmt->execute([$ticket['id'], $user['id']]);
+    if (!$stmt->fetchColumn()) {
         _apiJson(['error' => 'This ticket is confidential. Access via the web interface is required.'], 403);
     }
 }
@@ -303,6 +322,11 @@ function _apiEnforceConfidential(PDO $db, array $user, array $ticket): void
  */
 $router->post('/api/v1/auth/login', function () {
     $input    = _apiInput();
+    foreach (['email', 'password', 'device_name', 'totp_code', 'code'] as $field) {
+        if (isset($input[$field]) && !is_string($input[$field])) {
+            _apiJson(['error' => 'Invalid ' . $field], 422);
+        }
+    }
     $email    = trim($input['email'] ?? '');
     $password = $input['password'] ?? '';
     $device   = trim(substr($input['device_name'] ?? 'Mobile App', 0, 255));
@@ -513,6 +537,8 @@ $router->get('/api/v1/dashboard', function () {
     // Fail-closed visibility — same predicate as the web dashboard, with the
     // token user passed explicitly (no session Auth in the API context).
     $vis = ticketStaffVisibilitySql($db, $agentId, $user['role'] ?? null, 't');
+    $vis['sql'] .= ' AND ' . _apiConfidentialVisibilitySql('t.type_id');
+    $vis['params'][] = $agentId;
 
     $openInT = ticketStatusSqlIn(ticketOpenBucketSlugs(), 't.status');
 
@@ -603,8 +629,11 @@ $router->get('/api/v1/tickets', function () {
         $params   = array_merge($params, $vis['params']);
     }
 
+    $where[] = _apiConfidentialVisibilitySql('t.type_id');
+    $params[] = (int) $user['id'];
+
     // Filter: status (comma-separated)
-    $statusRaw = trim($_GET['status'] ?? '');
+    $statusRaw = trim(requestScalar('status'));
     if ($statusRaw !== '') {
         $statuses = array_filter(
             array_map('trim', explode(',', $statusRaw)),
@@ -653,7 +682,7 @@ $router->get('/api/v1/tickets', function () {
         $where[] = ticketHasAttachmentSql('t', !_apiIsStaff($user));
     }
 
-    $search = trim($_GET['search'] ?? '');
+    $search = trim(requestScalar('search'));
     if ($search !== '') {
         $where[]  = 't.subject LIKE ?';
         $params[] = '%' . $search . '%';
@@ -735,6 +764,11 @@ $router->post('/api/v1/tickets', function () {
     $input = _apiInput();
     $db    = Database::connect();
 
+    foreach (['subject', 'description'] as $field) {
+        if (isset($input[$field]) && !is_string($input[$field])) {
+            _apiJson(['error' => 'Invalid ' . $field], 422);
+        }
+    }
     $subject     = trim($input['subject'] ?? '');
     $description = trim($input['description'] ?? '');
 
@@ -976,14 +1010,45 @@ $router->post('/api/v1/tickets/{id}/update', function (array $p) {
     $input   = _apiInput();
     $changes = [];
 
-    $validStatuses    = ticketActiveStatusSlugs();
+    // Validate every supplied change before touching the ticket, SLA or timeline.
+    if (array_key_exists('status', $input) && !in_array($input['status'], ticketActiveStatusSlugs(), true)) {
+        _apiJson(['error' => 'Invalid status value'], 422);
+    }
+    $newPriority = _apiNullableId($input['priority_id'] ?? null, 'priority');
+    $newGroup = _apiNullableId($input['group_id'] ?? null, 'group');
+    $newAssigned = _apiNullableId($input['assigned_to'] ?? null, 'assignee');
+    $lookup = static function (string $sql, ?int $id, string $label) use ($db): ?string {
+        if ($id === null) {
+            return null;
+        }
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$id]);
+        $name = $stmt->fetchColumn();
+        if ($name === false) {
+            _apiJson(['error' => 'Invalid ' . $label], 422);
+        }
+        return $name;
+    };
+    $newPriorityName = $lookup('SELECT name FROM ticket_priorities WHERE id = ?', $newPriority, 'priority');
+    $newGroupName = $lookup('SELECT name FROM `groups` WHERE id = ?', $newGroup, 'group');
+    $agentName = $lookup(
+        "SELECT CONCAT(first_name, ' ', last_name) FROM users WHERE id = ? AND " . staffRoleSqlIn('role'),
+        $newAssigned,
+        'assignee',
+    ) ?? 'Unassigned';
+    $setDueDate = array_key_exists('due_date', $input) && roleCan($user['role'] ?? null, 'tickets.set_due_date');
+    $dueDate = null;
+    if ($setDueDate && $input['due_date'] !== null && $input['due_date'] !== '') {
+        $date = $input['due_date'];
+        if (!is_string($date) || ($timestamp = strtotime($date)) === false) {
+            _apiJson(['error' => 'Invalid due date'], 422);
+        }
+        $dueDate = date('Y-m-d', $timestamp);
+    }
 
     // ── Status ────────────────────────────────────────────────────────────────
     if (array_key_exists('status', $input)) {
         $newStatus = $input['status'];
-        if (!in_array($newStatus, $validStatuses, true)) {
-            _apiJson(['error' => 'Invalid status value'], 422);
-        }
         if ($newStatus !== $ticket['status']) {
             $oldStatus = $ticket['status'];
             $db->prepare('UPDATE tickets SET status = ? WHERE id = ?')->execute([$newStatus, $ticketId]);
@@ -1005,7 +1070,6 @@ $router->post('/api/v1/tickets/{id}/update', function (array $p) {
 
     // ── Priority ─────────────────────────────────────────────────────────────
     if (array_key_exists('priority_id', $input)) {
-        $newPriority = $input['priority_id'] !== null ? (int) $input['priority_id'] : null;
         $oldPriority = $ticket['priority_id'] !== null ? (int) $ticket['priority_id'] : null;
         if ($newPriority !== $oldPriority) {
             $oldName = 'None';
@@ -1014,12 +1078,7 @@ $router->post('/api/v1/tickets/{id}/update', function (array $p) {
                 $s->execute([$oldPriority]);
                 $oldName = $s->fetchColumn() ?: 'None';
             }
-            $newName = 'None';
-            if ($newPriority) {
-                $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
-                $s->execute([$newPriority]);
-                $newName = $s->fetchColumn() ?: 'None';
-            }
+            $newName = $newPriorityName ?? 'None';
             $db->prepare('UPDATE tickets SET priority_id = ? WHERE id = ?')->execute([$newPriority, $ticketId]);
             $db->prepare(
                 'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
@@ -1034,21 +1093,8 @@ $router->post('/api/v1/tickets/{id}/update', function (array $p) {
 
     // ── Assigned to ──────────────────────────────────────────────────────────
     if (array_key_exists('assigned_to', $input)) {
-        $newAssigned = $input['assigned_to'] !== null ? (int) $input['assigned_to'] : null;
         $oldAssigned = $ticket['assigned_to'] !== null ? (int) $ticket['assigned_to'] : null;
         if ($newAssigned !== $oldAssigned) {
-            $agentName = 'Unassigned';
-            if ($newAssigned) {
-                // Only staff may be assigned a ticket — never a portal user.
-                $s = $db->prepare(
-                    "SELECT CONCAT(first_name, ' ', last_name) FROM users WHERE id = ? AND " . staffRoleSqlIn('role')
-                );
-                $s->execute([$newAssigned]);
-                $agentName = $s->fetchColumn();
-                if ($agentName === false) {
-                    _apiJson(['error' => 'Invalid assignee'], 422);
-                }
-            }
             $db->prepare('UPDATE tickets SET assigned_to = ? WHERE id = ?')->execute([$newAssigned, $ticketId]);
             $db->prepare(
                 'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
@@ -1060,28 +1106,15 @@ $router->post('/api/v1/tickets/{id}/update', function (array $p) {
 
     // ── Group ────────────────────────────────────────────────────────────────
     if (array_key_exists('group_id', $input)) {
-        $newGroup = $input['group_id'] !== null ? (int) $input['group_id'] : null;
         $oldGroup = $ticket['group_id'] !== null ? (int) $ticket['group_id'] : null;
         if ($newGroup !== $oldGroup) {
-            if ($newGroup !== null) {
-                $chk = $db->prepare('SELECT 1 FROM `groups` WHERE id = ?');
-                $chk->execute([$newGroup]);
-                if (!$chk->fetchColumn()) {
-                    _apiJson(['error' => 'Invalid group'], 422);
-                }
-            }
             $oldGroupName = 'None';
             if ($oldGroup) {
-                $s = $db->prepare('SELECT name FROM groups WHERE id = ?');
+                $s = $db->prepare('SELECT name FROM `groups` WHERE id = ?');
                 $s->execute([$oldGroup]);
                 $oldGroupName = $s->fetchColumn() ?: 'None';
             }
-            $newGroupName = 'None';
-            if ($newGroup) {
-                $s = $db->prepare('SELECT name FROM groups WHERE id = ?');
-                $s->execute([$newGroup]);
-                $newGroupName = $s->fetchColumn() ?: 'None';
-            }
+            $newGroupName ??= 'None';
             $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?')->execute([$newGroup, $ticketId]);
             $db->prepare(
                 'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
@@ -1092,12 +1125,7 @@ $router->post('/api/v1/tickets/{id}/update', function (array $p) {
     }
 
     // ── Due date ──────────────────────────────────────────────────────────────
-    if (array_key_exists('due_date', $input) && roleCan($user['role'] ?? null, 'tickets.set_due_date')) {
-        $dueDate = null;
-        if ($input['due_date'] !== null && $input['due_date'] !== '') {
-            $ts      = strtotime($input['due_date']);
-            $dueDate = $ts ? date('Y-m-d', $ts) : null;
-        }
+    if ($setDueDate) {
         $db->prepare('UPDATE tickets SET due_date = ? WHERE id = ?')->execute([$dueDate, $ticketId]);
         $changes[] = 'due_date';
     }
@@ -1123,7 +1151,7 @@ $router->get('/api/v1/tickets/{id}/timeline', function (array $p) {
     $db       = Database::connect();
     $ticketId = (int) $p['id'];
 
-    $tStmt = $db->prepare('SELECT id, created_by, group_id FROM tickets WHERE id = ?');
+    $tStmt = $db->prepare('SELECT id, created_by, group_id, type_id FROM tickets WHERE id = ?');
     $tStmt->execute([$ticketId]);
     $ticket = $tStmt->fetch(PDO::FETCH_ASSOC);
     if (!$ticket) {
@@ -1216,6 +1244,9 @@ $router->post('/api/v1/tickets/{id}/replies', function (array $p) {
     _apiEnforceConfidential($db, $user, $ticket);
 
     $input   = _apiInput();
+    if (isset($input['message']) && !is_string($input['message'])) {
+        _apiJson(['error' => 'Invalid message'], 422);
+    }
     $message = trim($input['message'] ?? '');
     if ($message === '') {
         _apiJson(['error' => 'message is required'], 422);
@@ -1693,7 +1724,7 @@ function _apiStoreUploads(string $field = 'attachments'): array
 
     $files = $_FILES[$field];
     $count = is_array($files['tmp_name']) ? count($files['tmp_name']) : 1;
-    $stored = [];
+    $validated = [];
 
     for ($i = 0; $i < $count; $i++) {
         $tmp   = is_array($files['tmp_name']) ? $files['tmp_name'][$i] : $files['tmp_name'];
@@ -1701,8 +1732,11 @@ function _apiStoreUploads(string $field = 'attachments'): array
         $name  = is_array($files['name'])     ? $files['name'][$i]     : $files['name'];
         $size  = is_array($files['size'])     ? (int) $files['size'][$i] : (int) $files['size'];
 
-        if ($error === UPLOAD_ERR_NO_FILE || $tmp === '') {
+        if ($error === UPLOAD_ERR_NO_FILE) {
             continue;
+        }
+        if (!is_string($tmp) || !is_string($name) || !is_int($error)) {
+            _apiJson(['error' => 'Invalid upload fields'], 422);
         }
         if ($error !== UPLOAD_ERR_OK) {
             _apiJson(['error' => 'Upload failed for "' . $name . '" (PHP upload error ' . $error . ')'], 422);
@@ -1711,32 +1745,39 @@ function _apiStoreUploads(string $field = 'attachments'): array
             _apiJson(['error' => 'Invalid upload for "' . $name . '"'], 422);
         }
 
-        $mime = mime_content_type($tmp) ?: 'application/octet-stream';
-        if (!in_array($mime, UPLOAD_ALLOWED_TYPES, true)) {
-            _apiJson(['error' => 'File type not allowed for "' . $name . '": ' . $mime], 422);
-        }
         if ($size > UPLOAD_MAX_SIZE) {
             $maxMb = round(UPLOAD_MAX_SIZE / 1048576, 1);
             _apiJson(['error' => 'File too large (max ' . $maxMb . ' MB): "' . $name . '"'], 422);
         }
-
-        $storedName = uniqid('att_', true) . '.' . safeUploadExtension($mime, $name);
-        if (!is_dir(ATTACHMENT_STORAGE_PATH)) {
-            mkdir(ATTACHMENT_STORAGE_PATH, 0755, true);
+        $mime = mime_content_type($tmp) ?: 'application/octet-stream';
+        if (!in_array($mime, UPLOAD_ALLOWED_TYPES, true)) {
+            _apiJson(['error' => 'File type not allowed for "' . $name . '": ' . $mime], 422);
         }
-        if (!move_uploaded_file($tmp, ATTACHMENT_STORAGE_PATH . $storedName)) {
-            _apiJson(['error' => 'Could not store uploaded file "' . $name . '"'], 500);
-        }
-        $stored[] = [
+        $validated[] = [
+            'temp_path'     => $tmp,
             'original_name' => $name,
-            'stored_name'   => $storedName,
+            'stored_name'   => 'att_' . bin2hex(random_bytes(16)) . '.' . safeUploadExtension($mime, $name),
             'mime_type'     => $mime,
             'file_size'     => $size,
         ];
     }
 
-    if (empty($stored)) {
+    if (empty($validated)) {
         _apiJson(['error' => 'No valid files in the upload'], 422);
+    }
+    if (!is_dir(ATTACHMENT_STORAGE_PATH)) {
+        mkdir(ATTACHMENT_STORAGE_PATH, 0755, true);
+    }
+    $stored = [];
+    foreach ($validated as $file) {
+        if (!move_uploaded_file($file['temp_path'], ATTACHMENT_STORAGE_PATH . $file['stored_name'])) {
+            foreach ($stored as $attachment) {
+                unlink(ATTACHMENT_STORAGE_PATH . $attachment['stored_name']);
+            }
+            _apiJson(['error' => 'Could not store uploaded files'], 500);
+        }
+        unset($file['temp_path']);
+        $stored[] = $file;
     }
     return $stored;
 }
@@ -1768,35 +1809,52 @@ $router->post('/api/v1/tickets/{id}/attachments', function (array $p) {
     // Optional timeline_id must belong to THIS ticket.
     $timelineId = null;
     if (isset($_POST['timeline_id']) && $_POST['timeline_id'] !== '') {
-        $timelineId = (int) $_POST['timeline_id'];
-        $chk = $db->prepare('SELECT 1 FROM ticket_timeline WHERE id = ? AND ticket_id = ?');
+        $timelineId = _apiNullableId($_POST['timeline_id'], 'timeline_id');
+        $chk = $db->prepare('SELECT is_internal FROM ticket_timeline WHERE id = ? AND ticket_id = ?');
         $chk->execute([$timelineId, $ticketId]);
-        if (!$chk->fetchColumn()) {
+        $entry = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$entry) {
             _apiJson(['error' => 'timeline_id does not belong to this ticket'], 422);
+        }
+        if (!empty($entry['is_internal']) && !_apiIsStaff($user)) {
+            _apiJson(['error' => 'Forbidden'], 403);
         }
     }
 
     $stored = _apiStoreUploads('attachments');
 
-    $ins = $db->prepare(
-        'INSERT INTO ticket_attachments
-            (ticket_id, timeline_id, uploaded_by, original_name, stored_name, mime_type, file_size)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
-    );
     $out = [];
-    foreach ($stored as $att) {
-        $ins->execute([
-            $ticketId, $timelineId, (int) $user['id'],
-            $att['original_name'], $att['stored_name'], $att['mime_type'], $att['file_size'],
-        ]);
-        $out[] = [
-            'id'            => (int) $db->lastInsertId(),
-            'ticket_id'     => $ticketId,
-            'timeline_id'   => $timelineId,
-            'original_name' => $att['original_name'],
-            'mime_type'     => $att['mime_type'],
-            'file_size'     => $att['file_size'],
-        ];
+    try {
+        $db->beginTransaction();
+        $ins = $db->prepare(
+            'INSERT INTO ticket_attachments
+                (ticket_id, timeline_id, uploaded_by, original_name, stored_name, mime_type, file_size)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        foreach ($stored as $att) {
+            $ins->execute([
+                $ticketId, $timelineId, (int) $user['id'],
+                $att['original_name'], $att['stored_name'], $att['mime_type'], $att['file_size'],
+            ]);
+            $out[] = [
+                'id'            => (int) $db->lastInsertId(),
+                'ticket_id'     => $ticketId,
+                'timeline_id'   => $timelineId,
+                'original_name' => $att['original_name'],
+                'mime_type'     => $att['mime_type'],
+                'file_size'     => $att['file_size'],
+            ];
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        foreach ($stored as $att) {
+            unlink(ATTACHMENT_STORAGE_PATH . $att['stored_name']);
+        }
+        error_log('Cannot save attachment metadata: ' . $e::class . ' (' . $e->getCode() . ')');
+        _apiJson(['error' => 'Could not save uploaded files'], 500);
     }
 
     _apiJson(['data' => $out], 201);
@@ -1805,8 +1863,8 @@ $router->post('/api/v1/tickets/{id}/attachments', function (array $p) {
 /**
  * GET /api/v1/attachments/{id}
  *
- * Streams the raw attachment bytes (NOT JSON). Anyone who can access the parent
- * ticket can download its attachments.
+ * Streams the raw attachment bytes (NOT JSON). Internal note attachments also
+ * require staff access.
  */
 $router->get('/api/v1/attachments/{id}', function (array $p) {
     $user = _apiAuth();
@@ -1814,8 +1872,11 @@ $router->get('/api/v1/attachments/{id}', function (array $p) {
     $id   = (int) $p['id'];
 
     $stmt = $db->prepare(
-        'SELECT id, ticket_id, original_name, stored_name, mime_type, file_size
-           FROM ticket_attachments WHERE id = ?'
+        'SELECT ta.id, ta.ticket_id, ta.original_name, ta.stored_name, ta.mime_type,
+                ta.file_size, tl.is_internal
+           FROM ticket_attachments ta
+           LEFT JOIN ticket_timeline tl ON tl.id = ta.timeline_id
+          WHERE ta.id = ?'
     );
     $stmt->execute([$id]);
     $att = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -1832,6 +1893,10 @@ $router->get('/api/v1/attachments/{id}', function (array $p) {
     _apiEnforceTicketAccess($db, $user, $ticket);
     _apiEnforceConfidential($db, $user, $ticket);
 
+    if (!empty($att['is_internal']) && !_apiIsStaff($user)) {
+        _apiJson(['error' => 'Forbidden'], 403);
+    }
+
     $path = ATTACHMENT_STORAGE_PATH . $att['stored_name'];
     if (!is_file($path)) {
         _apiJson(['error' => 'Attachment file is missing on the server'], 404);
@@ -1847,6 +1912,7 @@ $router->get('/api/v1/attachments/{id}', function (array $p) {
     header('Content-Disposition: attachment; filename="' . str_replace('"', '\\"', $att['original_name']) . '"');
     header('Content-Length: ' . $att['file_size']);
     header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
     readfile($path);
     exit;
 });
