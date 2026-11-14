@@ -27,6 +27,10 @@ services:
       ENGINEER_AI_GENERATION_ENABLED: ${ENGINEER_AI_GENERATION_ENABLED:-false}
       ENGINEER_OLLAMA_URL: ${ENGINEER_OLLAMA_URL:-http://host.docker.internal:11434}
       ENGINEER_OLLAMA_MODEL: ${ENGINEER_OLLAMA_MODEL:-qwen3:0.6b}
+      STT_WHISPER_URL: ${STT_WHISPER_URL:-}
+      INTAKE_AI_URL: ${INTAKE_AI_URL:-http://host.docker.internal:8091/api/hackathon/v1/intake/analyze}
+      INTAKE_AI_ALLOWED_HOSTS: ${INTAKE_AI_ALLOWED_HOSTS:-host.docker.internal,intake-ai}
+      INTAKE_SERVICE_TOKEN: ${INTAKE_SERVICE_TOKEN:-}
       TEST_BASE_URL: http://127.0.0.1:8000
     depends_on:
       db:
