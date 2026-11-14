@@ -30,12 +30,14 @@ final class EngineerAssistant
 
         $context = self::printerContext($ticket);
         if ($context === 'safety') {
-            $result['steps'] = [[
+            $result['safety'] = true;
+            if ($sources) {
+                $result['steps'] = [[
                 'text' => 'Прекратите использование. Отойдите, предупредите окружающих и немедленно сообщите ответственному. Действуйте по правилам безопасности объекта.',
                 'source_ids' => array_column($sources, 'id'),
             ]];
-            $result['status'] = 'answered';
-            $result['safety'] = true;
+                $result['status'] = 'answered';
+            }
         } elseif ($sources) {
             try {
                 if ($generate === null && env('ENGINEER_AI_GENERATION_ENABLED', 'false') === 'true') {
@@ -187,7 +189,7 @@ final class EngineerAssistant
         if (preg_match('/дым|гор(?:ит|ят)|гар[ьи]|искр|перегрев/u', $text)) {
             return 'safety';
         }
-        if (preg_match('/сотн|массов|одновременно|\b[2-9][0-9]\b|\b[1-9][0-9]{2,}\b/u', $text)) {
+        if (preg_match('/сотн|массов|одновременно|\b(?:[2-9][0-9]|[1-9][0-9]{2,})\s+принтер/u', $text)) {
             return 'mass';
         }
         return preg_match('/краск|тонер|картридж/u', $text) ? 'toner' : null;
@@ -200,17 +202,14 @@ final class EngineerAssistant
             return [];
         }
         $context = self::printerContext($ticket);
-        $articleFilter = match ($context) {
-            'safety' => "AND a.slug = 'engineer-demo-2'",
-            'toner' => "AND a.slug = 'engineer-demo-21'",
-            'mass' => "AND a.slug IN ('engineer-demo-22','engineer-demo-23','engineer-demo-24')",
-            default => '',
-        };
+        $articleFilter = $context === 'safety'
+            ? "AND a.title LIKE '%принтер%' AND (a.title LIKE '%дым%' OR a.title LIKE '%перегрев%' OR a.title LIKE '%гарь%')"
+            : '';
         if ($context === 'toner') {
             $terms = array_unique([...$terms, 'тонер', 'картридж']);
         }
         if ($context === 'mass') {
-            $terms = array_unique([...$terms, 'принтер', 'печати']);
+            $terms = array_unique([...$terms, 'принтер', 'печати', 'массов', 'сервер', 'очередь']);
         }
         $scores = [];
         $params = [];

@@ -46,6 +46,7 @@
             const sources = new Map(data.sources.map(source => [source.id, source]));
             if (data.safety) {
                 result.append(element('h6', 'Безопасность — действуйте сразу'));
+                if (!data.steps.length) result.append(element('p', 'Прекратите использование и сообщите ответственному. Действуйте по правилам безопасности объекта.'));
             }
             if (data.steps.length) {
                 const list = document.createElement('ol');

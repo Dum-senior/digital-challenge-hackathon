@@ -93,6 +93,64 @@
     }
     if (result.data.length === 0) add(ul, 'li', 'Черновиков пока нет');
   }
+  const record = el('intakeRecord');
+  const recordingStatus = el('intakeRecordingStatus');
+  let recorder;
+  let recordingTimer;
+  record.addEventListener('click', async () => {
+    if (recorder?.state === 'recording') {
+      recorder.stop();
+      return;
+    }
+    record.disabled = true;
+    error('');
+    let stream;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        throw new Error('Запись голоса недоступна в этом браузере.');
+      }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      recorder.onstop = async () => {
+        clearTimeout(recordingTimer);
+        stream.getTracks().forEach(track => track.stop());
+        record.disabled = true;
+        record.setAttribute('aria-pressed', 'false');
+        record.textContent = 'Записать голос';
+        recordingStatus.textContent = 'Распознаём речь…';
+        try {
+          const body = new FormData();
+          body.append('audio', new Blob(chunks, { type: recorder.mimeType }), 'recording');
+          body.append('source', 'browser');
+          const response = await fetch('/intake/transcriptions', {
+            method: 'POST', headers: { 'X-CSRF-Token': csrf }, body
+          });
+          const result = await response.json();
+          if (!response.ok || !result.text) throw new Error('Не удалось распознать запись. Попробуйте снова или введите текст.');
+          el('intakeText').value = result.text.slice(0, 4000);
+          el('intakeSource').value = 'voice';
+          recordingStatus.textContent = 'Текст готов. Проверьте его перед отправкой.';
+        } catch (e) {
+          recordingStatus.textContent = '';
+          error(e.message);
+        } finally {
+          record.disabled = false;
+        }
+      };
+      recorder.start();
+      recordingTimer = setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 110000);
+      record.setAttribute('aria-pressed', 'true');
+      record.textContent = 'Остановить запись';
+      recordingStatus.textContent = 'Идёт запись';
+    } catch (e) {
+      stream?.getTracks().forEach(track => track.stop());
+      error('Не удалось начать запись. Проверьте разрешение на микрофон или введите текст.');
+    } finally {
+      record.disabled = false;
+    }
+  });
   el('intakeAnalyze').addEventListener('click', async event => {
     const button = event.currentTarget; btn(button, true); error('');
     try {

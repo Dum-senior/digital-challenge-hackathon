@@ -92,6 +92,19 @@ final class EngineerAssistantHttpTest extends TestCase
         self::assertSame(200, $this->post($this->agentClient(), $path, [])->getStatusCode());
     }
 
+    public function test_browser_transcription_requires_csrf_and_an_audio_file(): void
+    {
+        $path = '/intake/transcriptions';
+        self::assertSame(403, $this->agentClient()->post($path)->getStatusCode());
+        $page = $this->get($this->agentClient(), '/intake');
+        self::assertSame(200, $page->getStatusCode());
+        self::assertStringContainsString('id="intakeRecord"', (string) $page->getBody());
+        self::assertSame(1, preg_match('/data-csrf="([^"]+)"/', (string) $page->getBody(), $match));
+        self::assertSame(400, $this->agentClient()->post($path, [
+            'headers' => ['X-CSRF-Token' => $match[1]],
+        ])->getStatusCode());
+    }
+
     public function test_api_and_session_share_the_same_budget(): void
     {
         $client = $this->api();

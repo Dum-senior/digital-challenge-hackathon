@@ -1970,8 +1970,7 @@ $router->post('/api/v1/push/unregister', function () {
     _apiJson(['ok' => true]);
 });
 
-$router->post('/api/v1/intake/transcriptions', function () {
-    _apiAuth();
+$intakeTranscribe = static function (): void {
     $upload = $_FILES['audio'] ?? [];
     $error = $upload['error'] ?? null;
     if (in_array($error, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
@@ -1990,4 +1989,12 @@ $router->post('/api/v1/intake/transcriptions', function () {
         _apiJson(['error' => $e->getMessage()], $e->getCode() ?: 503);
     }
     _apiJson($result);
+};
+$router->post('/api/v1/intake/transcriptions', static function () use ($intakeTranscribe): void {
+    _apiAuth();
+    $intakeTranscribe();
+});
+$router->post('/intake/transcriptions', static function () use ($intakeTranscribe): void {
+    _intakeActor();
+    $intakeTranscribe();
 });

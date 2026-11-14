@@ -10,6 +10,10 @@
   <section class="card mb-3"><div class="card-body">
     <label class="form-label" for="intakeText">Описание проблемы на русском</label>
     <textarea id="intakeText" class="form-control" maxlength="4000" rows="4" placeholder="Например: На НТП с девяти утра нет данных со счётчика"></textarea>
+    <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+      <button type="button" id="intakeRecord" class="btn btn-outline-primary" aria-pressed="false">Записать голос</button>
+      <span id="intakeRecordingStatus" role="status"></span>
+    </div>
     <div class="row mt-2 g-2"><div class="col-auto"><label for="intakeSource" class="form-label">Канал</label>
       <select id="intakeSource" class="form-select"><option value="text">Текст</option><option value="voice">Голос (исправленная транскрипция)</option><option value="phone">Телефон (проверенная транскрипция)</option></select>
     </div><div class="col-auto d-flex align-items-end"><button type="button" id="intakeAnalyze" class="btn btn-primary">Разобрать обращение</button></div></div>

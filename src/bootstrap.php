@@ -80,7 +80,7 @@ if (!headers_sent()) {
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     // camera=(self): the inventory audit and floor pages scan QR codes with getUserMedia.
-    header('Permissions-Policy: geolocation=(), microphone=(), camera=(self)');
+    header('Permissions-Policy: geolocation=(), microphone=(self), camera=(self)');
     if ($isHttps) {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
     }

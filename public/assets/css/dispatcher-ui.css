@@ -39,3 +39,12 @@
     .dispatcher-login, .dispatcher-intake-grid { grid-template-columns: minmax(0, 1fr); }
     .dispatcher-login-brand { min-height: auto; }
 }
+
+.dispatcher-intake-grid > section { min-width: 0; align-self: start; }
+.dispatcher-intake .card { border-color: #d7e2e9; border-radius: .85rem; }
+.dispatcher-intake .form-label { font-weight: 600; }
+.dispatcher-intake #intakeText { min-height: 9rem; background: #f7fafc; }
+.dispatcher-intake #intakeRecordingStatus { color: var(--bs-secondary-color, #526777); }
+.dispatcher-intake #intakeRecord[aria-pressed="true"] { color: #982824; border-color: #982824; }
+.dispatcher-intake #intakeDraft { border-inline-start: .3rem solid #27bbae; }
+.dispatcher-intake #intakeQueue { overflow-wrap: anywhere; }
