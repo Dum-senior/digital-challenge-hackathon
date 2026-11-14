@@ -7,6 +7,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 BASE = os.environ.get("TEST_BASE_URL", "http://127.0.0.1:8080")
 
@@ -27,6 +28,18 @@ def request(client, path, body=None, csrf=None, expected=200, form=False):
         assert response.status == expected, (path, response.status, raw[:400])
         return json.loads(raw) if "application/json" in response.headers.get("Content-Type", "") else raw
 
+def upload(client, path, field, fixture, csrf):
+    boundary = "dispatcher-release-smoke"
+    file = Path(fixture)
+    data = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{file.name}"\r\n\r\n'.encode()
+        + file.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+    )
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}", "X-CSRF-Token": csrf}
+    with client.open(urllib.request.Request(BASE + path, data=data, headers=headers), timeout=115) as response:
+        assert response.status == 200
+        return json.load(response)
+
 def sign_in(role):
     client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     form = request(client, "/login")
@@ -45,6 +58,14 @@ request(dispatcher, "/workspace/api/engineers", expected=403)
 request(engineer, "/workspace/api/engineers", expected=403)
 engineers = request(admin, "/workspace/api/engineers")["engineers"]
 assert engineers and engineers[0]["competencies"]
+
+for variable, path, field in (
+    ("TEST_AUDIO", "/intake/transcriptions", "audio"),
+    ("TEST_IMAGE", "/workspace/api/ocr", "file"),
+):
+    if os.environ.get(variable):
+        assert upload(dispatcher, path, field, os.environ[variable], csrf)["text"].strip()
+        print("PASS", path, flush=True)
 
 text = "В корпусе Б в кабинете 214 из принтера идёт дым."
 draft = request(dispatcher, "/intake/analyze", {"text": text}, csrf, expected=201)
