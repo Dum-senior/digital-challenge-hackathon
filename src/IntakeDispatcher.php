@@ -117,6 +117,9 @@ final class IntakeDispatcher
                 break;
             }
         }
+        if (preg_match('/^(?:у нас )?(?:ничего не работает|вс[её] упало)[.!\s]*$/iu', trim($text))) {
+            $category = 'unknown';
+        }
         $priority = $danger ? 'critical' : ($category === 'unknown' ? null : 'medium');
         $reason = $danger ? 'Явный признак опасности; требуется немедленная проверка'
             : ($mass ? 'Затронуто несколько пользователей или объектов'

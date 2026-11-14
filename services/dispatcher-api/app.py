@@ -197,6 +197,9 @@ def analyze(incident: Incident):
         if re.search(pattern, incident.text, re.I):
             result.category = category
             break
+    if re.fullmatch(r"(?:у нас )?(?:ничего не работает|вс[её] упало)[.!\s]*", incident.text.strip(), re.I):
+        result.category = "unknown"
+        result.questions = ["Какая система недоступна?", "Где возникла проблема и кого она затронула?"]
     return {**result.model_dump(), **details}
 
 
