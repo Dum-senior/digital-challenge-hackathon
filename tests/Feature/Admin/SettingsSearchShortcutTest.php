@@ -151,10 +151,10 @@ class SettingsSearchShortcutTest extends TestCase
      */
     public function test_navbar_handler_on_a_plain_page_is_unchanged(): void
     {
-        $body    = (string) $this->get($this->adminClient(), '/admin/tickets')->getBody();
+        $body    = (string) $this->get($this->adminClient(), '/admin')->getBody();
         $handler = $this->extractHandler($body, "document.addEventListener('keydown'");
 
-        $this->assertNotNull($handler, 'No navbar keydown handler on /admin/tickets.');
+        $this->assertNotNull($handler, 'No navbar keydown handler on /admin.');
         $this->assertStringNotContainsString('stopImmediatePropagation', $handler);
         $this->assertStringNotContainsString('}, true);', $handler, 'The navbar handler became capture-phase.');
     }

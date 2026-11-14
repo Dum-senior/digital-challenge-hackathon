@@ -1,21 +1,21 @@
 <?php
 $layout       = 'app';
-$pageTitle    = 'Knowledge Base';
+$pageTitle    = 'База знаний';
 $kbBase       ??= '/portal/kb';
 $kbPanelLabel ??= 'Portal';
 $kbPanelUrl   ??= '/portal';
 if (empty($sidebarItems)) $sidebarItems = portalSidebar('kb');
 $breadcrumbs  = [
     ['label' => $kbPanelLabel, 'url' => $kbPanelUrl],
-    ['label' => 'Knowledge Base'],
+    ['label' => 'База знаний'],
 ];
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0">База знаний</h2>
+    <div><h1 class="h3 fw-bold mb-1">База знаний</h1><p class="text-secondary mb-0">Короткие инструкции и решения для типичных проблем.</p></div>
     <div style="max-width:320px; width:100%;">
         <div class="input-group">
             <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
-            <input type="text" class="form-control" id="kb-search" placeholder="Search articles..."
+            <input type="text" class="form-control" id="kb-search" placeholder="Поиск по статьям" aria-label="Поиск по статьям"
                    autocomplete="off">
         </div>
     </div>
@@ -23,7 +23,7 @@ $breadcrumbs  = [
 
 <!-- Search results (hidden by default) -->
 <div id="kb-search-results" class="mb-4" style="display:none;">
-    <h5 class="fw-semibold mb-3">Search Results</h5>
+    <h5 class="fw-semibold mb-3">Результаты поиска</h5>
     <div id="kb-search-list"></div>
 </div>
 
@@ -32,7 +32,7 @@ $breadcrumbs  = [
     <?php if (empty($categories)): ?>
         <div class="text-center py-5 text-muted">
             <i class="bi bi-book" style="font-size:3rem;"></i>
-            <p class="mt-2">No knowledge base articles available yet.</p>
+            <p class="mt-2">В базе знаний пока нет статей.</p>
         </div>
     <?php else: ?>
         <div class="row g-3">
