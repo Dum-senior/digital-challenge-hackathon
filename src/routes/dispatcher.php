@@ -65,6 +65,11 @@ function dispatcherTickets(PDO $db, ?int $engineer = null, bool $activeOnly = fa
         CASE WHEN u.is_available=1 AND COALESCE(o.is_oof,0)=0 THEN 1 ELSE 0 END AS engineer_available
         FROM tickets t LEFT JOIN users u ON u.id=t.assigned_to LEFT JOIN ticket_types c ON c.id=t.type_id
         LEFT JOIN ticket_priorities p ON p.id=t.priority_id LEFT JOIN locations l ON l.id=t.location_id
+        LEFT JOIN agent_oof_status o ON o.user_id=u.id
+        LEFT JOIN (
+            SELECT work.assigned_to, SUM(CASE WHEN work.status='in_progress' THEN 20 ELSE 10 END) AS wait_minutes
+            FROM tickets work WHERE $active GROUP BY work.assigned_to
+        ) q ON q.assigned_to=u.id
         WHERE (c.id IS NULL OR c.is_confidential=0)" . ($engineer === null ? '' : ' AND t.assigned_to=?')
         . ($activeOnly ? ' AND t.assigned_to IS NOT NULL AND '.ticketStatusSqlIn(ticketClosedBucketSlugs(),'t.status',true) : '')
         . ' ORDER BY t.id DESC');
