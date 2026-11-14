@@ -281,6 +281,7 @@ $router->get('/workspace/api/articles/{id}', static function (array $p): void {
     dispatcherActor(['admin','dispatcher','engineer']);
     $article=dispatcherArticles()[$p['id']]??null;
     if (!$article) _apiJson(['error'=>'Источник не найден'],404);
+    $article['content_html']=renderMarkdown($article['content']);
     _apiJson($article);
 });
 

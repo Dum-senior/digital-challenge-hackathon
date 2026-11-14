@@ -390,14 +390,14 @@ function showEditTicket(id){
 }
 async function showSource(button){
  const id=button.dataset.id,type=button.dataset.type||'kb';
- let article=['kb','article','knowledge'].includes(type)?state.articles.find(x=>String(x.id)===String(id)):null;
- if(!article&&id&&['kb','article','knowledge'].includes(type)){
-  try{article=await API.getArticle(id);}catch(_e){}
+ let article=null;
+ if(id&&['kb','article','knowledge'].includes(type)){
+  try{article=await API.getArticle(id);}catch(e){toast('Не удалось открыть источник: '+e.message,'error');return;}
  }
  const name=button.dataset.title||article?.title||'Источник';
- const content=article?(Array.isArray(article.content)?article.content.join('\n'):String(article.content||'')):'';
+ const content=article?.content_html||'';
  modal(`<h2>${esc(name)}</h2><p>${article?esc(article.description||'Источник из базы знаний'):'Ссылка на источник рекомендации. Для открытия полного текста требуется доступ через сервер.'}</p>
- ${content?`<div class="source-preview">${esc(content).replace(/\n/g,'<br>')}</div>`:''}<div class="form-actions end">${btn('Закрыть','close-modal')}</div>`);
+ ${content?`<div class="source-preview">${content}</div>`:''}<div class="form-actions end">${btn('Закрыть','close-modal')}</div>`);
 }
 async function requestStats(form){
  if(state.role!=='admin')return;
