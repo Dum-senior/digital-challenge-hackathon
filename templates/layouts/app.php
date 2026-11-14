@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?= e(csrfToken()) ?>">
-    <title><?= e($pageTitle) ?> &ndash; <?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?></title>
+    <title><?= e($pageTitle) ?> &ndash; <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?></title>
     <?php require ROOT_DIR . '/templates/partials/pwa-head.php'; ?>
     <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link href="/assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">

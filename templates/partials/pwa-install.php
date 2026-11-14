@@ -13,7 +13,7 @@
  *  - "Update available" toast when a new SW lands while the page is open
  *  - localStorage dismissal so we don't nag staff who said no
  */
-$appName = getSetting('branding_app_name', 'OpenHelpDesk');
+$appName = getSetting('branding_app_name', 'Диспетчер ИИ');
 ?>
 <style>
 .pwa-install-banner {

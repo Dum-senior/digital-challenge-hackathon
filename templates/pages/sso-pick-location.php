@@ -6,7 +6,7 @@ $pageTitle = 'Choose your ' . label('location.singular', 'Location');
     <div class="text-center mb-4">
         <h1 class="text-white fw-bold">
             <?= brandMark('1em') ?>
-            <?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?>
+            <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?>
         </h1>
         <p class="text-white-50">Almost there!</p>
     </div>
@@ -82,7 +82,7 @@ $pageTitle = 'Choose your ' . label('location.singular', 'Location');
     </div>
 
     <p class="text-center text-white-50 mt-3 small">
-        <?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?> &copy; <?= date('Y') ?>
+        <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> &copy; <?= date('Y') ?>
     </p>
 </div>
 

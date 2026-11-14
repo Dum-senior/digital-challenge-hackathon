@@ -4,7 +4,7 @@
     <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center gap-2" href="/">
             <?= brandMark('32px', 'fs-4') ?>
-            <span><?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?></span>
+            <span><?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?></span>
         </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"

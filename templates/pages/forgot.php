@@ -4,7 +4,7 @@ $pageTitle = 'Reset Password';
 ?>
 <div style="max-width:420px;width:100%;">
     <div class="text-center mb-4">
-        <h1 class="text-white fw-bold"><?= brandMark('1em') ?> <?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?></h1>
+        <h1 class="text-white fw-bold"><?= brandMark('1em') ?> <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?></h1>
         <p class="text-white-50">Forgot your password?</p>
     </div>
 
@@ -64,6 +64,6 @@ $pageTitle = 'Reset Password';
     </div>
 
     <p class="text-center text-white-50 mt-3 small">
-        <?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?> &copy; <?= date('Y') ?>
+        <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> &copy; <?= date('Y') ?>
     </p>
 </div>
