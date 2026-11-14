@@ -48,7 +48,9 @@ services:
       INTAKE_CONFIRM_ROLES: admin,dispatcher
       DISPATCHER_INFERENCE_URL: http://inference:8092
       STT_WHISPER_URL: http://inference:8092/transcribe
-    depends_on: &initialized
+    depends_on:
+      inference:
+        condition: service_healthy
       db:
         condition: service_healthy
       migrate:
@@ -67,9 +69,17 @@ services:
       DISPATCHER_CHAT_URL: ${MODEL_HOST:-http://172.17.0.1}:11436
       DISPATCHER_EMBED_URL: ${MODEL_HOST:-http://172.17.0.1}:11437
       DISPATCHER_WHISPER_URL: ${MODEL_HOST:-http://172.17.0.1}:8090/inference
-    depends_on: *initialized
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import pathlib,socket; assert pathlib.Path('index.json').is_file(); socket.create_connection(('127.0.0.1',8092),2).close()"]
+      interval: 5s
+      timeout: 3s
+      start_period: 90s
+      retries: 18
 volumes:
   database:
   storage:

@@ -79,11 +79,10 @@ $router->get('/workspace/api/engineers', static function (): void {
     dispatcherActor(['admin']);
     $db=Database::connect();
     $tickets=dispatcherTickets($db, activeOnly: true);
-    $closed=ticketClosedBucketSlugs();
     $engineers=dispatcherEngineers($db);
     $byEngineer=[];
     foreach ($tickets as $ticket) {
-        if ($ticket['assigneeId'] && !in_array($ticket['status'], $closed, true)) $byEngineer[$ticket['assigneeId']][]=$ticket;
+        $byEngineer[$ticket['assigneeId']][]=$ticket;
     }
     foreach ($engineers as &$e) $e['tickets']=$byEngineer[$e['id']]??[];
     unset($e);
