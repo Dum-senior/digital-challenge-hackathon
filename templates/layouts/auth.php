@@ -8,6 +8,7 @@
     <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link href="/assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
     <?= brandIconStylesheet() ?>
+    <link href="/assets/css/dispatcher-ui.css" rel="stylesheet">
     <style>
         :root {
             --ld-primary: <?= e(getSetting('branding_primary_color', '#4f46e5')) ?>;
@@ -15,7 +16,7 @@
         }
         body {
             min-height: 100vh;
-            background: linear-gradient(135deg, <?= e(getSetting('branding_navbar_start', '#1e1b4b')) ?> 0%, <?= e(getSetting('branding_navbar_end', '#312e81')) ?> 50%, <?= e(getSetting('branding_primary_color', '#4f46e5')) ?> 100%);
+            background: #0b2030;
             display: flex;
             align-items: center;
             justify-content: center;

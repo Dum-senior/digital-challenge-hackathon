@@ -1,9 +1,12 @@
 <?php
 /** Safe DOM UI for /intake; no API keys and no innerHTML with LLM-originated strings. */
 ?>
-<main class="container py-4" id="ai-intake" data-csrf="<?= e(csrfToken()) ?>">
-  <h1 class="h3">ИИ-диспетчерская · обработка обращения</h1>
-  <p class="text-muted">ИИ формирует черновик. Заявка, назначение, SLA и уведомления появятся только после подтверждения уполномоченным диспетчером.</p>
+<div class="container py-4 dispatcher-intake" id="ai-intake" data-csrf="<?= e(csrfToken()) ?>">
+  <header class="dispatcher-intake-header">
+    <h1>Приём обращений</h1>
+    <p>Опишите проблему. ИИ подготовит черновик, а диспетчер проверит данные перед созданием заявки.</p>
+  </header>
+  <div class="dispatcher-intake-grid">
   <section class="card mb-3"><div class="card-body">
     <label class="form-label" for="intakeText">Описание проблемы на русском</label>
     <textarea id="intakeText" class="form-control" maxlength="4000" rows="4" placeholder="Например: На НТП с девяти утра нет данных со счётчика"></textarea>
@@ -11,10 +14,11 @@
       <select id="intakeSource" class="form-select"><option value="text">Текст</option><option value="voice">Голос (исправленная транскрипция)</option><option value="phone">Телефон (проверенная транскрипция)</option></select>
     </div><div class="col-auto d-flex align-items-end"><button type="button" id="intakeAnalyze" class="btn btn-primary">Разобрать обращение</button></div></div>
   </div></section>
-  <section class="mb-3"><h2 class="h5">Мои черновики / очередь диспетчера</h2>
+  <section class="card mb-3"><div class="card-body"><h2 class="h5">Очередь черновиков</h2>
     <button type="button" class="btn btn-sm btn-outline-secondary" id="intakeReload">Обновить</button>
     <ul id="intakeQueue" class="list-group mt-2" aria-live="polite"></ul>
-  </section>
+  </div></section>
+  </div>
   <div id="intakeError" class="alert alert-warning" role="alert" hidden></div>
   <section id="intakeDraft" class="card" hidden><div class="card-body">
     <h2 class="h5">Черновик №<span id="intakeDraftId"></span> · версия <span id="intakeRevision"></span></h2>
@@ -54,5 +58,5 @@
     </div>
     <p id="intakeCreated" class="mt-3" hidden></p>
   </div></section>
-</main>
+</div>
 <script src="/assets/js/intake-dispatcher.js" defer></script>

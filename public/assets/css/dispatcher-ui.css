@@ -1,0 +1,41 @@
+.dispatcher-login {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    width: min(62rem, calc(100vw - 2rem));
+    margin-block: 1rem;
+    overflow: hidden;
+    border: 1px solid #426076;
+    border-radius: 1.25rem;
+    background: #f5f8fa;
+    box-shadow: 0 1.5rem 4rem #07152155;
+}
+.dispatcher-login-brand, .dispatcher-intake-header { background: #102b3c; color: #fff; }
+.dispatcher-login-brand {
+    display: grid;
+    align-content: center;
+    padding: clamp(1.5rem, 6vw, 4.5rem);
+    min-height: 22rem;
+    border-bottom: .35rem solid #27bbae;
+}
+.dispatcher-login-brand h1 { font-size: clamp(2rem, 5vw, 3.6rem); letter-spacing: -.045em; }
+.dispatcher-login-brand p, .dispatcher-intake-header p { color: #c5d8e1; }
+.dispatcher-login-form { align-self: center; padding: clamp(1rem, 4vw, 2.5rem); }
+.dispatcher-login-form .card { background: transparent; }
+.dispatcher-login-form .btn-primary { --bs-btn-bg: #06685f; --bs-btn-border-color: #06685f; --bs-btn-hover-bg: #084f49; }
+.dispatcher-intake { max-width: 75rem; }
+.dispatcher-intake-header {
+    padding: clamp(1.4rem, 4vw, 3rem);
+    margin-bottom: 1.5rem;
+    border-radius: 1rem;
+    border-inline-start: .4rem solid #27bbae;
+}
+.dispatcher-intake-header h1 { font-size: clamp(1.85rem, 4vw, 3rem); letter-spacing: -.04em; }
+.dispatcher-intake-header p { max-width: 62ch; margin: 0; }
+.dispatcher-intake-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1.25rem; }
+.dispatcher-intake .card-body { padding: clamp(1rem, 3vw, 1.75rem); }
+.dispatcher-intake textarea { resize: vertical; }
+.dispatcher-intake :is(.form-select, .form-control, .btn) { min-height: 2.75rem; }
+@media (max-width: 48rem) {
+    .dispatcher-login, .dispatcher-intake-grid { grid-template-columns: minmax(0, 1fr); }
+    .dispatcher-login-brand { min-height: auto; }
+}

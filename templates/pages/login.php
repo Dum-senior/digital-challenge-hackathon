@@ -2,13 +2,15 @@
 $layout    = 'auth';
 $pageTitle = 'Вход';
 ?>
-<div style="max-width:420px;width:100%;">
-    <div class="text-center mb-4">
+<div class="dispatcher-login">
+    <div class="dispatcher-login-brand">
         <h1 class="text-white fw-bold"><?= brandMark('1em') ?> <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?></h1>
-        <p class="text-white-50">Войдите в свою учётную запись</p>
+        <p>Приём обращений и помощь инженерам</p>
     </div>
 
-    <div class="card shadow-lg border-0" style="border-radius:1rem;">
+    <div class="dispatcher-login-form">
+    <h2 class="h4 px-4">Войдите в свою учётную запись</h2>
+    <div class="card border-0">
         <div class="card-body p-4">
             <?php if (!empty($_GET['setup'])): ?>
             <div class="alert alert-success d-flex align-items-center" role="status" aria-live="polite">
@@ -55,8 +57,7 @@ $pageTitle = 'Вход';
                     <a href="/forgot" class="small text-decoration-none">Забыли пароль?</a>
                 </div>
 
-                <button type="submit" class="btn w-100 py-2 fw-semibold text-white"
-                        style="background-color:var(--ld-primary);border-color:var(--ld-primary);">
+                <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
                     <i class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></i>Войти
                 </button>
             </form>
@@ -98,7 +99,8 @@ $pageTitle = 'Вход';
         </div>
     </div>
 
-    <p class="text-center text-white-50 mt-3 small">
+    <p class="text-center text-muted mt-3 small">
         <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> &copy; <?= date('Y') ?>
     </p>
+</div>
 </div>

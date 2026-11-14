@@ -477,6 +477,7 @@
         }
     </style>
     <?php require ROOT_DIR . '/templates/partials/badge-soft-styles.php'; ?>
+    <link href="/assets/css/dispatcher-ui.css" rel="stylesheet">
 </head>
 <body class="<?= !empty($embedMode) ? 'embed-mode' : '' ?>">
     <a class="skip-link" href="#main-content">Skip to main content</a>
