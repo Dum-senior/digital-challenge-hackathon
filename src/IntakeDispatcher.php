@@ -150,7 +150,9 @@ final class IntakeDispatcher
         }
         $typeId = self::matchType($db, $category);
         $priorityId = $priority === null ? null : self::matchPriority($db, $priority);
-        $assignment = self::suggest($db, $category, $priority === 'critical');
+        $slaProfile = $danger ? 'critical' : ($mass ? 'mass' : $priority);
+        $responseMinutes = self::slaProfiles()[$slaProfile ?? '']['response_minutes'] ?? null;
+        $assignment = self::suggest($db, $category, $priority === 'critical', $responseMinutes);
         preg_match_all('/сч[её]тчик(?:а|у|е|ом)?\s*(?:№\s*|номер\s*)?(\d[\p{L}0-9-]{0,30})(?![\p{L}0-9-])/iu', $text, $meters);
         $numbers = array_values(array_unique($meters[1]));
         $meter = count($numbers) === 1 ? $numbers[0] : null;
@@ -179,7 +181,8 @@ final class IntakeDispatcher
             'incident_time' => $fields['incident_time'], 'affected_scope' => $fields['affected_scope'],
             'priority' => $priority, 'priority_id' => $priorityId,
             'severity_reason' => $reason,
-            'sla_profile' => $danger ? 'critical' : ($mass ? 'mass' : $priority),
+            'sla_profile' => $slaProfile,
+            'assignment_options' => $assignment['options'],
             'is_potential_emergency' => $danger,
             'recommended_group_id' => $assignment['group_id'],
             'recommended_assignee_id' => ($failure && !$danger) ? null : $assignment['assignee_id'],
@@ -297,111 +300,90 @@ final class IntakeDispatcher
         return (int) $stmt->fetchColumn() ?: null;
     }
 
-    /** Current live skills + non-closed ticket counts; never a second personnel catalog. */
-    public static function suggest(PDO $db, string $category, bool $emergency = false): array
+    public static function categoryForType(?string $name): string
     {
-        if ($emergency) {
-            $active = ticketStatusSqlIn(ticketClosedBucketSlugs(), 't.status', true);
-            $choice = $db->query("SELECT u.id, g.id AS group_id, COUNT(DISTINCT t.id) AS workload
-                FROM users u
-                JOIN group_user_map m ON m.user_id = u.id
-                JOIN `groups` g ON g.id = m.group_id AND g.is_confidential = 0
-                LEFT JOIN agent_oof_status o ON o.user_id = u.id
-                LEFT JOIN tickets t ON t.assigned_to = u.id AND $active
-                WHERE u.is_available = 1 AND u.role NOT IN ('admin','dispatcher') AND COALESCE(o.is_oof,0) = 0 AND " . staffRoleSqlIn('u.role') . "
-                GROUP BY u.id, g.id ORDER BY workload, u.id, g.id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-            return $choice
-                ? ['group_id' => (int) $choice['group_id'], 'assignee_id' => (int) $choice['id'],
-                    'reason' => 'Авария: доступный инженер с минимальной нагрузкой. Открытых заявок: ' . $choice['workload']]
-                : ['group_id' => null, 'assignee_id' => null, 'reason' => 'Нет доступных инженеров. Эскалируйте диспетчеру'];
+        foreach (self::CATEGORIES as $category) {
+            if ($name !== null && self::categoryName($category) === $name) return $category;
         }
+        return 'unknown';
+    }
+
+    /**
+     * An indicative queue estimate, not an attendance promise. Each queued job
+     * contributes 10 minutes and each job already in progress contributes 20.
+     */
+    public static function assignmentOptions(PDO $db, string $category, ?int $minutes, ?int $excludeTicket = null): array
+    {
         $keywords = [
-            'peripherals' => ['принтер', 'печать', 'printer'], 'telemetry' => ['телеметр', 'счётчик', 'счетчик'],
-            'automation' => ['opc', 'асу', 'автоматиз'], 'network' => ['сеть', 'связь', 'network'],
-            'security' => ['иб', 'security', 'безопасн'], 'access' => ['доступ', 'access', 'учётн'],
-            'database' => ['баз данных', 'sql', 'database'],
+            'peripherals' => ['принтер', 'печать'], 'telemetry' => ['телеметр', 'счётчик', 'счетчик'],
+            'automation' => ['opc', 'асу', 'автоматиз'], 'network' => ['сеть', 'связь'],
+            'security' => ['иб', 'безопасн'], 'access' => ['доступ', 'учётн'],
+            'database' => ['баз данных', 'sql'], 'workstation' => ['рабочие станц', 'рабочее место'],
+            'fire' => ['аварийн', 'пожар'],
         ][$category] ?? [];
-        if ($keywords === []) return ['group_id' => null, 'assignee_id' => null, 'reason' => 'Требуется уточнение категории'];
-        $groups = $db->query('SELECT id, name, description FROM `groups` WHERE is_confidential = 0 ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
-        $score = [];
-        foreach ($groups as $g) {
-            $id = (int) $g['id'];
-            $title = mb_strtolower($g['name'] . ' ' . ($g['description'] ?? ''));
-            $score[$id] = 0;
-            foreach ($keywords as $word) {
-                if (mb_stripos($title, $word) !== false) { $score[$id] += 5; break; }
-            }
-        }
-        // A group can be generically named "IT" but still contain printer/network
-        // specialists. Compare LIVE group membership + registered skill names too.
-        $skillStmt = $db->query('SELECT m.group_id, m.user_id, s.name AS skill_name
-           FROM group_user_map m
-           JOIN users u ON u.id = m.user_id
-           JOIN user_skill_map usm ON usm.user_id = u.id
-           JOIN agent_skills s ON s.id = usm.skill_id
-           JOIN `groups` g ON g.id = m.group_id AND g.is_confidential = 0
-           WHERE ' . staffRoleSqlIn('u.role'));
-        $skilled = [];
-        foreach ($skillStmt->fetchAll(PDO::FETCH_ASSOC) as $entry) {
-            $group = (int) $entry['group_id'];
-            $name = mb_strtolower($entry['skill_name']);
-            foreach ($keywords as $word) {
-                if (mb_stripos($name, $word) !== false) {
-                    $skilled[$group][(int) $entry['user_id']] = true;
-                    break;
-                }
-            }
-        }
-        foreach ($score as $id => &$value) $value += count($skilled[$id] ?? []);
-        unset($value);
-        $best = $score === [] ? 0 : max($score);
-        $matches = $best > 0 ? array_keys(array_filter($score, static fn(int $v): bool => $v === $best)) : [];
-        if (count($matches) !== 1) {
-            return ['group_id' => null, 'assignee_id' => null, 'reason' => 'Нет однозначного соответствия группе или подтверждённым навыкам OpenHelpDesk'];
-        }
-        $groupId = (int) $matches[0];
-        $sql = "SELECT u.id, u.is_available, COALESCE(o.is_oof, 0) AS is_oof,
-                      s.name AS skill_name, usm.proficiency
-                FROM group_user_map gum
-                JOIN users u ON u.id = gum.user_id
-                LEFT JOIN agent_oof_status o ON o.user_id = u.id
-                LEFT JOIN user_skill_map usm ON usm.user_id = u.id
-                LEFT JOIN agent_skills s ON s.id = usm.skill_id
-                WHERE gum.group_id = ? AND " . staffRoleSqlIn('u.role') . ' ORDER BY u.id';
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$groupId]);
-        $candidates = [];
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $entry) {
-            $id = (int) $entry['id'];
-            $candidates[$id] ??= ['id' => $id, 'available' => ((int) $entry['is_available'] === 1 && (int) $entry['is_oof'] === 0), 'skills' => []];
-            if ($entry['skill_name'] !== null) $candidates[$id]['skills'][] = [mb_strtolower($entry['skill_name']), (int) $entry['proficiency']];
-        }
-        $levels = [];
-        foreach ($candidates as $id => $candidate) {
-            if (!$candidate['available']) continue;
-            $level = 0;
-            foreach ($candidate['skills'] as [$skill, $proficiency]) {
-                foreach ($keywords as $needle) {
-                    if (mb_stripos($skill, $needle) !== false) $level = max($level, $proficiency);
-                }
-            }
-            $levels[$id] = $level;
-        }
-        if (!$levels) return ['group_id' => $groupId, 'assignee_id' => null,
-            'reason' => 'В подразделении нет доступных инженеров'];
-        $ids = array_keys($levels);
-        $holders = implode(',', array_fill(0, count($ids), '?'));
         $active = ticketStatusSqlIn(ticketClosedBucketSlugs(), 't.status', true);
-        $stmt = $db->prepare("SELECT t.assigned_to, COUNT(*) AS count_open FROM tickets t WHERE t.assigned_to IN ({$holders}) AND {$active} GROUP BY t.assigned_to");
-        $stmt->execute($ids);
-        $counts = array_fill_keys($ids, 0);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) $counts[(int) $row['assigned_to']] = (int) $row['count_open'];
-        usort($ids, static fn(int $a, int $b): int =>
-            ($levels[$b] <=> $levels[$a]) ?: ($counts[$a] <=> $counts[$b]) ?: ($a <=> $b));
-        $choice = $ids[0];
-        $reason = [0=>'Подбор по нагрузке в подразделении', 1=>'Базовый навык', 2=>'Уверенный навык', 3=>'Эксперт по направлению'][$levels[$choice]] ?? 'Подтверждённый навык';
-        return ['group_id' => $groupId, 'assignee_id' => $choice,
-            'reason' => "$reason. Открытых заявок: {$counts[$choice]}"];
+        $query = $db->prepare("SELECT u.id, CONCAT_WS(' ',u.first_name,u.last_name) AS name,
+            u.is_available, COALESCE(o.is_oof,0) AS is_oof, g.id AS group_id, g.name AS department,
+            s.name AS skill, us.proficiency, COALESCE(q.jobs,0) AS jobs, COALESCE(q.wait_minutes,0) AS wait_minutes
+            FROM users u JOIN group_user_map m ON m.user_id=u.id
+            JOIN `groups` g ON g.id=m.group_id AND g.is_confidential=0
+            LEFT JOIN agent_oof_status o ON o.user_id=u.id
+            LEFT JOIN user_skill_map us ON us.user_id=u.id
+            LEFT JOIN agent_skills s ON s.id=us.skill_id AND (s.group_id IS NULL OR s.group_id=g.id)
+            LEFT JOIN (
+                SELECT t.assigned_to,COUNT(*) AS jobs,
+                    SUM(CASE WHEN t.status='in_progress' THEN 20 ELSE 10 END) AS wait_minutes
+                FROM tickets t WHERE $active AND t.id<>? GROUP BY t.assigned_to
+            ) q ON q.assigned_to=u.id
+            WHERE u.role='agent' ORDER BY u.id,g.id,s.name");
+        $query->execute([$excludeTicket ?? 0]);
+        $choices = [];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $key = $row['group_id'] . ':' . $row['id'];
+            $choices[$key] ??= [
+                'id'=>(int)$row['id'], 'group_id'=>(int)$row['group_id'], 'name'=>$row['name'],
+                'department'=>$row['department'], 'available'=>(bool)$row['is_available'] && !(bool)$row['is_oof'],
+                'open_count'=>(int)$row['jobs'], 'wait_minutes'=>(int)$row['wait_minutes'],
+                'fits_sla'=>$minutes === null ? null : (int)$row['wait_minutes'] < $minutes,
+                'skills'=>[], 'match'=>0,
+            ];
+            if ($row['skill'] === null) continue;
+            $choices[$key]['skills'][] = $row['skill'];
+            foreach ($keywords as $keyword) {
+                if (mb_stripos($row['skill'], $keyword) !== false) {
+                    $choices[$key]['match'] = max($choices[$key]['match'], (int)$row['proficiency']);
+                }
+            }
+        }
+        $choices = array_values($choices);
+        usort($choices, static fn(array $a, array $b): int =>
+            ($b['available'] <=> $a['available'])
+            ?: (($b['match'] > 0) <=> ($a['match'] > 0))
+            ?: (($b['fits_sla'] !== false) <=> ($a['fits_sla'] !== false))
+            ?: ($a['wait_minutes'] <=> $b['wait_minutes'])
+            ?: ($b['match'] <=> $a['match'])
+            ?: ($a['id'] <=> $b['id'])
+            ?: ($a['group_id'] <=> $b['group_id']));
+        return $choices;
+    }
+
+    public static function suggest(PDO $db, string $category, bool $emergency = false, ?int $minutes = null): array
+    {
+        $choices = self::assignmentOptions($db, $category, $minutes);
+        $qualified = array_values(array_filter($choices, static fn(array $c): bool => $c['available'] && $c['match'] > 0));
+        $choice = $qualified[0] ?? ($emergency ? ($choices[0] ?? null) : null);
+        if (!$choice || !$choice['available']) {
+            return ['group_id'=>null, 'assignee_id'=>null,
+                'reason'=>'Нет доступного специалиста с подходящей компетенцией. Проверьте смену и эскалируйте.',
+                'options'=>$choices];
+        }
+        $reason = sprintf('Открытых заявок: %d. Оценка очереди: %d мин.', $choice['open_count'], $choice['wait_minutes']);
+        if ($choice['fits_sla'] === false) {
+            $reason .= ' Очередь не укладывается в SLA. Подключите резерв или уточните время реакции.';
+        } elseif (count($qualified) > 1 && array_filter($qualified, static fn(array $c): bool => $c['fits_sla'] === false)) {
+            $reason .= ' Предложен доступный специалист, потому что очередь других специалистов превышает SLA.';
+        }
+        return ['group_id'=>$choice['group_id'], 'assignee_id'=>$choice['id'], 'reason'=>$reason, 'options'=>$choices];
     }
 
     public static function validateApproved(PDO $db, array $approved, int $ownerId, bool $canAssign): array
@@ -537,7 +519,7 @@ final class IntakeDispatcher
         $staff = self::canConfirm($user);
         // Never disclose internal routing IDs/notes through the portal's extracted object.
         if (!$staff) {
-            unset($analysis['recommended_group_id'], $analysis['recommended_assignee_id'], $analysis['assignment_reason']);
+            unset($analysis['recommended_group_id'], $analysis['recommended_assignee_id'], $analysis['assignment_reason'], $analysis['assignment_options']);
         }
         return [
             'draft_id' => (int) $row['id'], 'revision' => (int) $row['revision'], 'status' => $row['status'],

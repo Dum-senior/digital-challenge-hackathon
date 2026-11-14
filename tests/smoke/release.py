@@ -67,7 +67,7 @@ with concurrent.futures.ThreadPoolExecutor() as pool:
 request(dispatcher, "/workspace/api/engineers", expected=403)
 request(engineer, "/workspace/api/engineers", expected=403)
 engineers = request(admin, "/workspace/api/engineers")["engineers"]
-assert engineers and engineers[0]["competencies"]
+assert len(engineers) >= 7 and any(e["competencies"] for e in engineers)
 
 for variable, path, field in (
     ("TEST_AUDIO", "/intake/transcriptions", "audio"),
@@ -94,7 +94,7 @@ assert draft["extracted"]["analysis_mode"] == "private_llm", draft["extracted"].
 assert draft["extracted"]["priority"] == "critical"
 assert draft["sla"]["response_minutes"] == 5
 assert draft["extracted"]["location"]["name"] == "Корпус Б"
-assert draft["approved"]["assigned_to"] == engineers[0]["id"]
+assert draft["approved"]["assigned_to"] in {e["id"] for e in engineers}
 endpoint = f"/intake/drafts/{draft['draft_id']}/confirm"
 approved = draft["approved"]
 args = {"revision": draft["revision"], "approve": True,
@@ -107,9 +107,27 @@ created = request(dispatcher, endpoint, {**args, "approved": approved,
                   "sla": {"response_minutes": 3, "resolution_minutes": 45}}, csrf, expected=201)
 ticket = created["ticket_id"]
 assert request(dispatcher, endpoint, args, csrf)["ticket_id"] == ticket
+before = next(t for t in request(dispatcher, "/workspace/api/tickets") if t["id"] == ticket)
+assign_path = f"/workspace/api/tickets/{ticket}/assignment"
+assignment = request(dispatcher, assign_path)
+second = request(dispatcher, "/intake/analyze", {"text": "В офисе №2 идёт дым из оборудования."}, csrf, expected=201)
+assert second["approved"]["assigned_to"] not in (None, assignment["assigned_to"]), second
+assert "очередь других специалистов превышает SLA" in second["recommendation"]["reason"]
+
+base_engineer = json.loads(re.search(r"window.DISPATCH_CONFIG=({.*?});", request(engineer, "/workspace"))[1])["currentUser"]["id"]
+replacement = next(e for e in assignment["options"] if e["id"] == base_engineer)
+assert replacement["available"] and assignment["assigned_to"] != base_engineer
+move = {"assignee_id": base_engineer, "group_id": replacement["group_id"],
+        "previous_assignee_id": assignment["assigned_to"], "reason": "Передача свободному инженеру"}
+request(engineer, assign_path, move, eng_csrf, expected=403)
+request(dispatcher, assign_path, move, csrf)
+request(dispatcher, assign_path, move, csrf, expected=409)
 for client in (dispatcher, engineer):
     record = next(t for t in request(client, "/workspace/api/tickets") if t["id"] == ticket)
     assert record["subject"] == approved["subject"]
+    assert record["responseDueAt"] == before["responseDueAt"]
+    assert record["resolutionDueAt"] == before["resolutionDueAt"]
+    assert record["slaStartedAt"]
     response = datetime.fromisoformat(record["responseDueAt"])
     resolution = datetime.fromisoformat(record["resolutionDueAt"])
     assert (resolution - response).total_seconds() == 42 * 60, record
@@ -122,6 +140,9 @@ assert solution.get("status") == "suggested" and solution.get("emergency"), solu
 assert solution["steps"] and not solution["take"] and "sources" not in solution, solution
 report = request(admin, "/workspace/api/reports")
 assert report["critical"] >= 1 and report["resolved"] >= 1
+assert next(t for t in report["incidents"] if t["id"] == ticket)["resolved"]
+assert report["byCategory"] and report["byEngineer"] and report["byLocation"]
+assert report["timing"]["response_count"] >= 1
 assert request(admin, "/workspace/api/audit")
 assert len(request(admin, "/workspace/api/articles")) >= 78
 print("PASS roles, emergency, edited draft, idempotency, engineer workflow, reports, audit and knowledge base")

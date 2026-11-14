@@ -121,3 +121,21 @@ input[type=date]:focus,input[type=url]:focus{border-color:#82a7f3;box-shadow:0 0
 @media(max-width:430px){.engineer-summary{grid-template-columns:1fr}.engineer-profile{flex-wrap:wrap}.engineer-workload{margin-left:57px;text-align:left;flex-direction:row;gap:7px;align-items:baseline}.engineer-avatar{width:39px;height:39px;flex-basis:39px}.engineer-profile h2{font-size:14px}}
 
 .field-with-hint{min-width:0;overflow-wrap:anywhere}.field-with-hint p{margin:4px 0 0}.ticket-detail-title{font-size:clamp(24px,4vw,36px);line-height:1.2;margin:5px 0 0;overflow-wrap:anywhere}.ticket-head>div{min-width:0}
+.sla-clocks{display:flex;flex-wrap:wrap;gap:9px;margin-top:9px}
+.sla-clock{--sla-color:#168454;--sla-fill:#ecf8f1;display:flex;align-items:stretch;gap:10px;min-width:165px;flex:1 1 165px;border:1px solid color-mix(in srgb,var(--sla-color) 23%,white);background:var(--sla-fill);padding:10px 12px;border-radius:10px;color:var(--sla-color)}
+.sla-clock[data-phase="watch"]{--sla-color:#8d5b00;--sla-fill:#fff7e4}
+.sla-clock[data-phase="urgent"],.sla-clock[data-phase="expired"]{--sla-color:#b32139;--sla-fill:#fff0f2}
+.sla-clock[data-phase="expired"]{border-color:#e59aab}
+.sla-clock[data-phase="idle"],.sla-clock[data-sla-paused]:not([data-sla-paused=""]){--sla-color:#566680;--sla-fill:#f1f4f8}
+.sla-rail{position:relative;flex:0 0 4px;width:4px;min-height:39px;margin:5px 4px;background:color-mix(in srgb,var(--sla-color) 24%,white);border-radius:8px}
+.sla-rail::before{content:"";position:absolute;inset:0 0 auto;height:var(--sla-progress);background:var(--sla-color);border-radius:inherit}
+.sla-rail i{position:absolute;left:50%;top:var(--sla-progress);transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--sla-color);box-shadow:0 0 0 2px var(--sla-fill)}
+.sla-rail i,.sla-rail::before{transition:top 1s linear,height 1s linear}
+.sla-clock-copy{display:grid;align-content:center;gap:3px}
+.sla-clock-title,.sla-clock-status,.sla-clock-done{font-size:11px}
+.sla-clock-time{font-size:12px;font-variant-numeric:tabular-nums}
+.sla-clock-status{font-weight:700}.sla-clock-done{color:#536580;padding:8px 0}
+.assignment-risk{display:block;color:#9b2740;font-size:12px;font-weight:650;margin-top:5px}
+.assignment-risk[hidden]{display:none}
+.stats-table th,.stats-table td{white-space:normal}
+@media(prefers-reduced-motion:reduce){.sla-rail i,.sla-rail::before{transition:none}}

@@ -35,6 +35,8 @@
     listCategories: () => request('/intake/meta'),
     analyze: (text,source) => post('/intake/analyze',{text,source,request_id:crypto.randomUUID()}),
     confirm: (draft,body) => post('/intake/drafts/'+id(draft)+'/confirm',body),
+    assignmentOptions: ticket => request(api+'/tickets/'+id(ticket)+'/assignment'),
+    reassign: (ticket,body) => post(api+'/tickets/'+id(ticket)+'/assignment',body),
     updateTicket: (ticket,body) => post(api+'/tickets/'+id(ticket)+'/update',body),
     draftAssist: draft => post(api+'/drafts/'+id(draft)+'/assist'),
     engineerAssist: ticket => post(api+'/tickets/'+id(ticket)+'/assist'),

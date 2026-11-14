@@ -84,24 +84,73 @@ function deadlineHtml(t){
  const overdue=date.getTime()<Date.now();
  return `<span class="sla-text ${overdue?'overdue':''}" data-sla-deadline="${esc(date.toISOString())}" title="Срок реакции: ${esc(date.toLocaleString('ru-RU'))}">${esc(slaText(iso))}</span>`;
 }
+function slaPhase(deadline, start, at=Date.now()){
+ const due=Date.parse(deadline), baseline=Date.parse(start);
+ if(!Number.isFinite(due)||!Number.isFinite(baseline))return {phase:'idle',progress:0,rank:0};
+ const progress=Math.max(0,Math.min(1,(at-baseline)/Math.max(1,due-baseline)));
+ if(at>=due)return {phase:'expired',progress:1,rank:4};
+ if(progress>=.8)return {phase:'urgent',progress,rank:3};
+ if(progress>=.5)return {phase:'watch',progress,rank:2};
+ return {phase:'normal',progress,rank:1};
+}
+const slaLabels={normal:'В срок',watch:'Срок приближается',urgent:'Срочно',expired:'Просрочен',idle:'Без срока'};
 function ticketSlaHtml(ticket) {
- const response = responseDeadline(ticket);
- const resolution = ticket.resolutionDueAt;
- if (!response && !resolution) return '';
- const closed = ['resolved','closed'].includes(ticket.status);
- const renderDeadline = (caption, iso, label) => {
-   if (!iso) return '';
-   const date = new Date(iso);
-   if (Number.isNaN(date.getTime())) return '';
-   const running = !closed && !ticket.sla_paused_at && !(label === 'реакцию' && ticket.first_responded_at);
-   return `<div><div class="field-label">${caption}</div><strong>${formatDate(iso)}</strong>${running
-     ? ` <span class="sla-text" data-sla-deadline="${esc(iso)}" data-sla-label="${label}">${esc(slaText(iso,label))}</span>` : ''}</div>`;
+ if(Number(ticket.sla_exempt))return '';
+ const closed=ticket.isClosed??['resolved','closed'].includes(ticket.status);
+ const begin=ticket.slaStartedAt||ticket.createdAt;
+ const paused=ticket.slaPausedAt;
+ const renderDeadline=(caption, iso, label, completed)=>{
+   if(!iso||!Number.isFinite(Date.parse(iso)))return '';
+   if(closed||completed)return `<div class="sla-clock-done"><span>${caption}</span> <strong>${formatDate(iso)}</strong> · ${closed?'Завершено':'Принято'}</div>`;
+   const phase=slaPhase(iso,begin,paused?Date.parse(paused):Date.now());
+   return `<div class="sla-clock" data-phase="${phase.phase}" style="--sla-progress:${phase.progress*100}%"
+     data-sla-rail="${esc(iso)}" data-sla-start="${esc(begin||'')}" data-sla-paused="${esc(paused||'')}">
+     <span class="sla-rail" aria-hidden="true"><i></i></span>
+     <div class="sla-clock-copy"><span class="sla-clock-title">${caption} до ${formatDate(iso)}</span>
+     <strong class="sla-clock-time" data-sla-deadline="${esc(iso)}" data-sla-label="${label}">${esc(paused?'На паузе':slaText(iso,label))}</strong>
+     <span class="sla-clock-status">${paused?'Пауза':slaLabels[phase.phase]}</span></div></div>`;
  };
- return `<div class="grid-2 top-gap">${renderDeadline('Реакция до',response,'реакцию')}
-   ${renderDeadline(ticket.priority==='critical'?'Контроль статуса до':'Решение до',resolution,'следующий контроль')}</div>`;
+ const response=renderDeadline('Реакция',responseDeadline(ticket),'реакцию',Boolean(ticket.first_responded_at));
+ const resolution=renderDeadline(ticket.priority==='critical'?'Контроль':'Решение',ticket.resolutionDueAt,'решение',false);
+ return response||resolution?`<div class="sla-clocks">${response}${resolution}</div>`:'';
+}
+function assignmentRiskHtml(ticket) {
+ if(ticket.isClosed||Number(ticket.sla_exempt)||ticket.slaPausedAt)return '';
+ const due=(!ticket.first_responded_at&&responseDeadline(ticket))||ticket.resolutionDueAt;
+ if(!due||!Number.isFinite(Date.parse(due)))return '';
+ const wait=Number(ticket.engineerQueueMinutes??0);
+ const unavailable=ticket.engineerAvailable===false||!ticket.assigneeId;
+ const risk=unavailable||Date.parse(due)-Date.now()<=wait*60000;
+ return `<span class="assignment-risk" data-assignment-window="${esc(due)}" data-queue-minutes="${wait}"
+    data-unavailable="${unavailable?'1':'0'}" ${risk?'':'hidden'}>${unavailable?'Исполнитель недоступен':'Очередь под угрозой SLA'} · проверьте замену</span>`;
 }
 function refreshCountdowns(){
- root.querySelectorAll('[data-sla-deadline]').forEach(el=>{const deadline=el.dataset.slaDeadline;el.textContent=slaText(deadline,el.dataset.slaLabel);el.classList.toggle('overdue',new Date(deadline).getTime()<Date.now());});
+ const now=Date.now();
+ root.querySelectorAll('[data-sla-deadline]').forEach(el=>{
+   const rail=el.closest('[data-sla-rail]');
+   if(rail?.dataset.slaPaused)return;
+   const deadline=el.dataset.slaDeadline;
+   el.textContent=slaText(deadline,el.dataset.slaLabel);
+   if(!rail){el.classList.toggle('overdue',Date.parse(deadline)<=now);return;}
+   const phase=slaPhase(deadline,rail.dataset.slaStart,now);
+   rail.dataset.phase=phase.phase;
+   rail.style.setProperty('--sla-progress',phase.progress*100+'%');
+   rail.querySelector('.sla-clock-status').textContent=slaLabels[phase.phase];
+ });
+ root.querySelectorAll('[data-assignment-window]').forEach(el=>{
+   el.hidden=el.dataset.unavailable!=='1'&&Date.parse(el.dataset.assignmentWindow)-now>Number(el.dataset.queueMinutes)*60000;
+ });
+ const body=root.querySelector('[data-live-queue]');
+ if(body&&!root.querySelector('.modal-backdrop')&&!body.contains(document.activeElement)){
+   const rows=[...body.querySelectorAll('[data-ticket-row]')];
+   const ranked=rows.map(row=>{
+     const clocks=[...row.querySelectorAll('[data-sla-rail]')].filter(clock=>!clock.dataset.slaPaused);
+     return {row,rank:Math.max(0,...clocks.map(clock=>slaPhase(clock.dataset.slaRail,clock.dataset.slaStart,now).rank)),
+       due:Math.min(Infinity,...clocks.map(clock=>Date.parse(clock.dataset.slaRail)))};
+   }).sort((a,b)=>Number(b.row.dataset.critical)-Number(a.row.dataset.critical)||b.rank-a.rank
+     ||a.due-b.due||Number(b.row.dataset.ticketRow)-Number(a.row.dataset.ticketRow));
+   ranked.forEach((item,i)=>{if(body.children[i]!==item.row)body.insertBefore(item.row,body.children[i]||null);});
+ }
  const timer=root.querySelector('[data-measurement-timer]');if(timer&&state.timerStarted!==null){timer.textContent=measurementTime(Date.now()-state.timerStarted);}
 }
 function measurementTime(ms){const t=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;}
@@ -114,8 +163,10 @@ function shell(page){
  const nav=(navigation[state.role]||navigation.dispatcher).map(([path,label,ico])=>`<a class="nav-item ${page===path||((page.startsWith('/tickets/')||page==='/tickets')&&path==='/tickets')?'active':''}" href="#${path}">${icon(ico)}<span>${esc(label)}</span></a>`).join('');
  const who=user(),current=page.split('/').filter(Boolean).join(' / ');
  const avatar=(who.name||'Пользователь').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+ const demoEngineerSelect=CFG.demoEngineers?.length>1?`<label><span class="sr-only">Демо-инженер</span>
+ <select class="role-choice" id="demo-engineer-select">${CFG.demoEngineers.map(e=>`<option value="${esc(e.id)}" ${Number(e.id)===Number(who.id)?'selected':''}>${esc(e.name)}</option>`).join('')}</select></label>`:'';
  const roleSelect=(API.isDemo()||CFG.demoRoles)?`<label><span class="sr-only">Выбрать роль для демонстрации</span><select class="role-choice" id="role-select">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${state.role===k?'selected':''}>${v}</option>`).join('')}</select></label>`:`<span class="role-choice">${esc(roles[state.role]||state.role)}</span>`;
- return `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-icon">${icon('spark',22)}</div><div><div class="brand-title">Диспетчер ИИ</div></div></div><div class="nav-caption">Рабочее пространство</div><nav aria-label="Основные разделы">${nav}</nav><div class="sidebar-footer"><span class="dot"></span>${API.isDemo()?'Демо-режим':'Подключённый режим'}<div>${API.isDemo()?'Без настоящих API и LLM':'Данные через API'}</div><div style="margin-top:12px"><a href="/workspace">${icon('logout',14)} <span style="display:inline-block;vertical-align:middle">Главное меню</span></a></div></div></aside><div class="content"><div class="container"><header class="topbar"><div class="breadcrumbs">Рабочее пространство / ${esc(current||'Главная')}</div><div class="account-area"><span class="mode ${API.isDemo()?'':'api'}">${API.isDemo()?'DEMO':'API'}</span>${roleSelect}<div class="avatar" title="${esc(who.name)}">${esc(avatar)}</div></div></header><main id="view"></main><footer class="footer-note">Диспетчер ИИ · ${API.isDemo()?'Демонстрационные данные. Не подключено к рабочей базе.':''}</footer></div></div></div><div class="toast-wrap" aria-live="polite"></div><div id="modal-root"></div>`;
+ return `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-icon">${icon('spark',22)}</div><div><div class="brand-title">Диспетчер ИИ</div></div></div><div class="nav-caption">Рабочее пространство</div><nav aria-label="Основные разделы">${nav}</nav><div class="sidebar-footer"><span class="dot"></span>${API.isDemo()?'Демо-режим':'Подключённый режим'}<div>${API.isDemo()?'Без настоящих API и LLM':'Данные через API'}</div><div style="margin-top:12px"><a href="/workspace">${icon('logout',14)} <span style="display:inline-block;vertical-align:middle">Главное меню</span></a></div></div></aside><div class="content"><div class="container"><header class="topbar"><div class="breadcrumbs">Рабочее пространство / ${esc(current||'Главная')}</div><div class="account-area"><span class="mode ${API.isDemo()?'':'api'}">${API.isDemo()?'DEMO':'API'}</span>${roleSelect}${demoEngineerSelect}<div class="avatar" title="${esc(who.name)}">${esc(avatar)}</div></div></header><main id="view"></main><footer class="footer-note">Диспетчер ИИ · ${API.isDemo()?'Демонстрационные данные. Не подключено к рабочей базе.':''}</footer></div></div></div><div class="toast-wrap" aria-live="polite"></div><div id="modal-root"></div>`;
 }
 /** Render editable values from the current server revision of the draft. */
 function classifyPreview() {
@@ -127,7 +178,9 @@ function classifyPreview() {
  const adviceKey='draft:'+draft.draft_id+':'+draft.revision;
  const advice=state.assist[adviceKey];
  const sla=draft.sla||{};
- const engineers=(meta.agents||[]).map(e=>({id:e.group_id+':'+e.id,name:e.first_name+' '+e.last_name}));
+ const live=(ex.assignment_options||[]).filter(e=>e.available);
+ const engineers=live.length?live.map(e=>({id:e.group_id+':'+e.id,name:assignmentLabel(e,a.assigned_to)})):
+   (meta.agents||[]).map(e=>({id:e.group_id+':'+e.id,name:e.first_name+' '+e.last_name}));
  const places=(meta.locations||[]).map(l=>({...l,name:l.address?l.name+' · '+l.address:l.name}));
  return `<div class="surface card"><h2>Проверка черновика №${esc(draft.draft_id)}</h2><div class="grid-2">
  <label class="form-field"><span>Категория</span><select id="confirm-category">${options(meta.types||[],a.type_id)}</select></label>
@@ -135,6 +188,7 @@ function classifyPreview() {
  <div class="field-with-hint"><label class="form-field"><span>Место</span><select id="confirm-location">${options(places,a.location_id)}</select></label>
  ${ex.severity_reason?`<p class="hint">${esc(ex.severity_reason)}</p>`:''}</div>
  <div class="field-with-hint"><label class="form-field"><span>Инженер</span><select id="confirm-assignee">${options(engineers,a.group_id+':'+a.assigned_to)}</select></label>
+ <p id="draft-assignment-hint" class="hint" role="status"></p>
  ${draft.recommendation?.reason?`<p class="hint">${esc(draft.recommendation.reason)}</p>`:''}</div></div>
  <label class="form-field"><span>Тема</span><textarea id="confirm-subject" maxlength="255">${esc(a.subject||ex.subject)}</textarea></label>
  <label class="form-field"><span>Описание</span><textarea id="confirm-description">${esc(a.description||ex.description)}</textarea></label>
@@ -177,17 +231,17 @@ function ticketsView(assigned=false){
  };
  const urgent=ticketsForRole().filter(isCriticalUnaccepted);
  const banner=isEngineer&&urgent.length?`<div class="urgent-banner" role="status" aria-label="Критические заявки ожидают реакции"><span class="urgent-banner-icon">${icon('warning',25)}</span><div><div class="urgent-head">СРОЧНО! ОЖИДАЮТ ПРИНЯТИЯ: ${urgent.length}</div><div class="urgent-details">Критическая заявка #${esc(urgent[0].id)} · ${esc(urgent[0].subject)} · ${deadlineHtml(urgent[0])}</div></div>${btn('Перейти к заявке '+icon('arrow',15),'focus-urgent','button urgent-quick','data-id="'+esc(urgent[0].id)+'"')}</div>`:'';
- return intro(assigned?'Мои заявки':'Заявки',assigned?'Ваши обращения. Примите заявку, затем отметьте её выполнение прямо в списке.':'Просмотр, статусы и корректировка текста обращений.')+banner+
+ return intro(assigned?'Мои заявки':'Заявки',assigned?'Ваши обращения. Примите заявку, затем отметьте её выполнение прямо в списке.':'Срочные заявки поднимаются в очереди по мере истечения SLA.')+banner+
  (isEngineer&&API.isDemo()?`<div class="demo-help">Демо: ${btn(icon('warning',13)+' Создать новую тревогу','demo-critical','button small soft')} ${btn(icon('refresh',13)+' Проверить обновления','refresh-queue','button small soft')}</div>`:isEngineer?`<div class="demo-help">${btn(icon('refresh',13)+' Проверить новые заявки','refresh-queue','button small soft')}</div>`:'')+
  `<div class="filters"><input id="ticket-search" type="search" placeholder="Поиск по номеру или тексту" value="${esc(state.ticketQuery)}"/><select id="ticket-filter-status"><option value="all">Все статусы</option>${Object.entries(statuses).filter(([k])=>k!=='needs_clarification').map(([k,v])=>`<option value="${k}" ${state.ticketStatus===k?'selected':''}>${v}</option>`).join('')}</select></div>
- <section class="surface"><div class="table-head"><strong>Список заявок</strong><small>${rows.length} из ${ticketsForRole().length}</small></div><div class="table-wrap"><table class="table"><thead><tr><th>№</th><th>Обращение</th><th>Приоритет</th><th>Статус</th>${isEngineer?'<th>Действия</th>':'<th>Исполнитель</th><th>Действие</th>'}</tr></thead><tbody>
- ${rows.length?rows.map(t=>`<tr class="${isEngineer&&isCriticalUnaccepted(t)?'urgent-ticket-row':''}" data-ticket-row="${esc(t.id)}"><td><button class="button link" data-action="open-ticket" data-id="${esc(t.id)}">#${esc(t.id)}</button></td><td><button class="ticket-title-link" data-action="open-ticket" data-id="${esc(t.id)}">${esc(t.subject)}</button><div class="small muted">${esc(t.location||'Место не указано')}</div>${ticketSlaHtml(t)}</td>${isEngineer&&isCriticalUnaccepted(t)?`<td colspan="3" class="urgent-only-cell">${controls(t)}</td>`:`<td>${pillPriority(t.priority)}</td><td>${isEngineer?engineerStateBadge(t):pillStatus(t.status)}</td>${isEngineer?`<td>${controls(t)}</td>`:`<td>${esc(t.assigneeName||'Не назначен')}</td><td>${btn(icon('file')+' Изменить','edit-ticket','button small soft','data-id="'+esc(t.id)+'"')}</td>`}`}</tr>`).join(''):`<tr><td colspan="${isEngineer?5:6}" class="muted" style="text-align:center;padding:30px">Нет подходящих заявок</td></tr>`}</tbody></table></div></section>`;
+ <section class="surface"><div class="table-head"><strong>Список заявок</strong><small>${rows.length} из ${ticketsForRole().length}</small></div><div class="table-wrap"><table class="table"><thead><tr><th>№</th><th>Обращение</th><th>Приоритет</th><th>Статус</th>${isEngineer?'<th>Действия</th>':'<th>Исполнитель</th><th>Действие</th>'}</tr></thead><tbody data-live-queue>
+ ${rows.length?rows.map(t=>`<tr class="${isEngineer&&isCriticalUnaccepted(t)?'urgent-ticket-row':''}" data-ticket-row="${esc(t.id)}" data-critical="${t.priority==='critical'&&!t.isClosed?1:0}"><td><button class="button link" data-action="open-ticket" data-id="${esc(t.id)}">#${esc(t.id)}</button></td><td><button class="ticket-title-link" data-action="open-ticket" data-id="${esc(t.id)}">${esc(t.subject)}</button><div class="small muted">${esc(t.location||'Место не указано')}</div>${ticketSlaHtml(t)}</td>${isEngineer&&isCriticalUnaccepted(t)?`<td colspan="3" class="urgent-only-cell">${controls(t)}</td>`:`<td>${pillPriority(t.priority)}</td><td>${isEngineer?engineerStateBadge(t):pillStatus(t.status)}</td>${isEngineer?`<td>${controls(t)}</td>`:`<td>${esc(t.assigneeName||'Не назначен')}${assignmentRiskHtml(t)}</td><td>${btn(icon('file')+' Изменить','edit-ticket','button small soft','data-id="'+esc(t.id)+'"')}${t.isClosed?'':btn('Сменить инженера','reassign-ticket','button small soft','data-id="'+esc(t.id)+'"')}</td>`}`}</tr>`).join(''):`<tr><td colspan="${isEngineer?5:6}" class="muted" style="text-align:center;padding:30px">Нет подходящих заявок</td></tr>`}</tbody></table></div></section>`;
 }
 function ticketView(ticket){
  if(!ticket)return listIsEmpty('Заявка не найдена','Вернитесь к списку.');
  const isEngineer=state.role==='engineer';
  const assist=state.assist[ticket.id];
- const detailFields=`<div><div class="field-label">Статус</div>${isEngineer?engineerStateBadge(ticket):pillStatus(ticket.status)}</div>${isEngineer?'':`<div><div class="field-label">Исполнитель</div><div class="field-value">${esc(ticket.assigneeName||'Не назначен')}</div></div>`}<div><div class="field-label">Объект / кабинет</div><div class="field-value">${esc(ticket.location||'Не указан')}</div></div><div><div class="field-label">Категория</div><div class="field-value">${esc(ticket.category||'Не определена')}</div></div>`;
+ const detailFields=`<div><div class="field-label">Статус</div>${isEngineer?engineerStateBadge(ticket):pillStatus(ticket.status)}</div>${isEngineer?'':`<div><div class="field-label">Исполнитель</div><div class="field-value">${esc(ticket.assigneeName||'Не назначен')}</div>${assignmentRiskHtml(ticket)}</div>`}<div><div class="field-label">Объект / кабинет</div><div class="field-value">${esc(ticket.location||'Не указан')}</div></div><div><div class="field-label">Категория</div><div class="field-value">${esc(ticket.category||'Не определена')}</div></div>`;
  const description=(ticket.description||'').split(/\r?\n\r?\nПолезная информация\r?\n/,1)[0];
  const editButton=isEngineer?'':btn(icon('file')+' Редактировать','edit-ticket','button soft','data-id="'+esc(ticket.id)+'"');
  const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h1 class="ticket-detail-title">${esc(ticket.subject)}</h1></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(description)}</div><div class="grid-2">${detailFields}</div>${ticketSlaHtml(ticket)}${editButton?`<div class="top-gap">${editButton}</div>`:''}</div>`;
@@ -227,17 +281,40 @@ function timingWidget(){
  const m=manual?.ms,a=ai?.ms;
  return `<details class="extract-details top-gap" ${state.metricsOpen?'open':''}><summary>Измерение времени: вручную и с ИИ</summary><p class="hint top-gap">Засеките фактическое время на одинаковом обращении. Это секундомер демонстрации, не прогноз и не статистика из БД.</p><div class="metric-card"><span class="metric-time" data-measurement-timer>${state.timerStarted!==null?measurementTime(Date.now()-state.timerStarted):'00:00'}</span><span class="metric-context">${state.timerKind==='manual'?'Ручной сценарий':state.timerKind==='ai'?'С ИИ':'Выберите сценарий'}</span></div><div class="form-actions">${btn('▶ Без ИИ','measure-manual','button small soft',state.timerStarted!==null?'disabled':'')}${btn('▶ С ИИ','measure-ai','button small soft',state.timerStarted!==null?'disabled':'')}${btn('■ Остановить','measure-stop','button small primary',state.timerStarted===null?'disabled':'')}</div><div class="grid-2 top-gap"><div class="notice">Без ИИ: <strong>${m!=null?measurementTime(m):'не измерено'}</strong></div><div class="notice">С ИИ: <strong>${a!=null?measurementTime(a):'не измерено'}</strong></div></div><div class="grid-2 top-gap"><label class="form-field"><span>Количество действий без ИИ</span><input id="manual-action-count" type="number" min="0" max="999" value="${esc(state.metricCounts.manual)}" placeholder="Измерьте вручную" /></label><label class="form-field"><span>Количество действий с ИИ</span><input id="ai-action-count" type="number" min="0" max="999" value="${esc(state.metricCounts.ai)}" placeholder="Измерьте вручную" /></label></div>${state.metricCounts.manual!==''&&state.metricCounts.ai!==''?`<div class="notice">Ручных действий: ${esc(state.metricCounts.manual)}; с ИИ: ${esc(state.metricCounts.ai)}. Разница: ${Number(state.metricCounts.manual)-Number(state.metricCounts.ai)}.</div>`:''}${m!=null&&a!=null?`<p class="hint top-gap">Разница измерений: ${esc(measurementTime(Math.abs(m-a)))} ${a<m?'быстрее с ИИ':a>m?'быстрее без ИИ':'— одинаково'} (один пробный замер, не средний результат).</p>`:''}</details>`;
 }
+function reportBreakdown(title, rows) {
+ return `<section class="surface card"><h2 class="panel-heading">${title}</h2>
+ <div class="table-wrap"><table class="table stats-table"><thead><tr><th>Группа</th><th>Всего</th><th>Завершено</th><th>Открыто</th><th>Просрочено</th></tr></thead>
+ <tbody>${rows.length?rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${Number(r.total)}</td><td>${Number(r.resolved)}</td><td>${Number(r.open)}</td><td>${Number(r.breached||0)}</td></tr>`).join(''):'<tr><td colspan="5">Нет заявок за период</td></tr>'}</tbody></table></div></section>`;
+}
 function reportsView(){
  const stats=state.stats;
- const total=Number(stats?.total||0),unresolved=Number(stats?.open||0),resolved=Number(stats?.resolved||0),critical=Number(stats?.critical||0);
- const byPriority=stats?.byPriority||{};const byStatus=stats?.byStatus||{};
- const sla=stats?.sla||stats?.slaSummary||null;
- return intro('Статистика заявок','Запросите сводку за выбранный период из базы данных.')+
- `<section class="surface card"><form id="stats-form"><div class="stats-filters"><label class="form-field"><span>Дата с</span><input name="from" type="date" value="${esc(state.statsFrom||'')}" /></label><label class="form-field"><span>Дата по</span><input name="to" type="date" value="${esc(state.statsTo||'')}" /></label><button type="submit" class="button primary">${icon('chart')} Запросить статистику</button></div></form></section>
- ${stats?`<div class="grid-3 stats-cards top-gap"><div class="surface stat"><div class="stat-label">Всего заявок</div><div class="stat-value">${total}</div></div><div class="surface stat"><div class="stat-label">В работе и ожидают</div><div class="stat-value">${unresolved}</div></div><div class="surface stat"><div class="stat-label">Завершены</div><div class="stat-value">${resolved}</div></div></div>
- <div class="grid-2 top-gap"><section class="surface card"><h2 class="panel-heading">По приоритетам</h2>${Object.entries(priorities).map(([k,v])=>progressLine(v,byPriority[k],total,k)).join('')}</section><section class="surface card"><h2 class="panel-heading">По статусам</h2>${Object.entries(statuses).filter(([k])=>['new','open','in_progress','resolved','closed'].includes(k)).map(([k,v])=>progressLine(v,byStatus[k],total,'medium')).join('')}</section></div>
- <section class="surface card top-gap"><h2 class="panel-heading">SLA и риски</h2>${sla?`<div class="grid-2"><div class="notice warning">Риск нарушения: <strong>${Number(sla.atRisk??sla.at_risk??0)}</strong></div><div class="notice danger">Просрочено: <strong>${Number(sla.breached??0)}</strong></div></div>`:'<div class="notice">Сервер ещё не передал статистику по SLA. Показатели не рассчитываем из догадок.</div>'}</section>`:listIsEmpty('Статистика ещё не запрошена','Выберите период и нажмите «Запросить статистику».')}
- <section class="surface card top-gap">${auditWidget()}</section><section class="surface card top-gap"><h2 class="panel-heading">Показать эффект автоматизации</h2>${timingWidget()}</section>`;
+ const summary=(value,label,detail='')=>`<div class="surface stat"><div class="stat-label">${label}</div><div class="stat-value">${value}</div>${detail?`<p class="hint">${detail}</p>`:''}</div>`;
+ const minutes=(value,count)=>Number(count)>0?Math.round(Number(value)*10)/10+' мин':'—';
+ const timing=stats?.timing||{};
+ const sla=stats?.sla||{};
+ const incidents=stats?.incidents||[];
+ const period=`<section class="surface card"><form id="stats-form"><div class="stats-filters">
+ <label class="form-field"><span>Дата с</span><input name="from" type="date" value="${esc(state.statsFrom||'')}"></label>
+ <label class="form-field"><span>Дата по</span><input name="to" type="date" value="${esc(state.statsTo||'')}"></label>
+ <button type="submit" class="button primary">${icon('chart')} Обновить</button></div></form></section>`;
+ return intro('Статистика','Состояние происшествий, нагрузка инженеров и соблюдение сроков.')+period+
+ (!stats?`<p class="hint top-gap">${state.statsError?esc(state.statsError):'Загружаем статистику…'}</p>`:
+ `<div class="grid-3 stats-cards top-gap">${summary(Number(stats.total),'Всего заявок')}
+ ${summary(Number(stats.resolved),'Завершено')}${summary(Number(stats.open),'Остаются открытыми')}
+ ${summary(Number(stats.critical),'Аварийные заявки')}${summary(Number(sla.atRisk||0),'Риск SLA')}
+ ${summary(Number(sla.breached||0),'Просрочено')}</div>
+ <div class="grid-2 stats-cards top-gap">${summary(minutes(timing.response_minutes,timing.response_count),'Средняя первая реакция',Number(timing.response_count||0)+' с отметкой реакции')}
+ ${summary(minutes(timing.resolution_minutes,timing.resolution_count),'Среднее время до завершения',Number(timing.resolution_count||0)+' с отметкой завершения')}</div>
+ <div class="grid-2 top-gap">${reportBreakdown('По категориям',stats.byCategory||[])}${reportBreakdown('По объектам',stats.byLocation||[])}</div>
+ <div class="top-gap">${reportBreakdown('По текущим исполнителям',stats.byEngineer||[])}</div>
+ <section class="surface card top-gap"><h2 class="panel-heading">Происшествия</h2>
+ <p class="hint">До 100 последних заявок за выбранный период.</p>
+ <div class="table-wrap"><table class="table"><thead><tr><th>Заявка</th><th>Категория и объект</th><th>Инженер</th><th>Состояние</th><th>SLA</th></tr></thead>
+ <tbody>${incidents.length?incidents.map(t=>`<tr><td><strong>#${esc(t.id)} ${esc(t.subject)}</strong><div class="hint">${formatDate(t.createdAt||t.created_at)}</div></td>
+ <td>${esc(t.category)}<div class="hint">${esc(t.location||'Место не указано')}</div></td>
+ <td>${esc(t.engineer||'Не назначен')}</td><td>${pillStatus(t.status)}</td>
+ <td>${esc(({on_track:'В срок',warning:'Под угрозой',breached:'Просрочен'})[t.sla]||'—')}</td></tr>`).join(''):'<tr><td colspan="5">Нет происшествий за период</td></tr>'}</tbody></table></div></section>`)
+ +`<section class="surface card top-gap">${auditWidget()}</section>`;
 }
 // Read-only administrator overview. In API mode, all records come from
 // /admin/engineers; the browser never connects directly to MariaDB.
@@ -320,11 +397,12 @@ async function loadData(){
    tickets:API.listTickets(),categories:API.listCategories(),pending:API.listPending()
   }:state.role==='engineer'?{
    tickets:API.listTickets()
-  }:{articles:API.listArticles(),engineers:API.listEngineersDashboard()};
+  }:{articles:API.listArticles(),engineers:API.listEngineersDashboard(),stats:API.ticketStatistics({from:state.statsFrom||'',to:state.statsTo||''})};
   const keys=Object.keys(queries),values=await Promise.allSettled(Object.values(queries));
   const convert=(v,keys)=>normList(v,keys);
   keys.forEach((key,i)=>{
    if(values[i].status!=='fulfilled'){
+    if(key==='stats')state.statsError=values[i].reason.message;
     if(key==='engineers'){state.engineersLoaded=true;state.engineersError=values[i].reason.message;state.engineers=[];}
     toast('Ошибка загрузки данных: '+values[i].reason.message,'error');return;
    }
@@ -335,6 +413,7 @@ async function loadData(){
    if(key==='articles')state.articles=convert(v,['articles','data','items']);
    if(key==='engineers'){state.engineers=convert(v,['engineers','data','items']);state.engineersLoaded=true;state.engineersError=null;}
    if(key==='categories')state.meta=v;
+   if(key==='stats'){state.stats=v;state.statsError=null;}
   });
   if(state.role==='engineer')state.queueSignature=JSON.stringify(state.tickets.map(t=>[t.id,t.status,t.priority,t.responseDueAt,t.response_due_at]));
  }catch(e){toast('Ошибка загрузки: '+e.message,'error');}
@@ -344,6 +423,41 @@ async function analyze(){if(state.loading)return;const field=root.querySelector(
  state.submissionText=text;state.draft=null;setLoading(true);const out=root.querySelector('#analysis-result');if(out)out.innerHTML='<div class="surface card"><span class="spinner"></span> Анализируем обращение…</div>';
  try{state.draft=await API.analyze(text,state.intakeSource);render();toast('Черновик готов. Проверьте поля перед созданием.','success');}catch(e){toast('Анализ не выполнен: '+e.message,'error');render();}finally{setLoading(false);render();}}
 function previewText(key){const x={toner:'В принтере закончилась краска, нужно заменить картридж.',mass:'Одновременно перестали работать 100 принтеров в офисе.',smoke:'Принтер не печатает, из него идёт дым и пахнет гарью.'};state.submissionText=x[key]||'';state.pendingId=null;state.draft=null;state.intakeSource='text';render();root.querySelector('#intake-text')?.focus();}
+function assignmentLabel(option, recommended) {
+ const match=option.match>0?' · подходящий навык':'';
+ return `${Number(recommended)===option.id?'★ ':''}${option.name} · очередь ≈ ${option.wait_minutes} мин${match}`;
+}
+function refreshDraftAssignment(){
+ const node=root.querySelector('#draft-assignment-hint');
+ if(!node||!state.draft)return;
+ const options=state.draft.extracted?.assignment_options||[];
+ const [group,id]=formValue('confirm-assignee').split(':').map(Number);
+ const minutes=Number(formValue('confirm-sla-response'));
+ const selected=options.find(e=>e.id===id&&e.group_id===group);
+ const next=options.find(e=>e.id!==id&&e.available&&e.match>0&&e.wait_minutes<minutes);
+ node.textContent=selected&&minutes>0&&(!selected.available||selected.wait_minutes>=minutes)
+   ? next?`Очередь выбранного инженера превышает SLA. Рассмотрите: ${next.name} (≈ ${next.wait_minutes} мин).`
+     :'Очередь выбранного инженера превышает SLA. Подходящего свободного резерва нет.'
+   : '';
+}
+async function showAssignment(id){
+ if(state.role!=='dispatcher')return;
+ try{
+   const data=await API.assignmentOptions(id);
+   const options=data.options.filter(e=>e.available&&e.id!==data.assigned_to);
+   const selected=data.alternative?.group_id+':'+data.alternative?.id;
+   modal(`<h2>Исполнитель заявки #${esc(id)}</h2>
+     ${data.warning?`<p class="notice warning" role="status">${esc(data.warning)}</p>`:''}
+     ${data.current?`<p>Сейчас ${esc(data.current.name)} · ${data.current.open_count} заявок · очередь ≈ ${data.current.wait_minutes} мин</p>`:''}
+     <p class="hint">${data.minutes_left===null?'Нет активного таймера':`До контрольного срока ${data.minutes_left} мин`}. Оценка очереди: 10 мин за ожидающую заявку и 20 мин за заявку в работе.</p>
+     <form id="assignment-form" data-id="${esc(id)}" data-previous="${esc(data.assigned_to??'')}">
+     <label class="form-field"><span>Новый инженер</span><select name="engineer" required><option value="">Выберите инженера</option>
+      ${options.map(e=>{const key=e.group_id+':'+e.id;return `<option value="${key}" ${key===selected?'selected':''}>${esc(assignmentLabel(e,data.alternative?.id))}</option>`;}).join('')}
+     </select></label>
+     <label class="form-field"><span>Причина переназначения</span><input name="reason" required minlength="5" maxlength="250"></label>
+     <div class="form-actions end">${btn('Отмена','close-modal')}<button type="submit" class="button primary" ${options.length?'':'disabled'}>Переназначить</button></div></form>`);
+ }catch(e){toast(e.message,'error');}
+}
 function selectedSlaProfile(draft, priorityId) {
  const level=state.meta?.priorities?.find(p=>String(p.id)===String(priorityId))?.level;
  if(!level) return null;
@@ -479,6 +593,7 @@ function attach(){
   else if(act==='find-solution')await findSolution(target.dataset.id);
   else if(act==='start-ticket')await setEngineerStatus(target.dataset.id,'in_progress');
   else if(act==='finish-ticket')await setEngineerStatus(target.dataset.id,'resolved');
+  else if(act==='reassign-ticket')await showAssignment(target.dataset.id);
   else if(act==='edit-ticket')showEditTicket(target.dataset.id);
   else if(act==='view-source')await showSource(target);
   else if(act==='open-article'&&state.role==='admin')navigate('/knowledge/'+target.dataset.id);
@@ -492,25 +607,37 @@ function attach(){
  });
  root.addEventListener('submit',async e=>{
   const f=e.target;if(!f.id)return;e.preventDefault();
-  if(f.id==='stats-form')await requestStats(f);
+  if(f.id==='assignment-form'){
+   const fd=new FormData(f);
+   const [group,engineer]=String(fd.get('engineer')||'').split(':').map(Number);
+   const button=f.querySelector('button[type="submit"]');button.disabled=true;
+   try{
+    await API.reassign(f.dataset.id,{assignee_id:engineer,group_id:group,previous_assignee_id:Number(f.dataset.previous)||null,reason:String(fd.get('reason')||'').trim()});
+    closeModal();await loadData();toast('Исполнитель изменён. Срок SLA сохранён.','success');
+   }catch(e){toast(e.message,'error');button.disabled=false;}
+  }
+  else if(f.id==='stats-form')await requestStats(f);
   else if(f.id==='edit-ticket-form'){if(state.role==='dispatcher'){const fd=new FormData(f);try{await API.updateTicket(f.dataset.id,{subject:String(fd.get('subject')||'').trim(),description:String(fd.get('description')||'').trim()});closeModal();await loadData();toast('Текст заявки сохранён','success');}catch(e){toast('Ошибка редактирования: '+e.message,'error');}}}
  });
  root.addEventListener('input',e=>{
+  if(e.target.id==='confirm-sla-response')refreshDraftAssignment();
   if(e.target.id==='intake-text')state.submissionText=e.target.value;
   if(e.target.id==='ticket-search'){state.ticketQuery=e.target.value;render();root.querySelector('#ticket-search')?.focus();root.querySelector('#ticket-search')?.setSelectionRange(state.ticketQuery.length,state.ticketQuery.length);}
   if(e.target.id==='kb-search'){state.kbQuery=e.target.value;render();root.querySelector('#kb-search')?.focus();root.querySelector('#kb-search')?.setSelectionRange(state.kbQuery.length,state.kbQuery.length);}
   if(e.target.id==='engineers-search'&&state.role==='admin'){state.engineersQuery=e.target.value;render();const field=root.querySelector('#engineers-search');field?.focus();field?.setSelectionRange(state.engineersQuery.length,state.engineersQuery.length);}
  });
  root.addEventListener('change',async e=>{
-  if(e.target.id==='role-select'&&CFG.demoRoles&&!API.isDemo()){
-   try{const response=await fetch('/workspace/api/demo-role',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':CFG.csrfToken},body:JSON.stringify({role:e.target.value})});if(!response.ok)throw new Error('Не удалось изменить роль');location.hash='';location.reload();}catch(err){toast(err.message,'error');render();}return;
+  if(['role-select','demo-engineer-select'].includes(e.target.id)&&CFG.demoRoles&&!API.isDemo()){
+   try{const response=await fetch('/workspace/api/demo-role',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':CFG.csrfToken},body:JSON.stringify(e.target.id==='demo-engineer-select'?{role:'engineer',engineer_id:Number(e.target.value)}:{role:e.target.value})});if(!response.ok)throw new Error('Не удалось изменить роль');location.hash='';location.reload();}catch(err){toast(err.message,'error');render();}return;
   }
   if(e.target.id==='role-select'&&API.isDemo()){if(!roles[e.target.value])return;state.role=e.target.value;state.currentUser=null;state.ticketQuery='';state.kbQuery='';state.draft=null;navigate(navigation[state.role][0][0]);await loadData();}
+  if(e.target.id==='confirm-assignee')refreshDraftAssignment();
   if(e.target.id==='confirm-priority'&&state.draft){
    const profile=selectedSlaProfile(state.draft,e.target.value);
    root.querySelector('#confirm-sla-response').value=profile?.response_minutes??'';
    root.querySelector('#confirm-sla-resolution').value=profile?.resolution_minutes??'';
    root.querySelector('#sla-profile-label').textContent=profile?.label||'Выберите приоритет.';
+   refreshDraftAssignment();
   }
   if(e.target.id==='ticket-filter-status'){state.ticketStatus=e.target.value;render();}
   if(e.target.id==='ticket-filter-priority'){state.ticketPriority=e.target.value;render();}

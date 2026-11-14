@@ -12,12 +12,19 @@ function dispatcherDemoEnabled(): bool
 {
     return env('DISPATCHER_DEMO_ROLES') === '1';
 }
-function dispatcherDemoSelect(string $role): void
+function dispatcherDemoSelect(string $role, ?int $engineerId = null): void
 {
     $accounts = ['dispatcher'=>'dispatcher@demo.test','engineer'=>'engineer@demo.test','admin'=>'admin@demo.test'];
     if (!isset($accounts[$role])) _apiJson(['error'=>'Неизвестная роль'],422);
-    $stmt=Database::connect()->prepare('SELECT id,first_name,last_name,email,role,avatar FROM users WHERE email=?');
-    $stmt->execute([$accounts[$role]]);
+    $db = Database::connect();
+    if ($role === 'engineer' && $engineerId !== null) {
+        $stmt = $db->prepare("SELECT id,first_name,last_name,email,role,avatar FROM users
+            WHERE id=? AND role='agent' AND (email='engineer@demo.test' OR email LIKE '%.engineer@demo.test')");
+        $stmt->execute([$engineerId]);
+    } else {
+        $stmt = $db->prepare('SELECT id,first_name,last_name,email,role,avatar FROM users WHERE email=?');
+        $stmt->execute([$accounts[$role]]);
+    }
     $user=$stmt->fetch(PDO::FETCH_ASSOC);
     if (!$user || dispatcherRole($user)!==$role) _apiJson(['error'=>'Демо-аккаунт не подготовлен'],503);
     session_regenerate_id(true);
@@ -29,7 +36,11 @@ $router->post('/workspace/api/demo-role', static function (): void {
     dispatcherActor(['dispatcher','engineer','admin']);
     $input=_intakeBody();
     if (!is_string($input['role']??null)) _apiJson(['error'=>'Укажите роль'],422);
-    dispatcherDemoSelect($input['role']);
+    $engineerId = $input['engineer_id'] ?? null;
+    if ($engineerId !== null && ($input['role'] !== 'engineer' || !is_int($engineerId) || $engineerId < 1)) {
+        _apiJson(['error'=>'Некорректный демо-инженер'],422);
+    }
+    dispatcherDemoSelect($input['role'], $engineerId);
     _apiJson(['ok'=>true]);
 });
 
@@ -45,10 +56,13 @@ function dispatcherActor(array $roles): array
 
 function dispatcherTickets(PDO $db, ?int $engineer = null, bool $activeOnly = false): array
 {
+    $active = ticketStatusSqlIn(ticketClosedBucketSlugs(), 'work.status', true);
     $stmt = $db->prepare("SELECT t.id,t.subject,t.description,t.status,t.assigned_to AS assigneeId,
         CONCAT_WS(' ',u.first_name,u.last_name) AS assigneeName,t.created_at,t.first_response_due_at,
-        t.first_responded_at,t.resolution_due_at,t.sla_state,t.sla_paused_at,t.sla_exempt,
-        p.name AS priority,c.name AS category,l.name AS location
+        t.first_responded_at,t.resolution_due_at,t.sla_started_at,t.sla_state,t.sla_paused_at,t.sla_exempt,
+        p.name AS priority,c.name AS category,l.name AS location,
+        COALESCE(q.wait_minutes,0) AS engineer_queue_minutes,
+        CASE WHEN u.is_available=1 AND COALESCE(o.is_oof,0)=0 THEN 1 ELSE 0 END AS engineer_available
         FROM tickets t LEFT JOIN users u ON u.id=t.assigned_to LEFT JOIN ticket_types c ON c.id=t.type_id
         LEFT JOIN ticket_priorities p ON p.id=t.priority_id LEFT JOIN locations l ON l.id=t.location_id
         WHERE (c.id IS NULL OR c.is_confidential=0)" . ($engineer === null ? '' : ' AND t.assigned_to=?')
@@ -56,13 +70,21 @@ function dispatcherTickets(PDO $db, ?int $engineer = null, bool $activeOnly = fa
         . ' ORDER BY t.id DESC');
     $stmt->execute($engineer === null ? [] : [$engineer]);
     $zone = Sla::storageTimezone();
-    return array_map(static function (array $t) use ($zone): array {
+    $closed = ticketClosedBucketSlugs();
+    return array_map(static function (array $t) use ($zone, $closed): array {
         $t['priority'] = ['Низкий'=>'low','Средний'=>'medium','Авария'=>'critical'][$t['priority']] ?? null;
         $t['subject']=html_entity_decode($t['subject'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $t['description']=html_entity_decode($t['description'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $t['createdAt'] = (new DateTimeImmutable($t['created_at'], $zone))->format(DATE_ATOM);
         $t['responseDueAt'] = $t['first_response_due_at'] ? (new DateTimeImmutable($t['first_response_due_at'], $zone))->format(DATE_ATOM) : null;
         $t['resolutionDueAt'] = $t['resolution_due_at'] ? (new DateTimeImmutable($t['resolution_due_at'], $zone))->format(DATE_ATOM) : null;
+        $t['slaStartedAt'] = (new DateTimeImmutable($t['sla_started_at'] ?: $t['created_at'], $zone))->format(DATE_ATOM);
+        $t['slaPausedAt'] = $t['sla_paused_at'] ? (new DateTimeImmutable($t['sla_paused_at'], $zone))->format(DATE_ATOM) : null;
+        $t['isClosed'] = in_array($t['status'], $closed, true);
+        $t['engineerQueueMinutes'] = max(0, (int)$t['engineer_queue_minutes']
+            - ($t['isClosed'] ? 0 : ($t['status'] === 'in_progress' ? 20 : 10)));
+        $t['engineerAvailable'] = (bool)$t['engineer_available'];
+        unset($t['engineer_queue_minutes'], $t['engineer_available']);
         $t['notes'] = [];
         return $t;
     }, $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -90,7 +112,11 @@ $router->get('/workspace', static function (): void {
     header('Cache-Control: private, no-store');
     $actor=Auth::user();
     $page=file_get_contents(ROOT_DIR . '/templates/dispatcher.html');
-    $config=json_encode(['demoRoles'=>dispatcherDemoEnabled(),'mode'=>'api','apiBase'=>'/workspace/api','csrfToken'=>csrfToken(),
+    $demoEngineers = dispatcherDemoEnabled() && dispatcherRole($actor)==='engineer'
+        ? Database::connect()->query("SELECT id,CONCAT_WS(' ',first_name,last_name) AS name FROM users
+            WHERE role='agent' AND (email='engineer@demo.test' OR email LIKE '%.engineer@demo.test') ORDER BY name")->fetchAll(PDO::FETCH_ASSOC)
+        : [];
+    $config=json_encode(['demoRoles'=>dispatcherDemoEnabled(),'demoEngineers'=>$demoEngineers,'mode'=>'api','apiBase'=>'/workspace/api','csrfToken'=>csrfToken(),
         'currentUser'=>['id'=>(int)$actor['id'],'role'=>dispatcherRole($actor),
             'name'=>trim($actor['first_name'].' '.$actor['last_name'])]], JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR);
     echo str_replace('<!--CONFIG-->', '<script>window.DISPATCH_CONFIG='.$config.';</script>', $page);
@@ -116,6 +142,98 @@ $router->get('/workspace/api/engineers', static function (): void {
     foreach ($engineers as &$e) $e['tickets']=$byEngineer[$e['id']]??[];
     unset($e);
     _apiJson(['engineers'=>$engineers]);
+});
+
+$router->get('/workspace/api/tickets/{id}/assignment', static function (array $p): void {
+    dispatcherActor(['dispatcher']);
+    $db = Database::connect();
+    $stmt = $db->prepare('SELECT t.*, c.name AS category FROM tickets t
+        LEFT JOIN ticket_types c ON c.id=t.type_id WHERE t.id=? AND COALESCE(c.is_confidential,0)=0');
+    $stmt->execute([(int)$p['id']]);
+    $ticket = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$ticket) _apiJson(['error'=>'Заявка не найдена'],404);
+    if (in_array($ticket['status'], ticketClosedBucketSlugs(), true)) _apiJson(['error'=>'Заявка завершена'],409);
+
+    $due = empty($ticket['first_responded_at']) && $ticket['first_response_due_at']
+        ? $ticket['first_response_due_at'] : $ticket['resolution_due_at'];
+    $minutes = null;
+    if ($due && !$ticket['sla_exempt'] && !$ticket['sla_paused_at']) {
+        $seconds = (new DateTimeImmutable($due, Sla::storageTimezone()))->getTimestamp() - time();
+        $minutes = max(0, (int)ceil($seconds / 60));
+    }
+    $options = IntakeDispatcher::assignmentOptions($db,
+        IntakeDispatcher::categoryForType($ticket['category']), $minutes, (int)$ticket['id']);
+    $current = null;
+    $alternative = null;
+    foreach ($options as $option) {
+        if ($option['id'] === (int)$ticket['assigned_to'] && $option['group_id'] === (int)$ticket['group_id']) {
+            $current = $option;
+        } elseif ($alternative === null && $option['id'] !== (int)$ticket['assigned_to']
+            && $option['available'] && $option['match'] > 0 && $option['fits_sla'] !== false) {
+            $alternative = $option;
+        }
+    }
+    $risk = $current === null || !$current['available'] || $current['fits_sla'] === false;
+    $warning = $risk ? ($alternative
+        ? 'Рекомендуем передать заявку: ' . $alternative['name'] . '. Подходящий навык и меньшая очередь.'
+        : 'Срок под угрозой или исполнитель недоступен. Подходящего свободного резерва нет — проверьте смену.')
+        : null;
+    _apiJson(['options'=>$options,'current'=>$current,'alternative'=>$risk ? $alternative : null,
+        'warning'=>$warning,'minutes_left'=>$minutes,'assigned_to'=>$ticket['assigned_to'] === null ? null : (int)$ticket['assigned_to']]);
+});
+
+$router->post('/workspace/api/tickets/{id}/assignment', static function (array $p): void {
+    $actor = dispatcherActor(['dispatcher']);
+    $input = _intakeBody();
+    $id = $input['assignee_id'] ?? null;
+    $group = $input['group_id'] ?? null;
+    $previous = $input['previous_assignee_id'] ?? null;
+    $reason = $input['reason'] ?? null;
+    if (!is_int($id) || $id < 1 || !is_int($group) || $group < 1
+        || ($previous !== null && !is_int($previous)) || !array_key_exists('previous_assignee_id', $input)
+        || !is_string($reason) || mb_strlen(trim($reason)) < 5 || mb_strlen($reason) > 250) {
+        _apiJson(['error'=>'Выберите инженера и укажите причину переназначения'],422);
+    }
+    $db = Database::connect();
+    $db->beginTransaction();
+    try {
+        $lock = $db->prepare('SELECT t.id,t.status,t.assigned_to,t.group_id FROM tickets t
+            LEFT JOIN ticket_types c ON c.id=t.type_id WHERE t.id=? AND COALESCE(c.is_confidential,0)=0 FOR UPDATE');
+        $lock->execute([(int)$p['id']]);
+        $ticket = $lock->fetch(PDO::FETCH_ASSOC);
+        if (!$ticket) { $db->rollBack(); _apiJson(['error'=>'Заявка не найдена'],404); }
+        $assigned = $ticket['assigned_to'] === null ? null : (int)$ticket['assigned_to'];
+        if ($assigned !== $previous || in_array($ticket['status'], ticketClosedBucketSlugs(), true)) {
+            $db->rollBack();
+            _apiJson(['error'=>'Заявка изменилась. Обновите список исполнителей.'],409);
+        }
+        $check = $db->prepare("SELECT u.id FROM users u JOIN group_user_map m ON m.user_id=u.id
+            JOIN `groups` g ON g.id=m.group_id AND g.is_confidential=0
+            LEFT JOIN agent_oof_status o ON o.user_id=u.id
+            WHERE u.id=? AND m.group_id=? AND u.role='agent' AND u.is_available=1 AND COALESCE(o.is_oof,0)=0");
+        $check->execute([$id,$group]);
+        if (!$check->fetchColumn() || $id === $assigned) {
+            $db->rollBack();
+            _apiJson(['error'=>'Выберите другого доступного инженера'],422);
+        }
+        $db->prepare('UPDATE tickets SET assigned_to=?, group_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
+            ->execute([$id,$group,$ticket['id']]);
+        $detail = sprintf('Исполнитель %s → %d. %s', $assigned ?? 'не назначен', $id, trim($reason));
+        $db->prepare("INSERT INTO audit_log (user_id,action,target_type,target_id,detail) VALUES (?,?,'ticket',?,?)")
+            ->execute([$actor['id'],'workspace.reassign',$ticket['id'],$detail]);
+        $db->prepare('INSERT INTO ticket_timeline (ticket_id,user_id,action,details,is_internal) VALUES (?,?,?,?,1)')
+            ->execute([$ticket['id'],$actor['id'],'assigned',$detail]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
+    try {
+        notifyAssignedAgent($db, (int)$ticket['id'], $id);
+    } catch (Throwable $e) {
+        error_log('Workspace reassignment notification failed: ' . get_class($e));
+    }
+    _apiJson(['ok'=>true]);
 });
 
 /** Lock the ticket so concurrent requests cannot skip or repeat a workflow transition. */
@@ -179,12 +297,18 @@ $router->get('/workspace/api/reports', static function (): void {
         $where[]="t.created_at $op ?";
         $params[]=$key==='to' ? (new DateTimeImmutable($day))->modify('+1 day')->format('Y-m-d') : $day;
     }
+    if (count($params) === 2 && $params[0] >= $params[1]) {
+        _apiJson(['error'=>'Начальная дата позже конечной'],422);
+    }
     // Match the SLA engine's 80% warning threshold for running clocks.
     $active=ticketStatusSqlIn(ticketClosedBucketSlugs(),'t.status',true);
     $response="(t.first_responded_at IS NULL AND t.first_response_due_at IS NOT NULL)";
     $baseline="COALESCE(t.sla_started_at,t.created_at)";
     $clock="CASE
-        WHEN t.sla_exempt=1 OR NOT ($active) OR t.sla_paused_at IS NOT NULL THEN t.sla_state
+        WHEN t.sla_exempt=1 THEN NULL
+        WHEN (t.first_response_due_at IS NOT NULL AND t.first_responded_at>t.first_response_due_at)
+            OR (t.resolution_due_at IS NOT NULL AND t.sla_closed_at>t.resolution_due_at) THEN 'breached'
+        WHEN NOT ($active) OR t.sla_paused_at IS NOT NULL THEN t.sla_state
         WHEN ($response AND UTC_TIMESTAMP()>t.first_response_due_at) OR UTC_TIMESTAMP()>t.resolution_due_at THEN 'breached'
         WHEN ($response AND TIMESTAMPDIFF(SECOND,$baseline,t.first_response_due_at)>0
             AND TIMESTAMPDIFF(SECOND,$baseline,UTC_TIMESTAMP())>=0.8*TIMESTAMPDIFF(SECOND,$baseline,t.first_response_due_at))
@@ -208,6 +332,37 @@ $router->get('/workspace/api/reports', static function (): void {
         if ($priority==='critical') $out['critical']+=$count;
         foreach (['atRisk','breached'] as $key) $out['sla'][$key]+=(int)$row[$key];
     }
+    $from = ' FROM tickets t LEFT JOIN ticket_types c ON c.id=t.type_id
+        LEFT JOIN users u ON u.id=t.assigned_to LEFT JOIN locations l ON l.id=t.location_id
+        WHERE ' . implode(' AND ', $where);
+    $closedSql = ticketStatusSqlIn($closed, 't.status');
+    $responseMinutes = "TIMESTAMPDIFF(SECOND,$baseline,t.first_responded_at)/60";
+    $resolutionMinutes = "CASE WHEN $closedSql THEN TIMESTAMPDIFF(SECOND,$baseline,t.sla_closed_at)/60 END";
+    foreach ([
+        'byCategory'=>"COALESCE(c.name,'Без категории')",
+        'byLocation'=>"COALESCE(l.name,'Место не указано')",
+        'byEngineer'=>"COALESCE(NULLIF(CONCAT_WS(' ',u.first_name,u.last_name),''),'Не назначен')",
+    ] as $key=>$label) {
+        $grouping = $key === 'byEngineer' ? "t.assigned_to, $label" : $label;
+        $group = $db->prepare("SELECT $label AS name, COUNT(*) AS total, SUM($closedSql) AS resolved,
+            SUM($active) AS open, SUM(($clock)='breached') AS breached $from
+            GROUP BY $grouping ORDER BY total DESC,name");
+        $group->execute($params);
+        $out[$key] = $group->fetchAll(PDO::FETCH_ASSOC);
+    }
+    $timing = $db->prepare("SELECT AVG($responseMinutes) AS response_minutes, COUNT($responseMinutes) AS response_count,
+        AVG($resolutionMinutes) AS resolution_minutes, COUNT($resolutionMinutes) AS resolution_count $from");
+    $timing->execute($params);
+    $out['timing'] = $timing->fetch(PDO::FETCH_ASSOC);
+    $recent = $db->prepare("SELECT t.id,t.subject,t.status,t.created_at,$closedSql AS resolved,
+        COALESCE(c.name,'Без категории') AS category,l.name AS location,
+        NULLIF(CONCAT_WS(' ',u.first_name,u.last_name),'') AS engineer,($clock) AS sla $from ORDER BY t.id DESC LIMIT 100");
+    $recent->execute($params);
+    $out['incidents'] = array_map(static function (array $row): array {
+        $row['subject'] = html_entity_decode($row['subject'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $row['createdAt'] = (new DateTimeImmutable($row['created_at'], Sla::storageTimezone()))->format(DATE_ATOM);
+        return $row;
+    }, $recent->fetchAll(PDO::FETCH_ASSOC));
     _apiJson($out);
 });
 
