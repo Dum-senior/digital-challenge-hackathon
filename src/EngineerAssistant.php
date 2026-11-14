@@ -42,6 +42,7 @@ final class EngineerAssistant
             try {
                 if ($generate === null && env('ENGINEER_AI_GENERATION_ENABLED', 'false') === 'true') {
                     $generate = self::ollama(...);
+                    $localModel = env('ENGINEER_OLLAMA_MODEL', 'qwen3:0.6b');
                 }
                 if ($generate !== null) {
                     $system = 'Ты помощник инженера. Ответь по-русски только JSON-объектом '
@@ -63,6 +64,7 @@ final class EngineerAssistant
                             preg_match('/^(Проверьте|Сверьте|Уточните|Сопоставьте|Передайте)\b/u', $step['text']) === 1));
                     }
                     if ($result['steps']) {
+                        if (isset($localModel)) { $result['model'] = $localModel; }
                         $result['status'] = 'answered';
                     }
                 }

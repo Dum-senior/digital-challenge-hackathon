@@ -42,7 +42,8 @@
                 sources_only: 'Найдены источники. Локальная модель отключена, недоступна или не смогла подтвердить решение.',
                 no_sources: 'Подтверждённое решение не найдено. Уточните симптомы или добавьте инструкцию в базу знаний.'
             };
-            status.textContent = messages[data.status] || 'Поиск временно недоступен.';
+            status.textContent = data.model ? 'Ответ локальной модели: ' + data.model
+                : (messages[data.status] || 'Поиск временно недоступен.');
             const sources = new Map(data.sources.map(source => [source.id, source]));
             if (data.safety) {
                 result.append(element('h6', 'Безопасность — действуйте сразу'));

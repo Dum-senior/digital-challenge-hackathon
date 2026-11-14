@@ -18,10 +18,10 @@
       <select id="intakeSource" class="form-select"><option value="text">Текст</option><option value="voice">Голос (исправленная транскрипция)</option><option value="phone">Телефон (проверенная транскрипция)</option></select>
     </div><div class="col-auto d-flex align-items-end"><button type="button" id="intakeAnalyze" class="btn btn-primary">Разобрать обращение</button></div></div>
   </div></section>
-  <section class="card mb-3"><div class="card-body"><h2 class="h5">Очередь черновиков</h2>
+  <section class="card mb-3"><div class="card-body"><details><summary class="fw-semibold mb-2">Очередь черновиков</summary>
     <button type="button" class="btn btn-sm btn-outline-secondary" id="intakeReload">Обновить</button>
     <ul id="intakeQueue" class="list-group mt-2" aria-live="polite"></ul>
-  </div></section>
+  </details></div></section>
   </div>
   <div id="intakeError" class="alert alert-warning" role="alert" hidden></div>
   <section id="intakeDraft" class="card" hidden><div class="card-body">
@@ -45,7 +45,7 @@
         <div class="col-md-6"><label for="reviewGroup" class="form-label">Группа</label><select id="reviewGroup" class="form-select"></select></div>
         <div class="col-md-6"><label for="reviewAssignee" class="form-label">Инженер</label><select id="reviewAssignee" class="form-select"></select></div>
       </div>
-      <h4 class="h6 mt-3">Подтверждённые технические поля</h4>
+      <details class="mt-3"><summary class="fw-semibold mb-2">Дополнительные поля</summary>
       <div class="row g-2">
         <div class="col-md-4"><label for="reviewObject" class="form-label">Объект</label><input id="reviewObject" class="form-control" maxlength="200"></div>
         <div class="col-md-4"><label for="reviewEquipment" class="form-label">Оборудование</label><input id="reviewEquipment" class="form-control" maxlength="200"></div>
@@ -57,6 +57,7 @@
         <div class="col-12"><label for="reviewTags" class="form-label">Теги (из существующей базы, Ctrl для нескольких)</label><select id="reviewTags" class="form-select" multiple size="3"></select></div>
       </div>
       <div class="mt-2"><label for="reviewReason" class="form-label">Причина ручного подтверждения/изменения аварийного приоритета</label><textarea id="reviewReason" class="form-control" maxlength="500" rows="2"></textarea></div>
+      </details>
       <div class="form-check my-2"><input id="reviewAcknowledge" class="form-check-input" type="checkbox"><label for="reviewAcknowledge" class="form-check-label">Я проверил данные, права назначения и потенциальные риски</label></div>
       <button type="button" id="reviewConfirm" class="btn btn-success">Подтвердить и создать заявку</button>
     </div>
