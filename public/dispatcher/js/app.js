@@ -120,8 +120,6 @@ function classifyPreview() {
  <p>${esc(ex.severity_reason||'')} ${esc(draft.recommendation?.reason||'')}</p>
  <label class="form-field"><span>Тема</span><textarea id="confirm-subject" maxlength="255">${esc(a.subject||ex.subject)}</textarea></label>
  <label class="form-field"><span>Описание</span><textarea id="confirm-description">${esc(a.description||ex.description)}</textarea></label>
- <label class="form-field"><span>Теги</span><select id="confirm-tags" multiple>${(meta.tags||[]).map(tag=>
- `<option value="${esc(tag.id)}" ${(a.tag_ids||[]).includes(Number(tag.id))?'selected':''}>${esc(tag.name)}</option>`).join('')}</select></label>
  <section class="top-gap"><h3>Предложенное решение</h3><div id="assist-container" data-assist-key="${esc(adviceKey)}">${advice?assistHtml(advice):'<p>Ищем решение в базе знаний…</p>'}</div></section>
  ${btn('Подтвердить и создать заявку','confirm-draft','button primary',state.loading?'disabled':'')}</div>`;
 }
@@ -328,7 +326,7 @@ async function confirmDraft() {
  const approved={subject:value('subject'),description:value('description'),type_id:Number(value('category'))||null,
   priority_id:Number(value('priority')),location_id:Number(value('location'))||null,
   group_id:group||null,assigned_to:engineer||null,
-  tag_ids:[...root.querySelector('#confirm-tags').selectedOptions].map(t=>Number(t.value))};
+  tag_ids:[]};
  const emergencyOverride=draft.extracted?.is_potential_emergency&&draft.recommendation?.priority_id!=null
   && Number(draft.recommendation.priority_id)!==approved.priority_id;
  const needsManualReview=draft.status!=='awaiting_review'||emergencyOverride;

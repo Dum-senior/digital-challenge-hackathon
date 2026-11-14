@@ -10,7 +10,7 @@ declare(strict_types=1);
 final class IntakeDispatcher
 {
     public const SOURCES = ['text', 'voice', 'phone'];
-    public const CATEGORIES = ['peripherals', 'telemetry', 'automation', 'network', 'security', 'access', 'database', 'unknown'];
+    public const CATEGORIES = ['peripherals', 'telemetry', 'automation', 'network', 'security', 'access', 'database', 'fire', 'unknown'];
     public const EDITABLE = ['subject', 'description', 'type_id', 'location_id', 'priority_id', 'group_id', 'assigned_to', 'tag_ids', 'fields'];
 
     public static function json(array $value): string
@@ -105,6 +105,7 @@ final class IntakeDispatcher
         $mass = (bool) preg_match('/нескольк(?:их|о)\s+(?:скважин|отделов|пользователей)|во\s+вс[её]м\s+корпус|у\s+всех|массов|нескольких\s+скважин/u', $lower);
         $category = $model['category'];
         $signals = [
+            'fire' => '/\bпожар\w*|\bзадымлен\w*|\bид[её]т дым\b|\bгорит\b/iu',
             'automation' => '/\b(?:opc|орс)\b|асу тп/iu',
             'telemetry' => '/сч[её]тчик|телеметр|показани/iu',
             'peripherals' => '/принтер|печата|печать/iu',
@@ -120,6 +121,7 @@ final class IntakeDispatcher
         if (preg_match('/^(?:у нас )?(?:ничего не работает|вс[её] упало)[.!\s]*$/iu', trim($text))) {
             $category = 'unknown';
         }
+        $danger = $danger || $category === 'fire';
         $priority = $danger ? 'critical' : ($category === 'unknown' ? null : 'medium');
         $reason = $danger ? 'Явный признак опасности; требуется немедленная проверка'
             : ($mass ? 'Затронуто несколько пользователей или объектов'
@@ -146,17 +148,20 @@ final class IntakeDispatcher
         preg_match_all('/сч[её]тчик(?:а|у|е|ом)?\s*(?:№\s*|номер\s*)?(\d[\p{L}0-9-]{0,30})(?![\p{L}0-9-])/iu', $text, $meters);
         $numbers = array_values(array_unique($meters[1]));
         $meter = count($numbers) === 1 ? $numbers[0] : null;
-        $tag = self::categoryTag($category);
-        $tagStmt = $db->prepare('SELECT id FROM ticket_tags WHERE name = ?');
-        $tagStmt->execute([$tag]);
-        $tagId = $tagStmt->fetchColumn();
         $facts = array_values(array_filter($model['facts'] ?? [], static fn($fact) =>
             is_string($fact) && trim($fact) !== '' && mb_strlen($fact) <= 180 && mb_stripos($text, $fact) !== false
             && !in_array($fact, [$meter, $fields['incident_time'], $fields['object']], true)));
         $subject = mb_substr(preg_replace('/\s+/u', ' ', trim($text)), 0, 140);
+        $modelSubject = $model['subject'] ?? null;
+        $modelDescription = $model['description'] ?? null;
+        if (!$failure && is_string($modelSubject) && trim($modelSubject) !== '' && mb_strlen($modelSubject) <= 140) {
+            $subject = preg_replace('/\s+/u', ' ', trim($modelSubject));
+        }
+        $description = !$failure && is_string($modelDescription) && trim($modelDescription) !== ''
+            && mb_strlen($modelDescription) <= 6000 ? trim($modelDescription) : $text;
         return [
-            'subject' => $subject, 'description' => $text, 'raw_text' => $text, 'category' => $category,
-            'type_id' => $typeId, 'tags' => $tag === null ? [] : [$tag], 'tag_ids' => $tagId ? [(int) $tagId] : [], 'location_name' => $location['name'],
+            'subject' => $subject, 'description' => $description, 'raw_text' => $text, 'category' => $category,
+            'type_id' => $typeId, 'tags' => [], 'tag_ids' => [], 'location_name' => $location['name'],
             'location_id' => $location['id'], 'object' => $location['name'] ?? $fields['object'], 'location' => $location, 'meter_number' => $meter,
             'started_at' => $fields['incident_time'], 'useful_notes' => implode("\n", array_slice($facts, 0, 4)), 'floor' => $fields['floor'],
             'room' => $fields['room'], 'equipment' => $fields['equipment'],
@@ -248,10 +253,10 @@ final class IntakeDispatcher
             : ['id' => null, 'name' => null, 'address' => null, 'candidates' => $matches];
     }
 
-    private static function categoryTag(string $category): ?string
+    private static function categoryName(string $category): ?string
     {
         return ['peripherals'=>'Печать', 'telemetry'=>'Телеметрия', 'automation'=>'OPC', 'network'=>'Сеть',
-            'security'=>'ИБ', 'access'=>'Доступ', 'database'=>'База данных'][$category] ?? null;
+            'security'=>'ИБ', 'access'=>'Доступ', 'database'=>'База данных', 'fire'=>'Пожар'][$category] ?? null;
     }
 
     private static function matchType(PDO $db, string $category): ?int
@@ -262,7 +267,7 @@ final class IntakeDispatcher
             'security' => ['информационная безопасность', 'иб', 'security'], 'access' => ['доступ', 'access'],
             'database' => ['база данных', 'database', 'бд'],
         ];
-        $canonical = self::categoryTag($category);
+        $canonical = self::categoryName($category);
         $matches = [];
         foreach ($db->query('SELECT id, name FROM ticket_types WHERE is_confidential = 0 ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
             if ($row['name'] === $canonical) return (int) $row['id'];
