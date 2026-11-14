@@ -39,6 +39,7 @@ services:
     restart: unless-stopped
     environment:
       <<: *database
+      DB_MIGRATE_ON_REQUEST: "false"
       APP_URL: ${APP_URL:-http://localhost:8080}
       MAIL_ENABLED: "false"
       INTAKE_API_MODE: dispatcher

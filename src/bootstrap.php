@@ -51,8 +51,10 @@ if (is_dir(ROOT_DIR . '/storage/logs')) {
     ini_set('error_log', ROOT_DIR . '/storage/logs/php-error.log');
 }
 
-// Run any pending database migrations automatically
-require ROOT_DIR . '/database/migrate.php';
+// Compose runs migrations once before the web container becomes available.
+if (env('DB_MIGRATE_ON_REQUEST', 'true') === 'true') {
+    require ROOT_DIR . '/database/migrate.php';
+}
 
 // Start session
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')

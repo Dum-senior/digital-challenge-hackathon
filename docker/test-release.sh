@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 env_file=$(mktemp)
 project="dispatcher-test-$$"
 cleanup() {
-    docker compose --env-file "$env_file" -p "$project" down -v
+    docker compose --env-file "$env_file" -p "$project" down -v || true
     unlink "$env_file"
 }
 trap cleanup EXIT
@@ -19,7 +19,7 @@ trap cleanup EXIT
 set -a
 . "$env_file"
 set +a
-docker compose --env-file "$env_file" -p "$project" up -d
+docker compose --env-file "$env_file" -p "$project" up -d --build
 export TEST_BASE_URL="http://127.0.0.1:$WEB_PORT"
 for _ in $(seq 1 45); do
     if curl -fsS "$TEST_BASE_URL/login" >/dev/null; then break; fi
