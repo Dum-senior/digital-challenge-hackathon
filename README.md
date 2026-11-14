@@ -1,3 +1,13 @@
+# digital-challenge-hackathon
+
+Командная ИИ-диспетчерская на основе OpenHelpDesk. Текущая разработка: помощник инженера в `feature/engineer-ai`.
+
+- [Команда, запуск, API помощника и ограничения](docs/team/README.md)
+- [Дизайн и независимая проверка](docs/team/engineer-ai-design.md)
+- [OpenAPI](openapi.json)
+
+Ниже сохранено описание исходного проекта.
+
 # OpenHelpDesk
 
 **OpenHelpDesk** is a self-hosted IT helpdesk and ticketing system built for libraries and small IT teams who want a capable support platform without SaaS fees or vendor lock-in. It runs on a plain LAMP stack — pure PHP 8 with a lightweight custom router, PDO, MySQL, and Bootstrap 5 — so it installs anywhere from XAMPP on Windows to a standard Apache box, via either a six-step web installer or a one-command seed script. Every front-end library ships self-hosted with the app (zero CDN dependencies), and database migrations apply themselves automatically on upgrade. Despite the modest footprint, it covers the full ticket lifecycle: assignment, prioritization, fully configurable ticket statuses, SLA tracking with business-hours and per-location timezone awareness, internal notes, attachments, tags, merging and splitting, bulk actions, drafts with server-side autosave, Gmail-style undo send, custom form fields with a per-type drag-and-drop form builder, and four switchable ticket-list views including a drag-and-drop Kanban board.

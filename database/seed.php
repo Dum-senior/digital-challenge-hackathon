@@ -58,6 +58,10 @@ try {
     $pdo->exec($schema);
     echo "[OK] Schema applied.\n";
 
+    // The schema snapshot has structure only; seed the status lookup before stamping migrations.
+    (require __DIR__ . '/migrations/041_ticket_statuses.php')($pdo);
+    (require __DIR__ . '/migrations/073_repair_status_schema_drift.php')($pdo);
+
     // Stamp every committed migration as already applied. schema.sql is the
     // canonical snapshot — it already includes every column/table the
     // migrations add. Without this, the auto-migrator in src/bootstrap.php

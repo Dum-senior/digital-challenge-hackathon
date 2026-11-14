@@ -1026,6 +1026,18 @@ $router->post('/agent/tickets/check-duplicates', function () {
 // "Similar past tickets" agent assist. Fetched async by the ticket view so the
 // LLM rerank never blocks page render. Result is cached per ticket in
 // ai_similarity_classifications; ?refresh=1 forces a recompute.
+$router->post('/agent/tickets/{id}/engineer-assist', function (array $p) {
+    header('Cache-Control: private, no-store');
+    if (!Auth::check()) { _apiJson(['error' => 'Войдите в систему.'], 401); }
+    Auth::requireAuth();
+    if (!Auth::isStaff()) { _apiJson(['error' => 'Помощник доступен только сотрудникам.'], 403); }
+    $token = $_POST['_token'] ?? null;
+    if (!is_string($token) || !verifyCsrf($token)) {
+        _apiJson(['error' => 'Обновите страницу и повторите запрос.'], 403);
+    }
+    engineerAssistRespond(Auth::user(), $p['id']);
+});
+
 $router->get('/agent/tickets/{id}/similar', function (array $p) {
     Auth::requireStaff();
     header('Content-Type: application/json');

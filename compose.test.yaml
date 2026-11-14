@@ -1,0 +1,33 @@
+name: engineer-assistant-test
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: engineer_test
+      MARIADB_USER: helpdesk
+      MARIADB_PASSWORD: local-test-only
+      MARIADB_RANDOM_ROOT_PASSWORD: 'yes'
+    volumes:
+      - test-db:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 5s
+      retries: 40
+  app:
+    build:
+      context: .
+      dockerfile: docker/php.Dockerfile
+    volumes:
+      - .:/app
+      - ./docker/test.env:/app/.env:ro
+    ports:
+      - '127.0.0.1:8085:8000'
+    environment:
+      TEST_BASE_URL: http://127.0.0.1:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    command: [php, -S, '0.0.0.0:8000', -t, public, public/index.php]
+volumes:
+  test-db:

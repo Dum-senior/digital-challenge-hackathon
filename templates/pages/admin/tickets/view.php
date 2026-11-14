@@ -257,6 +257,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
             </div>
         </div>
 
+        <?php require ROOT_DIR . '/templates/partials/engineer-assistant.php'; ?>
         <?php if (!empty($similarEnabled)): ?>
         <!-- Similar past tickets (AI) — populated async from /admin/tickets/{id}/similar -->
         <div class="card border-0 shadow-sm mb-4" id="similarTicketsCard"

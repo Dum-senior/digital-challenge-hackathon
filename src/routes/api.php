@@ -846,6 +846,13 @@ $router->post('/api/v1/tickets', function () {
  *
  * Returns the full ticket including tags, CC users, and watchers.
  */
+$router->post('/api/v1/tickets/{id}/engineer-assist', function (array $p) {
+    header('Cache-Control: private, no-store');
+    $user = _apiAuth();
+    _apiRequireAgent($user);
+    engineerAssistRespond($user, $p['id']);
+});
+
 $router->get('/api/v1/tickets/{id}', function (array $p) {
     $user     = _apiAuth();
     $db       = Database::connect();
