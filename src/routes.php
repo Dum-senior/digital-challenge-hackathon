@@ -1380,6 +1380,7 @@ $router->get('/search', function () {
  * Home – redirect authenticated users by role
  * ------------------------------------------------------------------ */
 $router->get('/', function () {
+    if (env('DISPATCHER_DEMO_ROLES', 'false') === 'true') redirect('/workspace');
     if (Auth::check()) {
         // Location prompt: redirect to picker when needed
         $locationPrompt = getSetting('sso_location_prompt', 'sso_only');
@@ -1404,6 +1405,7 @@ $router->get('/', function () {
  * Authentication
  * ------------------------------------------------------------------ */
 $router->get('/login', function () {
+    if (env('DISPATCHER_DEMO_ROLES', 'false') === 'true') redirect('/workspace');
     if (Auth::check()) {
         redirect('/');
     }

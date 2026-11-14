@@ -6,6 +6,33 @@ function dispatcherRole(array $user): string
     return roleIsAdmin($user['role']) ? 'admin' : ($user['role'] === 'dispatcher' ? 'dispatcher' : 'engineer');
 }
 
+
+/** Explicit demo deployment only: select existing seeded accounts, never arbitrary users. */
+function dispatcherDemoEnabled(): bool
+{
+    return env('DISPATCHER_DEMO_ROLES', 'false') === 'true';
+}
+function dispatcherDemoSelect(string $role): void
+{
+    $accounts = ['dispatcher'=>'dispatcher@demo.test','engineer'=>'engineer@demo.test','admin'=>'admin@demo.test'];
+    if (!isset($accounts[$role])) _apiJson(['error'=>'Неизвестная роль'],422);
+    $stmt=Database::connect()->prepare('SELECT id,first_name,last_name,email,role,avatar FROM users WHERE email=?');
+    $stmt->execute([$accounts[$role]]);
+    $user=$stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$user || dispatcherRole($user)!==$role) _apiJson(['error'=>'Демо-аккаунт не подготовлен'],503);
+    session_regenerate_id(true);
+    $_SESSION['user']=$user;
+    $_SESSION['user']['id']=(int)$user['id'];
+}
+$router->post('/workspace/api/demo-role', static function (): void {
+    if (!dispatcherDemoEnabled()) _apiJson(['error'=>'Демо-режим выключен'],404);
+    dispatcherActor(['dispatcher','engineer','admin']);
+    $input=_intakeBody();
+    if (!is_string($input['role']??null)) _apiJson(['error'=>'Укажите роль'],422);
+    dispatcherDemoSelect($input['role']);
+    _apiJson(['ok'=>true]);
+});
+
 /** Authorize the session and validate CSRF for every write. */
 function dispatcherActor(array $roles): array
 {
@@ -57,11 +84,12 @@ function dispatcherEngineers(PDO $db): array
 }
 
 $router->get('/workspace', static function (): void {
+    if (dispatcherDemoEnabled() && !Auth::check()) dispatcherDemoSelect('dispatcher');
     Auth::requireStaff();
     header('Cache-Control: private, no-store');
     $actor=Auth::user();
     $page=file_get_contents(ROOT_DIR . '/templates/dispatcher.html');
-    $config=json_encode(['mode'=>'api','apiBase'=>'/workspace/api','csrfToken'=>csrfToken(),
+    $config=json_encode(['demoRoles'=>dispatcherDemoEnabled(),'mode'=>'api','apiBase'=>'/workspace/api','csrfToken'=>csrfToken(),
         'currentUser'=>['id'=>(int)$actor['id'],'role'=>dispatcherRole($actor),
             'name'=>trim($actor['first_name'].' '.$actor['last_name'])]], JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR);
     echo str_replace('<!--CONFIG-->', '<script>window.DISPATCH_CONFIG='.$config.';</script>', $page);
