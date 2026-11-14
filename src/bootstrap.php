@@ -16,6 +16,7 @@ require_once ROOT_DIR . '/src/TimeDiagnostics.php';
 require_once ROOT_DIR . '/src/Holidays.php';
 require_once ROOT_DIR . '/src/AI.php';
 require_once ROOT_DIR . '/src/EngineerAssistant.php';
+require_once ROOT_DIR . '/src/TranscriptionService.php';
 require_once ROOT_DIR . '/src/RecurringTickets.php';
 require_once ROOT_DIR . '/src/CronJobs.php';
 require_once ROOT_DIR . '/src/PWA.php';

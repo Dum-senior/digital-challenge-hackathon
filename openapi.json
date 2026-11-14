@@ -809,6 +809,53 @@
         }
     },
     "paths": {
+        "/intake/transcriptions": {
+            "post": {
+                "summary": "Transcribe a Russian audio recording",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["audio"],
+                                "properties": {
+                                    "audio": {"type": "string", "format": "binary", "description": "Up to 20 MiB and 120 seconds"},
+                                    "source": {"type": "string", "enum": ["browser", "upload", "phone"], "default": "upload"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transcription",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["status", "text", "language", "duration_ms", "processing_ms", "source"],
+                                    "properties": {
+                                        "status": {"type": "string", "enum": ["transcribed"]},
+                                        "text": {"type": "string"},
+                                        "language": {"type": "string", "enum": ["ru"]},
+                                        "duration_ms": {"type": "integer"},
+                                        "processing_ms": {"type": "integer"},
+                                        "source": {"type": "string", "enum": ["browser", "upload", "phone"]}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {"description": "Invalid or empty recording"},
+                    "401": {"description": "Missing or invalid Bearer token"},
+                    "413": {"description": "Recording exceeds size or duration limit"},
+                    "415": {"description": "Unsupported audio format"},
+                    "429": {"description": "Rate limit exceeded"},
+                    "503": {"description": "Transcription service unavailable"}
+                }
+            }
+        },
         "/tickets/{id}/engineer-assist": {
             "post": {
                 "tags": [
