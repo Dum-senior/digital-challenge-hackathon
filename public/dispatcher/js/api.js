@@ -37,6 +37,7 @@
     clarify: (draft,revision,answer) => post('/intake/drafts/'+id(draft)+'/clarify',{revision,answer}),
     confirm: (draft,body) => post('/intake/drafts/'+id(draft)+'/confirm',body),
     updateTicket: (ticket,body) => post(api+'/tickets/'+id(ticket)+'/update',body),
+    draftAssist: draft => post(api+'/drafts/'+id(draft)+'/assist'),
     engineerAssist: ticket => post(api+'/tickets/'+id(ticket)+'/assist'),
     ticketStatistics: range => request(api+'/reports?'+new URLSearchParams(range)),
     listAudit: () => request(api+'/audit'),

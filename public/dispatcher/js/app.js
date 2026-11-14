@@ -109,6 +109,8 @@ function classifyPreview() {
  const options=(items,selected)=>'<option value="">Не выбрано</option>'+items.map(item=>
    `<option value="${esc(item.id)}" ${String(item.id)===String(selected)?'selected':''}>${esc(item.name)}</option>`).join('');
  const text=(key,label,value)=>`<label class="form-field"><span>${label}</span><input id="confirm-${key}" value="${esc(value||'')}" /></label>`;
+ const adviceKey='draft:'+draft.draft_id+':'+draft.revision;
+ const advice=state.assist[adviceKey];
  const engineers=(meta.agents||[]).map(e=>({id:e.group_id+':'+e.id,name:e.first_name+' '+e.last_name}));
  const places=(meta.locations||[]).map(l=>({...l,name:l.address?l.name+' · '+l.address:l.name}));
  return `<div class="surface card"><h2>Проверка черновика №${esc(draft.draft_id)}</h2><div class="grid-2">
@@ -128,6 +130,7 @@ function classifyPreview() {
  ${(draft.questions||[]).map(q=>`<p>${esc(q)}</p>`).join('')}
  ${(draft.questions||[]).length?`<label class="form-field"><span>Уточнение</span><textarea id="clarify-text"></textarea></label>${btn('Отправить уточнение','clarify')}`:''}
  <label class="form-field"><span>Обоснование ручного решения, если требуется</span><textarea id="confirm-reason" maxlength="500"></textarea></label>
+ <section class="top-gap"><h3>Предложенное решение</h3><div id="assist-container" data-assist-key="${esc(adviceKey)}">${advice?assistHtml(advice):'<p>Ищем решение в базе знаний…</p>'}</div></section>
  ${btn('Подтвердить и создать заявку','confirm-draft','button primary',state.loading?'disabled':'')}</div>`;
 }
 function intakeView(){
@@ -171,10 +174,11 @@ function ticketView(ticket){
  const assist=state.assist[ticket.id];
  const detailFields=`<div><div class="field-label">Статус</div>${isEngineer?engineerStateBadge(ticket):pillStatus(ticket.status)}</div>${isEngineer?'':`<div><div class="field-label">Исполнитель</div><div class="field-value">${esc(ticket.assigneeName||'Не назначен')}</div></div>`}<div><div class="field-label">Объект / кабинет</div><div class="field-value">${esc(ticket.location||'Не указан')}</div></div><div><div class="field-label">Категория</div><div class="field-value">${esc(ticket.category||'Не определена')}</div></div>`;
  const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h2>${esc(ticket.subject)}</h2></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(ticket.description)}</div><div class="grid-2">${detailFields}</div>${ticket.extracted?.equipment||ticket.extracted?.ip||ticket.extracted?.tags?.length?`<details class="extract-details top-gap"><summary>Дополнительные данные заявки</summary><div class="grid-2 top-gap">${Object.entries(ticket.extracted).filter(([k,v])=>['equipment','ip','floor','room','object','serial_number','symptoms','tags'].includes(k)&&v).map(([k,v])=>`<div><span class="field-label">${esc(({equipment:'Оборудование',ip:'IP',floor:'Этаж',room:'Кабинет',object:'Объект',serial_number:'Серийный номер',symptoms:'Симптомы',tags:'Теги'})[k]||k)}</span><span class="field-value">${esc(Array.isArray(v)?v.join(', '):v)}</span></div>`).join('')}</div></details>`:''}</div>`;
- if(isEngineer)return `<button class="back" data-action="back-tickets">${icon('back',15)} Мои заявки</button><div class="work-focus">${information}<div class="surface card top-gap" ${assist?.status==='insufficient_evidence'?'hidden':''}><div class="section-heading"><h2>Предложенное решение</h2></div><div id="assist-container">${assist?assistHtml(assist):'<div class="notice"><span class="spinner"></span> Загружаем рекомендации и источники…</div>'}</div></div><p class="hint top-gap">Чтобы принять или завершить заявку, используйте кнопки напротив неё в списке «Мои заявки».</p></div>`;
+ if(isEngineer)return `<button class="back" data-action="back-tickets">${icon('back',15)} Мои заявки</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Предложенное решение</h2></div><div id="assist-container" data-assist-key="${esc(ticket.id)}">${assist?assistHtml(assist):'<div class="notice"><span class="spinner"></span> Загружаем рекомендации и источники…</div>'}</div></div><p class="hint top-gap">Чтобы принять или завершить заявку, используйте кнопки напротив неё в списке «Мои заявки».</p></div>`;
  return `<button class="back" data-action="back-tickets">${icon('back',15)} К заявкам</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Описание заявки</h2>${btn(icon('file')+' Редактировать','edit-ticket','button soft','data-id="'+esc(ticket.id)+'"')}</div><p class="muted">Диспетчер может поправить формулировку, не меняя историю исполнения.</p></div></div>`;
 }
 function assistHtml(a){
+ if(a.error)return '<p class="notice danger">'+esc('Ошибка поиска: '+a.error)+'</p>';
  const steps=Array.isArray(a.steps)?a.steps:[];
  const sources=Array.isArray(a.sources)?a.sources:[];
  const title=['answered','suggested'].includes(a.status)?'Рекомендованные действия':a.status==='sources_only'?'Найденные источники':'Нет подтверждённого решения';
@@ -279,6 +283,11 @@ function render(){
  else if(p==='/engineers')html=engineersView();
  else html=notAllowed();
  document.getElementById('view').innerHTML=html;
+ const draft=state.draft;
+ if(document.querySelector('#assist-container')?.dataset.assistKey.startsWith('draft:')){
+  const key='draft:'+draft.draft_id+':'+draft.revision;
+  if(!state.assist[key]&&!state.assistPending[key])findSolution(key,()=>API.draftAssist(draft.draft_id));
+ }
  // Engineer sees proposal automatically; no additional knowledge-base navigation or button.
  if(state.role==='engineer'&&p.startsWith('/tickets/')){
   const ticket=state.tickets.find(t=>String(t.id)===p.split('/')[2]);
@@ -339,9 +348,15 @@ async function confirmDraft() {
 }
 async function clarify(){const value=root.querySelector('#clarify-text')?.value.trim();if(!value){toast('Укажите дополнительные сведения.','error');return;}
  try{state.submissionText+='\nДополнение: '+value;state.draft=await API.clarify(state.draft.draft_id,state.draft.revision,value);render();}catch(e){toast('Ошибка уточнения: '+e.message,'error');}}
-async function findSolution(id){if(state.assistPending[id])return;state.assistPending[id]=true;const node=root.querySelector('#assist-container');if(node)node.innerHTML='<div class="notice"><span class="spinner"></span> Ищем решения в базе знаний…</div>';
- try{state.assist[id]=await API.engineerAssist(id);const next=root.querySelector('#assist-container');if(next){next.innerHTML=assistHtml(state.assist[id]);next.parentElement.hidden=state.assist[id].status==='insufficient_evidence';}}
- catch(e){const next=root.querySelector('#assist-container');if(next)next.innerHTML='<div class="notice danger">'+esc('Ошибка поиска: '+e.message)+'</div>';}finally{delete state.assistPending[id];}}
+async function findSolution(key, request=()=>API.engineerAssist(key)){
+ if(state.assistPending[key])return;
+ state.assistPending[key]=true;
+ try{state.assist[key]=await request();}
+ catch(e){state.assist[key]={error:e.message};}
+ finally{delete state.assistPending[key];}
+ const node=root.querySelector('#assist-container');
+ if(node?.dataset.assistKey===String(key))node.innerHTML=assistHtml(state.assist[key]);
+}
 async function loadAudit(){
  try{const out=await API.listAudit();state.audit=normList(out,['events','audit','data','items']);state.auditLoaded=true;render();}
  catch(e){toast('Не удалось загрузить журнал: '+e.message,'error');}

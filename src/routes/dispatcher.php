@@ -238,13 +238,25 @@ $router->post('/workspace/api/tickets/{id}/assist', static function (array $p): 
     $stmt->execute([(int)$p['id']]);
     $t=$stmt->fetch(PDO::FETCH_ASSOC);
     if (!$t || (dispatcherRole($actor)==='engineer' && (int)$t['assigned_to']!==(int)$actor['id'])) _apiJson(['error'=>'Заявка не найдена'],404);
+    dispatcherResolve(html_entity_decode(strip_tags($t['description'])));
+});
+
+$router->post('/workspace/api/drafts/{id}/assist', static function (array $p): void {
+    $actor=dispatcherActor(['dispatcher']);
+    $draft=_intakeFetch(Database::connect(), (int)$p['id'], $actor);
+    $edited=json_decode($draft['edited_json'],true);
+    dispatcherResolve($edited['description'] ?? $draft['raw_text']);
+});
+
+function dispatcherResolve(string $text): never
+{
     session_write_close();
-    $result=dispatcherInference('resolve',['text'=>mb_substr(html_entity_decode(strip_tags($t['description'])),0,6000)]);
+    $result=dispatcherInference('resolve',['text'=>mb_substr($text,0,6000)]);
     foreach ($result['sources']??[] as $i=>$source) {
         $result['sources'][$i]['title']=$source['section'];
     }
     _apiJson($result);
-});
+}
 
 /** Serve the same Markdown sections used to build the embedding index. */
 function dispatcherArticles(): array
