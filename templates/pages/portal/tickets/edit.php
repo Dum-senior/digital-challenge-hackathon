@@ -59,7 +59,7 @@ $breadcrumbs  = [
                 <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
                 <div id="portal-edit-editor"></div>
                 <input type="hidden" id="description" name="description" value="<?= e($ticket['description']) ?>">
-                <div id="portal-edit-editor-error" class="text-danger small mt-1" style="display:none;">Description is required.</div>
+                <div id="portal-edit-editor-error" class="text-danger small mt-1" style="display:none;">Опишите проблему.</div>
             </div>
 
             <hr class="my-4">

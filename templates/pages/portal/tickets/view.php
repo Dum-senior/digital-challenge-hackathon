@@ -82,7 +82,7 @@ if ($solutionTimelineId > 0) {
     <div>
         <strong>This is a practice request used by the tour.</strong>
         It isn't a real ticket — the buttons here are switched off, and nothing you click will be saved or sent.
-        <a href="/portal" class="alert-link">Back to your dashboard</a>
+        <a href="/portal" class="alert-link">Вернуться на главную</a>
     </div>
 </div>
 <?php endif; ?>
@@ -299,7 +299,7 @@ if ($solutionTimelineId > 0) {
         <?php if ($hasAnyValue): ?>
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-list-check me-2"></i>Additional Details</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-list-check me-2"></i>Дополнительные сведения</h5>
             </div>
             <div class="card-body">
                 <dl class="row mb-0">
@@ -348,7 +348,7 @@ if ($solutionTimelineId > 0) {
         <?php if (!empty($attachments)): ?>
         <div class="card border-0 shadow-sm mb-4" id="tour-ticket-attachments">
             <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2"></i>Attachments</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2"></i>Вложения</h5>
             </div>
             <div class="list-group list-group-flush">
                 <?php foreach ($attachments as $att): ?>
@@ -396,7 +396,7 @@ if ($solutionTimelineId > 0) {
             </div>
             <div class="card-body p-0">
                 <?php if (empty($timeline)): ?>
-                <div class="text-center py-4 text-muted">No timeline entries.</div>
+                <div class="text-center py-4 text-muted">История пока пуста.</div>
                 <?php else:
                 // Render in the user's chosen direction. SQL gives newest-first;
                 // reverse for oldest-first. The collapser always keeps the first
@@ -505,14 +505,14 @@ if ($solutionTimelineId > 0) {
         <!-- Add Comment -->
         <div class="card border-0 shadow-sm mt-4" id="tour-ticket-comment">
             <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-chat-dots me-2"></i>Add Comment</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-chat-dots me-2"></i>Добавить комментарий</h5>
             </div>
             <div class="card-body">
                 <form method="POST" action="/portal/tickets/<?= $ticket['id'] ?>/comment" enctype="multipart/form-data" id="portalReplyForm">
                     <?= csrfField() ?>
                     <div id="portalReplyDraftNote" class="alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 small d-none">
-                        <span><i class="bi bi-arrow-counterclockwise me-1"></i>Restored your unsent comment.</span>
-                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="portalReplyDraftDiscard">Discard</button>
+                        <span><i class="bi bi-arrow-counterclockwise me-1"></i>Черновик комментария восстановлен.</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="portalReplyDraftDiscard">Удалить черновик</button>
                     </div>
                     <div class="mb-3">
                         <textarea class="form-control" name="message" id="portalReplyMessage" rows="3" required
@@ -599,7 +599,7 @@ if ($solutionTimelineId > 0) {
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm" id="tour-ticket-details">
             <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle me-2"></i>Details</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle me-2"></i>Сведения</h5>
             </div>
             <div class="card-body">
                 <dl class="mb-0">
@@ -615,18 +615,18 @@ if ($solutionTimelineId > 0) {
                         <?php if ($ticket['priority_name']): ?>
                         <span class="badge" style="background:<?= e($ticket['priority_color']) ?>;"><?= e($ticket['priority_name']) ?></span>
                         <?php else: ?>
-                        <span class="text-muted">Not set</span>
+                        <span class="text-muted">Не указано</span>
                         <?php endif; ?>
                     </dd>
 
-                    <dt class="text-muted small">Type</dt>
-                    <dd><?php if ($ticket['type_name']): ?><span class="badge" style="background:<?= e($ticket['type_color'] ?: '#6c757d') ?>;"><?= e($ticket['type_name']) ?></span><?php else: ?><span class="text-muted">Not Set</span><?php endif; ?></dd>
+                    <dt class="text-muted small">Тип</dt>
+                    <dd><?php if ($ticket['type_name']): ?><span class="badge" style="background:<?= e($ticket['type_color'] ?: '#6c757d') ?>;"><?= e($ticket['type_name']) ?></span><?php else: ?><span class="text-muted">Не указано</span><?php endif; ?></dd>
 
                     <dt class="text-muted small"><?= label('location.singular') ?></dt>
-                    <dd><?= e($ticket['location_name'] ?? 'Not set') ?></dd>
+                    <dd><?= e($ticket['location_name'] ?? 'Не указано') ?></dd>
 
                     <dt class="text-muted small">Исполнитель</dt>
-                    <dd><?= e($ticket['agent_name'] ?: 'Unassigned') ?></dd>
+                    <dd><?= e($ticket['agent_name'] ?: 'Не назначен') ?></dd>
 
                     <?php if ((int) ($ticket['escalation_level'] ?? 0) > 0): ?>
                     <dt class="text-muted small">Escalation</dt>
@@ -637,7 +637,7 @@ if ($solutionTimelineId > 0) {
                     </dd>
                     <?php endif; ?>
 
-                    <dt class="text-muted small">Created</dt>
+                    <dt class="text-muted small">Дата создания</dt>
                     <dd><?= date('M j, Y g:i A', strtotime($ticket['created_at'])) ?></dd>
                 </dl>
             </div>

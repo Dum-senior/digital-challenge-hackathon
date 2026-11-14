@@ -68,7 +68,7 @@ endif; ?>
     <div class="d-flex align-items-center gap-2">
         <?php if (!empty($sharedTemplates)): ?>
         <select id="portalTemplateSelect" class="form-select form-select-sm" style="width:auto;max-width:200px;" title="Start from a template">
-            <option value="">Template…</option>
+            <option value="">Шаблон…</option>
             <?php foreach ($sharedTemplates as $t): ?>
                 <option value="<?= (int)$t['id'] ?>"><?= e($t['name']) ?></option>
             <?php endforeach; ?>
@@ -88,8 +88,8 @@ endif; ?>
             <?php require ROOT_DIR . '/templates/partials/ticket-create-asset.php'; ?>
 
             <div id="ticketDraftNote" class="alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-3 small d-none">
-                <span><i class="bi bi-arrow-counterclockwise me-1"></i>Restored your unsent ticket draft.</span>
-                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="ticketDraftDiscard">Discard draft</button>
+                <span><i class="bi bi-arrow-counterclockwise me-1"></i>Ваш черновик восстановлен.</span>
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="ticketDraftDiscard">Удалить черновик</button>
             </div>
 
             <div class="mb-3" id="tour-portal-subject">
@@ -102,7 +102,7 @@ endif; ?>
                     <div class="card border-info">
                         <div class="card-body py-2 px-3">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <small class="fw-semibold text-info"><i class="bi bi-lightbulb me-1"></i>Related KB articles that may help:</small>
+                                <small class="fw-semibold text-info"><i class="bi bi-lightbulb me-1"></i>Похожие инструкции из базы знаний:</small>
                                 <button type="button" class="btn-close btn-close-sm" id="kb-dismiss" aria-label="Close" style="font-size:.6rem;"></button>
                             </div>
                             <div id="kb-suggestion-list"></div>
@@ -115,7 +115,7 @@ endif; ?>
                 <label class="form-label fw-semibold"><?= e(getSetting('sys_field_label_description', 'Description')) ?> <span class="text-danger">*</span></label>
                 <div id="portal-ticket-editor"></div>
                 <input type="hidden" id="description" name="description" value="<?= e(old('description')) ?>">
-                <div id="portal-ticket-editor-error" class="text-danger small mt-1" style="display:none;">Description is required.</div>
+                <div id="portal-ticket-editor-error" class="text-danger small mt-1" style="display:none;">Опишите проблему.</div>
             </div>
 
             <!-- Duplicate-ticket warning (filled by JS when AI finds matches) -->
@@ -170,7 +170,7 @@ endif; ?>
                 <div class="col-md-6">
                     <label for="type_id" class="form-label fw-semibold"><?= e(getSetting('sys_field_label_ticket_type', 'Ticket Type')) ?> <span class="text-danger">*</span></label>
                     <select class="form-select" id="type_id" name="type_id" required>
-                        <option value="">— Select type —</option>
+                        <option value="">— Выберите тип —</option>
                         <?php foreach ($types as $t): ?>
                         <option value="<?= $t['id'] ?>" <?= $selectedTypeId == $t['id'] ? 'selected' : '' ?>>
                             <?= e($t['name']) ?>
@@ -229,7 +229,7 @@ endif; ?>
                             <span class="text-danger field-required-star" <?= $isRequired ? '' : 'style="display:none;"' ?>>*</span>
                         </label>
                         <select class="form-select" id="priority_id" name="priority_id" <?= $isRequired ? 'required' : '' ?>>
-                            <option value="">— Let our team decide —</option>
+                            <option value="">— Назначит поддержка —</option>
                             <?php foreach ($priorities as $p): ?>
                             <option value="<?= $p['id'] ?>" <?= old('priority_id') == $p['id'] ? 'selected' : '' ?>>
                                 <?= e($p['name']) ?>
@@ -264,7 +264,7 @@ endif; ?>
                 <?php endif; ?>
                 <?php elseif ($sysKey === 'attachments'): ?>
                 <div class="mb-3 dynamic-field-wrap" id="tour-portal-attachments" data-field-kind="system" data-field-key="attachments" <?= $wrapStyle ?>>
-                    <label for="attachments" class="form-label fw-semibold"><?= e(getSetting('sys_field_label_attachments', 'Attachments')) ?></label>
+                    <label for="attachments" class="form-label fw-semibold"><?= e(getSetting('sys_field_label_attachments', 'Вложения')) ?></label>
                     <input type="file" class="form-control" id="attachments" name="attachments[]" multiple>
                     <div class="form-text">
                         Max <?= UPLOAD_MAX_SIZE / 1024 / 1024 ?>MB per file. Allowed: PDF, images, Office documents, text, ZIP.

@@ -50,7 +50,7 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
             <div class="col-md-auto" style="min-width:140px;">
                 <label class="form-label small text-muted mb-1">Статус</label>
                 <select class="form-select form-select-sm" name="status">
-                    <option value="">All Statuses</option>
+                    <option value="">Все статусы</option>
                     <?php foreach ($statusLabels as $val => $label): ?>
                     <option value="<?= $val ?>" <?= $filters['status'] === $val ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
@@ -59,7 +59,7 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
             <div class="col-md-auto" style="min-width:130px;">
                 <label class="form-label small text-muted mb-1">Приоритет</label>
                 <select class="form-select form-select-sm" name="priority">
-                    <option value="">All Priorities</option>
+                    <option value="">Все приоритеты</option>
                     <?php foreach ($priorities as $p): ?>
                     <option value="<?= $p['id'] ?>" <?= $filters['priority'] == $p['id'] ? 'selected' : '' ?>><?= e($p['name']) ?></option>
                     <?php endforeach; ?>
@@ -110,12 +110,12 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
             <thead class="table-light">
                 <tr>
                     <th style="width:60px;min-width:60px;white-space:nowrap;"><a href="<?= sortUrl('id', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark"># <?= sortIcon('id', $sort, $dir) ?></a></th>
-                    <th style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="<?= sortUrl('subject', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Subject <?= sortIcon('subject', $sort, $dir) ?></a></th>
-                    <th><a href="<?= sortUrl('status', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Status <?= sortIcon('status', $sort, $dir) ?></a></th>
-                    <th><a href="<?= sortUrl('priority', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Priority <?= sortIcon('priority', $sort, $dir) ?></a></th>
-                    <th><a href="<?= sortUrl('type', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Type <?= sortIcon('type', $sort, $dir) ?></a></th>
-                    <th><a href="<?= sortUrl('agent', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Assigned To <?= sortIcon('agent', $sort, $dir) ?></a></th>
-                    <th><a href="<?= sortUrl('created_at', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Created <?= sortIcon('created_at', $sort, $dir) ?></a></th>
+                    <th style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="<?= sortUrl('subject', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Тема <?= sortIcon('subject', $sort, $dir) ?></a></th>
+                    <th><a href="<?= sortUrl('status', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Статус <?= sortIcon('status', $sort, $dir) ?></a></th>
+                    <th><a href="<?= sortUrl('priority', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Приоритет <?= sortIcon('priority', $sort, $dir) ?></a></th>
+                    <th><a href="<?= sortUrl('type', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Тип <?= sortIcon('type', $sort, $dir) ?></a></th>
+                    <th><a href="<?= sortUrl('agent', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Исполнитель <?= sortIcon('agent', $sort, $dir) ?></a></th>
+                    <th><a href="<?= sortUrl('created_at', $sort, $dir, $sortParams, '/portal/tickets') ?>" class="text-decoration-none text-dark">Дата создания <?= sortIcon('created_at', $sort, $dir) ?></a></th>
                 </tr>
             </thead>
             <tbody>
@@ -125,7 +125,7 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
                     <?php if ($userHasAnyTickets): ?>
                     Change your filters to see your requests, or <a href="/portal/tickets/create">start a new help request</a>.
                     <?php else: ?>
-                    No help requests yet. <a href="/portal/tickets/create">Submit your first one</a>.
+                    No help requests yet. <a href="/portal/tickets/create">Подать первое обращение</a>.
                     <?php endif; ?>
                 </td></tr>
                 <?php else: ?>
@@ -160,9 +160,9 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
                             <span class="text-muted">—</span>
                             <?php endif; ?>
                         </td>
-                        <td><?php if ($t['type_name']): ?><span class="badge" style="background:<?= e($t['type_color'] ?: '#6c757d') ?>;"><?= e($t['type_name']) ?></span><?php else: ?><span class="text-muted small">Not Set</span><?php endif; ?></td>
-                        <td><?= e($t['agent_name'] ?: 'Unassigned') ?></td>
-                        <td class="text-muted small"><?= date('M j, Y', strtotime($t['created_at'])) ?></td>
+                        <td><?php if ($t['type_name']): ?><span class="badge" style="background:<?= e($t['type_color'] ?: '#6c757d') ?>;"><?= e($t['type_name']) ?></span><?php else: ?><span class="text-muted small">Не указано</span><?php endif; ?></td>
+                        <td><?= e($t['agent_name'] ?: 'Не назначен') ?></td>
+                        <td class="text-muted small"><?= date('d.m.Y', strtotime($t['created_at'])) ?></td>
                     </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

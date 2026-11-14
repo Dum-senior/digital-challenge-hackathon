@@ -1,9 +1,9 @@
 <?php
 $layout       = 'app';
-$pageTitle    = label('portal.nav.help', 'Help');
+$pageTitle    = label('portal.nav.dashboard', 'Главная');
 $sidebarItems = portalSidebar('dashboard');
 $breadcrumbs  = [
-    ['label' => label('portal.nav.help', 'Help')],
+    ['label' => label('portal.nav.dashboard', 'Главная')],
 ];
 $portalLabelOverrides = [
     'open'                   => label('portal.status.open', 'Submitted'),
@@ -20,10 +20,10 @@ foreach (ticketActiveStatuses() as $__s) {
 }
 unset($__s);
 ?>
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="dispatcher-intake-header d-flex flex-wrap justify-content-between align-items-center gap-3">
     <div>
-        <h2 class="fw-bold mb-1">Welcome, <?= e($user['first_name'] ?? 'User') ?></h2>
-        <p class="text-muted mb-0">How can we help you today?</p>
+        <h2 class="fw-bold mb-1">Мои обращения</h2>
+        <p>Опишите проблему, чтобы отправить её в поддержку.</p>
     </div>
     <a href="/portal/tickets/create" id="tour-portal-new-ticket" class="btn text-white" style="background:var(--ld-primary);">
         <i class="bi bi-plus-circle me-1"></i><?= e(label('portal.action.new', 'New Help Request')) ?>
@@ -33,12 +33,12 @@ unset($__s);
 <div class="card border-0 shadow-sm mt-4" id="tour-portal-recent">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
         <h5 class="mb-0 fw-semibold"><i class="bi bi-ticket-detailed me-2"></i><?= e(label('portal.dashboard.recent_tickets', 'Your Active Requests')) ?></h5>
-        <a href="/portal/tickets" class="btn btn-sm btn-outline-primary">View All</a>
+        <a href="/portal/tickets" class="btn btn-sm btn-outline-primary">Все обращения</a>
     </div>
     <?php if (empty($recentTickets)): ?>
     <div class="card-body text-center py-5 text-muted">
         <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-        <p class="mb-0"><?= e(label('portal.no_tickets', 'You have no active requests.')) ?> Click "<?= e(label('portal.action.new', 'New Help Request')) ?>" to get started.</p>
+        <p class="mb-0"><?= e(label('portal.no_tickets', 'You have no active requests.')) ?> Чтобы подать заявку, нажмите «Новое обращение».</p>
     </div>
     <?php else: ?>
     <div class="table-responsive">
@@ -50,7 +50,7 @@ unset($__s);
                     <th>Статус</th>
                     <th>Приоритет</th>
                     <th>Исполнитель</th>
-                    <th>Created</th>
+                    <th>Дата создания</th>
                 </tr>
             </thead>
             <tbody>
@@ -76,8 +76,8 @@ unset($__s);
                         <span class="text-muted">—</span>
                         <?php endif; ?>
                     </td>
-                    <td><?= e($t['agent_name'] ?: 'Unassigned') ?></td>
-                    <td class="text-muted small"><?= date('M j, Y', strtotime($t['created_at'])) ?></td>
+                    <td><?= e($t['agent_name'] ?: 'Не назначен') ?></td>
+                    <td class="text-muted small"><?= date('d.m.Y', strtotime($t['created_at'])) ?></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>

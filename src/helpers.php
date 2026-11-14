@@ -8258,9 +8258,7 @@ function portalSidebar(string $active = ''): array
     return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), [
         ['icon' => 'bi-speedometer2',    'label' => label('portal.nav.dashboard'),     'url' => '/portal',         'key' => 'dashboard'],
         ['icon' => 'bi-ticket-detailed', 'label' => label('portal.nav.my_tickets'),    'url' => '/portal/tickets', 'key' => 'tickets'],
-        ['icon' => 'bi-grid-1x2',        'label' => 'Floor mode',                      'url' => '/portal/floor',   'key' => 'floor', 'touchOnly' => true],
         ['icon' => 'bi-book',            'label' => label('portal.nav.knowledge_base'), 'url' => '/portal/kb',     'key' => 'kb'],
-        ['icon' => 'bi-question-circle', 'label' => 'Help',                            'url' => '/portal/help',    'key' => 'help'],
     ]);
 }
 
