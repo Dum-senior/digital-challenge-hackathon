@@ -305,6 +305,9 @@ function reportsView(){
  ${summary(Number(sla.breached||0),'Просрочено')}</div>
  <div class="grid-2 stats-cards top-gap">${summary(minutes(timing.response_minutes,timing.response_count),'Средняя первая реакция',Number(timing.response_count||0)+' с отметкой реакции')}
  ${summary(minutes(timing.resolution_minutes,timing.resolution_count),'Среднее время до завершения',Number(timing.resolution_count||0)+' с отметкой завершения')}</div>
+ <div class="grid-2 top-gap">
+ <section class="surface card"><h2 class="panel-heading">По приоритетам</h2>${Object.entries(priorities).map(([key,label])=>progressLine(label,stats.byPriority?.[key],stats.total,key)).join('')}</section>
+ <section class="surface card"><h2 class="panel-heading">По статусам</h2>${Object.entries(stats.byStatus||{}).map(([key,count])=>progressLine(esc(statuses[key]||key),count,stats.total,'medium')).join('')}</section></div>
  <div class="grid-2 top-gap">${reportBreakdown('По категориям',stats.byCategory||[])}${reportBreakdown('По объектам',stats.byLocation||[])}</div>
  <div class="top-gap">${reportBreakdown('По текущим исполнителям',stats.byEngineer||[])}</div>
  <section class="surface card top-gap"><h2 class="panel-heading">Происшествия</h2>
@@ -314,7 +317,7 @@ function reportsView(){
  <td>${esc(t.category)}<div class="hint">${esc(t.location||'Место не указано')}</div></td>
  <td>${esc(t.engineer||'Не назначен')}</td><td>${pillStatus(t.status)}</td>
  <td>${esc(({on_track:'В срок',warning:'Под угрозой',breached:'Просрочен'})[t.sla]||'—')}</td></tr>`).join(''):'<tr><td colspan="5">Нет происшествий за период</td></tr>'}</tbody></table></div></section>`)
- +`<section class="surface card top-gap">${auditWidget()}</section>`;
+ +`<section class="surface card top-gap">${auditWidget()}</section><section class="surface card top-gap">${timingWidget()}</section>`;
 }
 // Read-only administrator overview. In API mode, all records come from
 // /admin/engineers; the browser never connects directly to MariaDB.
