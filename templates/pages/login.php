@@ -34,6 +34,15 @@ $pageTitle = 'Вход';
             <form method="POST" action="/login">
                 <?= csrfField() ?>
 
+                <fieldset class="mb-3" id="demo-login-roles" hidden>
+                    <legend class="form-label fs-6 fw-semibold">Быстрый выбор учётной записи</legend>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-login="user@localdesk.user">Заявитель</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-login="agent@localdesk.user">Инженер</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-login="admin@localdesk.user">Администратор</button>
+                    </div>
+                </fieldset>
+
                 <div class="mb-3">
                     <label for="email" class="form-label fw-semibold">Электронная почта</label>
                     <div class="input-group">
@@ -104,3 +113,20 @@ $pageTitle = 'Вход';
     </p>
 </div>
 </div>
+
+<script>
+{
+    const roles = document.getElementById('demo-login-roles');
+    const email = document.getElementById('email');
+    const password = document.getElementById('password');
+    roles.addEventListener('click', event => {
+        const choice = event.target.closest('button[data-login]');
+        if (!choice) return;
+        if (email.value !== choice.dataset.login) password.value = '';
+        email.value = choice.dataset.login;
+        email.dispatchEvent(new Event('input', { bubbles: true }));
+        password.focus();
+    });
+    roles.hidden = false;
+}
+</script>

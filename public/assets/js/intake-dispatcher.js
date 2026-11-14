@@ -42,6 +42,7 @@
   async function renderDraft(d) {
     current = d;
     error('');
+    el('intakeEmpty').hidden = true;
     el('intakeDraft').hidden = false;
     el('intakeDraftId').textContent = String(d.draft_id);
     el('intakeStatus').textContent = statuses.get(d.status) || 'Черновик';
@@ -53,6 +54,11 @@
       const val = add(facts, 'dd', value); val.className = 'col-sm-8';
     }
     el('intakeOriginal').textContent = d.raw_text || '';
+    const priority = String(d.extracted?.priority || '').toLowerCase();
+    const priorityBadge = el('intakePriority');
+    priorityBadge.textContent = labels.get(priority.replace(/^./, ch => ch.toUpperCase())) || '';
+    priorityBadge.dataset.level = priority;
+    priorityBadge.hidden = !priorityBadge.textContent;
     const summary = [
       ['Категория', meta?.types?.find(x => Number(x.id) === Number(d.approved?.type_id ?? d.extracted?.type_id))?.name],
       ['Приоритет', labels.get(String(d.extracted?.priority || '').replace(/^./, ch => ch.toUpperCase()))],
@@ -115,6 +121,13 @@
       }); li.appendChild(button); ul.appendChild(li);
     }
     if (result.data.length === 0) add(ul, 'li', 'Черновиков пока нет');
+  }
+  for (const example of root.querySelectorAll('[data-example]')) {
+    example.addEventListener('click', () => {
+      el('intakeText').value = example.dataset.example;
+      el('intakeSource').value = 'text';
+      el('intakeText').focus();
+    });
   }
   const record = el('intakeRecord');
   const recordingStatus = el('intakeRecordingStatus');

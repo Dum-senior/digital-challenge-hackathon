@@ -1,23 +1,29 @@
 <?php
 $layout = 'app';
+$pageTitle = 'Обращения';
 $sidebarItems = Auth::isAdmin() ? adminSidebar('intake') : (Auth::isStaff() ? staffSidebar('intake') : portalSidebar('intake'));
 
 ?>
 <div class="container py-4 dispatcher-intake" id="ai-intake" data-csrf="<?= e(csrfToken()) ?>">
   <header class="dispatcher-intake-header">
-    <h1>Приём обращений</h1>
-    <p>Опишите проблему. ИИ подготовит черновик, а диспетчер проверит данные перед созданием заявки.</p>
+    <h1>Новое обращение</h1>
+    <p>Опишите проблему — система поможет классифицировать заявку.</p>
   </header>
   <div class="dispatcher-intake-grid">
   <section class="card mb-3"><div class="card-body">
-    <label class="form-label" for="intakeText">Опишите проблему</label>
-    <textarea id="intakeText" class="form-control" maxlength="4000" rows="4" placeholder="Например: в кабинете 312 не печатает принтер"></textarea>
+    <label class="form-label" for="intakeText">01 — Расскажите, что произошло</label>
+    <textarea id="intakeText" class="form-control" maxlength="4000" rows="4" placeholder="Например: Не печатает принтер в кабинете 205, из него идёт дым..."></textarea>
     <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
       <button type="button" id="intakeRecord" class="btn btn-outline-primary" aria-pressed="false">Записать голос</button>
       <span id="intakeRecordingStatus" role="status"></span>
     </div>
     <select id="intakeSource" hidden aria-label="Канал обращения"><option value="text">Текст</option><option value="voice">Голос</option></select>
     <button type="button" id="intakeAnalyze" class="btn btn-primary mt-3">Анализировать</button>
+    <div class="intake-examples mt-3 d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-example="В принтере закончилась краска">Нет краски</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-example="Не работают 100 принтеров">100 принтеров</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-example="Принтер не печатает и дымится">Принтер дымится</button>
+    </div>
   </div></section>
   <section class="card mb-3"><div class="card-body"><details><summary class="fw-semibold mb-2">Очередь черновиков</summary>
     <button type="button" class="btn btn-sm btn-outline-secondary" id="intakeReload">Обновить</button>
@@ -25,8 +31,10 @@ $sidebarItems = Auth::isAdmin() ? adminSidebar('intake') : (Auth::isStaff() ? st
   </details></div></section>
   </div>
   <div id="intakeError" class="alert alert-warning" role="alert" hidden></div>
+  <div id="intakeEmpty" class="card p-4 mb-3 text-secondary">Здесь появится результат анализа</div>
   <section id="intakeDraft" class="card" hidden><div class="card-body">
-    <h2 class="h5">Черновик №<span id="intakeDraftId"></span></h2>
+    <h2 class="h5">Результат анализа <small class="text-secondary">№<span id="intakeDraftId"></span></small></h2>
+    <span id="intakePriority" class="intake-priority" hidden></span>
     <p id="intakeStatus" class="fw-bold"></p>
     <p id="intakeEmergency" class="alert alert-danger" hidden></p>
     <?php $supportPhone = trim(env('INTAKE_SUPPORT_PHONE', '')); ?>

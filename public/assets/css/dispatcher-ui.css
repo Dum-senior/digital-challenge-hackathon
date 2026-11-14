@@ -48,3 +48,36 @@
 .dispatcher-intake #intakeRecord[aria-pressed="true"] { color: #982824; border-color: #982824; }
 .dispatcher-intake #intakeDraft { border-inline-start: .3rem solid #27bbae; }
 .dispatcher-intake #intakeQueue { overflow-wrap: anywhere; }
+
+body.dispatcher-workspace {
+    --ld-sidebar-width: 218px;
+    --ld-navbar-height: 0px;
+    --ld-primary: #2864e8;
+    background: #f5f7fb;
+    color: #18243b;
+}
+.dispatcher-workspace .sidebar { background: #fff; border-color: #e6eaf1; }
+.workspace-brand { display: flex; align-items: center; gap: .65rem; padding: 1.35rem 1rem; font-weight: 700; }
+.workspace-brand > span { background: #2864e8; color: #fff; border-radius: 9px; padding: .35rem .65rem; }
+.workspace-brand small { display: block; font-weight: 400; color: #61718a; }
+.dispatcher-workspace .sidebar .nav-link { justify-content: flex-start; gap: .6rem; margin-inline: .55rem; padding: .65rem .75rem; border-radius: 9px; color: #344761; }
+.dispatcher-workspace .sidebar .nav-link.active { background: #eaf1ff; color: #2054c5; }
+.dispatcher-workspace .main-content { padding: clamp(1rem, 3vw, 2.5rem); }
+.workspace-top { display: flex; justify-content: space-between; margin-bottom: 1.4rem; color: #61718a; }
+.dispatcher-workspace .card { border: 1px solid #e6eaf1; border-radius: 13px; box-shadow: 0 2px 8px #18243b08; }
+.dispatcher-workspace .dispatcher-intake { padding-inline: 0; }
+.dispatcher-workspace .dispatcher-intake-header { padding: 0; border: 0; background: transparent; color: #18243b; }
+.dispatcher-workspace .dispatcher-intake-header p { color: #61718a; }
+.dispatcher-workspace .btn-primary { --bs-btn-bg: #2864e8; --bs-btn-border-color: #2864e8; }
+@media (max-width: 48rem) {
+    .dispatcher-workspace .sidebar { display: block; position: static; width: auto; height: auto; }
+    .dispatcher-workspace .sidebar .nav { flex-direction: row !important; flex-wrap: wrap; padding-bottom: .5rem; }
+    .dispatcher-workspace .sidebar .nav-link { margin-inline: .25rem; }
+    .dispatcher-workspace .main-content { margin-left: 0; }
+}
+.dispatcher-workspace .sidebar .nav-link { font-size: .97rem; }
+.intake-priority { display: inline-block; margin-bottom: .65rem; padding: .2rem .65rem; border-radius: 99px; background: #edf1f7; color: #30425e; }
+.intake-priority[hidden] { display: none; }
+.intake-priority[data-level="low"] { background: #e2f5eb; color: #20543a; }
+.intake-priority[data-level="high"] { background: #fff0dc; color: #813d08; }
+.intake-priority[data-level="critical"] { background: #fce4e6; color: #89232c; }

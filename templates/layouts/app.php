@@ -479,9 +479,10 @@
     <?php require ROOT_DIR . '/templates/partials/badge-soft-styles.php'; ?>
     <link href="/assets/css/dispatcher-ui.css" rel="stylesheet">
 </head>
-<body class="<?= !empty($embedMode) ? 'embed-mode' : '' ?>">
+<?php $minimal = empty($embedMode) && preg_match('~^/(?:intake/?$|(?:agent|admin|portal)/(?:tickets|kb)(?:/|$))~', (string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH)); ?>
+<body class="<?= $minimal ? 'dispatcher-workspace' : (!empty($embedMode) ? 'embed-mode' : '') ?>">
     <a class="skip-link" href="#main-content">Skip to main content</a>
-    <?php if (empty($embedMode)) require ROOT_DIR . '/templates/partials/navbar.php'; ?>
+    <?php if (!$minimal && empty($embedMode)) require ROOT_DIR . '/templates/partials/navbar.php'; ?>
 
     <?php if (Auth::isAdmin() && getSetting('show_onboarding', '0') === '1'): ?>
     <a href="/admin?tour=1" id="ld-tour-resume" title="Continue setup tour">
@@ -502,8 +503,10 @@
     <!-- Sidebar -->
     <?php if (empty($embedMode)): ?>
     <aside class="sidebar">
+        <?php if ($minimal): ?><div class="workspace-brand"><span aria-hidden="true">✦</span><div>Диспетчер ИИ<small>Smart Service Desk</small></div></div><?php endif; ?>
         <nav class="nav flex-column" aria-label="Section navigation">
             <?php foreach ($sidebarItems as $item): ?>
+            <?php if ($minimal && !in_array($item['key'], ['intake', 'tickets', 'kb'], true)) continue; ?>
             <a class="nav-link <?= ($item['active'] ?? false) ? 'active' : '' ?> <?= ($item['touchOnly'] ?? false) ? 'touch-only' : '' ?>"
                href="<?= e($item['url']) ?>"
                aria-label="<?= e($item['label']) ?>"
@@ -511,6 +514,7 @@
                title="<?= e($item['label']) ?>"
                data-bs-toggle="tooltip" data-bs-placement="right">
                 <i class="bi <?= e($item['icon']) ?>" aria-hidden="true"></i>
+                <?php if ($minimal): ?><span><?= $item['key'] === 'intake' ? 'Обращения' : e($item['label']) ?></span><?php endif; ?>
             </a>
             <?php endforeach; ?>
         </nav>
@@ -519,6 +523,9 @@
 
     <!-- Main content -->
     <main id="main-content" tabindex="-1" class="main-content">
+        <?php if ($minimal): ?>
+        <div class="workspace-top"><span>Рабочее пространство / <?= e($pageTitle) ?></span><div class="d-flex gap-3"><a href="/profile" aria-label="Профиль"><?= e(Auth::user()['first_name'] ?? 'Профиль') ?></a><a href="/logout">Выйти</a></div></div>
+        <?php endif; ?>
         <?php if (!empty($breadcrumbs)): ?>
         <nav aria-label="Breadcrumb" class="mb-3">
             <ol class="breadcrumb">
