@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+
+repo=/srv/helpdesk-preview-source
+shared=/srv/helpdesk-preview
+releases=/srv/helpdesk-preview-releases
+live=/srv/helpdesk-preview-live
+git -C "$repo" fetch --quiet origin codex/preview-autodeploy
+sha=$(git -C "$repo" rev-parse FETCH_HEAD)
+release="$releases/$sha"
+if [[ "$(readlink "$live" || true)" == "$release" ]]; then
+    exit 0
+fi
+
+stage=$(mktemp -d "$releases/.stage.XXXXXX")
+trap 'test ! -d "$stage" || find "$stage" -depth -delete' EXIT
+git -C "$repo" archive "$sha" | tar -xf - -C "$stage"
+chmod 755 "$stage"
+COMPOSER_ALLOW_SUPERUSER=1 composer --working-dir="$stage" install --no-dev --prefer-dist --no-interaction --no-plugins --no-scripts
+php -l "$stage/public/index.php"
+for path in storage public/uploads; do
+    if [[ -d "$stage/$path" ]]; then
+        find "$stage/$path" -depth -delete
+    fi
+    ln -s "$shared/$path" "$stage/$path"
+done
+ln -s "$shared/.env" "$stage/.env"
+if [[ ! -d "$release" ]]; then mv "$stage" "$release"; fi
+previous=$(readlink "$live")
+ln -sfn "$release" "$live.next"
+mv -Tf "$live.next" "$live"
+if ! curl -fsS --max-time 15 http://127.0.0.1:8085/login >/dev/null; then
+    ln -sfn "$previous" "$live.next"
+    mv -Tf "$live.next" "$live"
+    exit 1
+fi
+echo "Deployed $sha"
