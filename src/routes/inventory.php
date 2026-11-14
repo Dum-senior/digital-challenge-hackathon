@@ -1,0 +1,1379 @@
+<?php
+
+/**
+ * Inventory (asset management) — read-only pages.
+ *
+ * /inventory is deliberately not under /assets, which is the static-files
+ * folder. Everything here is gated on assets.view (or assets.manage, which
+ * implies it); admins hold every permission.
+ */
+
+/** Columns + joins shared by the list, the detail page and search. */
+function assetSelect(): string
+{
+    return 'SELECT a.*, m.name AS model_name, m.model_number, m.image AS model_image, m.eol_months,
+                   c.id AS category_id, c.name AS category_name, mf.name AS manufacturer_name,
+                   s.name AS status_name, s.kind AS status_kind, s.color AS status_color,
+                   l.name AS location_name, dl.name AS default_location_name, sp.name AS supplier_name,
+                   CONCAT(u.first_name, " ", u.last_name) AS assigned_user_name, u.email AS assigned_user_email,
+                   al.name AS assigned_location_name, pa.asset_tag AS assigned_asset_tag, pa.name AS assigned_asset_name
+            FROM assets a
+            JOIN asset_models m        ON m.id = a.model_id
+            JOIN asset_categories c    ON c.id = m.category_id
+            JOIN asset_statuses s      ON s.id = a.status_id
+            LEFT JOIN asset_manufacturers mf ON mf.id = m.manufacturer_id
+            LEFT JOIN asset_suppliers sp ON sp.id = a.supplier_id
+            LEFT JOIN locations l      ON l.id = a.location_id
+            LEFT JOIN locations dl     ON dl.id = a.default_location_id
+            LEFT JOIN users u          ON a.assigned_type = "user" AND u.id = a.assigned_id
+            LEFT JOIN locations al     ON a.assigned_type = "location" AND al.id = a.assigned_id
+            LEFT JOIN assets pa        ON a.assigned_type = "asset" AND pa.id = a.assigned_id';
+}
+
+/** When an asset was acquired: its purchase date, else the manufacturer's warranty start (few purchase dates came over from Snipe-IT). */
+const ASSET_ACQUIRED = 'COALESCE(a.purchase_date, a.warranty_start)';
+
+/** Age buckets shared by the Age report and the list's age= filter: key => [label, min years, max years or null]. */
+const ASSET_AGE_BUCKETS = [
+    'lt1' => ['Under 1 year', 0, 1], '1-2' => ['1–2 years', 1, 2], '2-3' => ['2–3 years', 2, 3], '3-4' => ['3–4 years', 3, 4],
+    '4-5' => ['4–5 years', 4, 5], '5-7' => ['5–7 years', 5, 7], '7plus' => ['7+ years', 7, null], 'unknown' => ['Unknown', null, null],
+];
+
+/** WHERE fragment for one age bucket (dates bound into $params). */
+function assetAgeWhere(string $key, array &$params): string
+{
+    [, $min, $max] = ASSET_AGE_BUCKETS[$key];
+    if ($key === 'unknown') {
+        return ASSET_ACQUIRED . ' IS NULL';
+    }
+    $sql = [ASSET_ACQUIRED . ($min > 0 ? ' <= ?' : ' IS NOT NULL')];
+    if ($min > 0) {
+        $params[] = date('Y-m-d', strtotime("-{$min} years"));
+    }
+    if ($max !== null) {
+        $sql[]    = ASSET_ACQUIRED . ' > ?';
+        $params[] = date('Y-m-d', strtotime("-{$max} years"));
+    }
+    return '(' . implode(' AND ', $sql) . ')';
+}
+
+/** CASE expression naming each row's age bucket — the same edges as assetAgeWhere(). */
+function assetAgeCase(): string
+{
+    $sql = 'CASE WHEN ' . ASSET_ACQUIRED . " IS NULL THEN 'unknown'";
+    foreach (ASSET_AGE_BUCKETS as $key => [, , $max]) {
+        if ($key !== 'unknown') {
+            $sql .= $max !== null ? ' WHEN ' . ASSET_ACQUIRED . " > '" . date('Y-m-d', strtotime("-{$max} years")) . "' THEN '{$key}'" : " ELSE '{$key}'";
+        }
+    }
+    return $sql . ' END';
+}
+
+/**
+ * Parse the inventory list's GET filter params and build the matching WHERE
+ * clause. Shared by the list and label printing (?set=filter), so "print
+ * labels for what I filtered" always matches exactly what the list shows.
+ * Returns whereSql + bind params, the filterParams echo for links/forms, and
+ * each filter's parsed state for the template.
+ */
+function assetListFilters(): array
+{
+    $q          = trim(requestScalar('q'));
+    $catFilter  = array_values(array_filter(array_map('intval', (array) ($_GET['category'] ?? []))));
+    $statRaw    = (array) ($_GET['status'] ?? []);
+    $statFilter = array_values(array_filter(array_map('intval', $statRaw)));
+    $deployed   = in_array('deployed', $statRaw, true); // virtual status: deployable kind + an assignee
+    $locFilter  = array_values(array_filter(array_map('trim', (array) ($_GET['location'] ?? []))));
+    $assigned   = requestScalar('assigned');
+    $deleted    = requestScalar('deleted') === '1';
+    $auditBefore = requestScalar('audit_before');
+    if ($auditBefore !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $auditBefore)) {
+        $auditBefore = '';
+    }
+    $auditAfter = requestScalar('audit_after');
+    if ($auditAfter !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $auditAfter)) {
+        $auditAfter = '';
+    }
+    $audit = in_array(requestScalar('audit'), ['never', 'overdue'], true) ? requestScalar('audit') : '';
+    $warranty = requestScalar('warranty');
+    if (!in_array($warranty, ['expired', 'soon', 'active', 'unknown', 'error'], true)) {
+        $warranty = '';
+    }
+    $wDays    = max(1, min(3650, (int) requestScalar('warranty_days', '90')));
+    $mfFilter = array_values(array_filter(array_map('trim', (array) ($_GET['manufacturer'] ?? []))));
+    $model    = (int) requestScalar('model', '0');
+    $age      = isset(ASSET_AGE_BUCKETS[requestScalar('age')]) ? requestScalar('age') : '';
+    $missing  = in_array(requestScalar('missing'), ['serial', 'purchase_date', 'label'], true) ? requestScalar('missing') : '';
+
+    $where  = [$deleted ? 'a.deleted_at IS NOT NULL' : 'a.deleted_at IS NULL'];
+    $params = [];
+    // Location and manufacturer take ids plus "none" (no location / model without a manufacturer).
+    $idsOrNone = static function (string $col, array $vals) use (&$where, &$params): void {
+        $ids   = array_values(array_filter(array_map('intval', $vals)));
+        $parts = in_array('none', $vals, true) ? ["{$col} IS NULL"] : [];
+        if ($ids !== []) {
+            $parts[] = "{$col} IN (" . implode(',', array_fill(0, count($ids), '?')) . ')';
+            $params  = array_merge($params, $ids);
+        }
+        if ($parts !== []) {
+            $where[] = '(' . implode(' OR ', $parts) . ')';
+        }
+    };
+    if ($q !== '') {
+        $where[] = '(a.asset_tag LIKE ? OR a.name LIKE ? OR a.serial LIKE ? OR m.name LIKE ? OR m.model_number LIKE ?)';
+        array_push($params, "%$q%", "%$q%", "%$q%", "%$q%", "%$q%");
+    }
+    if ($catFilter !== []) {
+        $where[] = 'c.id IN (' . implode(',', array_fill(0, count($catFilter), '?')) . ')';
+        $params  = array_merge($params, $catFilter);
+    }
+    $statParts = [];
+    if ($statFilter !== []) {
+        $statParts[] = 's.id IN (' . implode(',', array_fill(0, count($statFilter), '?')) . ')';
+        $params      = array_merge($params, $statFilter);
+    }
+    if ($deployed) {
+        $statParts[] = "(s.kind = 'deployable' AND a.assigned_type IS NOT NULL)";
+    }
+    if ($statParts !== []) {
+        $where[] = '(' . implode(' OR ', $statParts) . ')';
+    }
+    $idsOrNone('a.location_id', $locFilter);
+    $idsOrNone('m.manufacturer_id', $mfFilter);
+    if ($model > 0) {
+        $where[]  = 'a.model_id = ?';
+        $params[] = $model;
+    }
+    if (in_array($assigned, ['user', 'location', 'asset'], true)) {
+        $where[]  = 'a.assigned_type = ?';
+        $params[] = $assigned;
+    } elseif ($assigned === 'unassigned') {
+        $where[] = 'a.assigned_type IS NULL';
+    } elseif ($assigned === 'import') {
+        $where[] = 'a.import_assignee IS NOT NULL';
+    }
+    if ($auditBefore !== '') {
+        $where[]  = '(a.last_audit_at IS NULL OR a.last_audit_at < ?)';
+        $params[] = $auditBefore;
+    }
+    if ($auditAfter !== '') {
+        $where[]  = 'a.last_audit_at >= ?';
+        $params[] = $auditAfter;
+    }
+    $today = date('Y-m-d');
+    if ($audit === 'never') {
+        $where[] = 'a.last_audit_at IS NULL';
+    } elseif ($audit === 'overdue') {
+        $where[]  = 'a.next_audit_date < ?';
+        $params[] = $today;
+    }
+    if ($warranty === 'expired') {
+        $where[]  = 'a.warranty_end < ?';
+        $params[] = $today;
+    } elseif ($warranty === 'soon') {
+        $where[] = 'a.warranty_end BETWEEN ? AND ?';
+        array_push($params, $today, date('Y-m-d', strtotime("+{$wDays} days")));
+    } elseif ($warranty === 'active') {
+        $where[]  = 'a.warranty_end >= ?';
+        $params[] = $today;
+    } elseif ($warranty === 'unknown') {
+        $where[] = 'a.warranty_end IS NULL';
+    } elseif ($warranty === 'error') {
+        $where[] = 'a.warranty_error IS NOT NULL';
+    }
+    if ($age !== '') {
+        $where[] = assetAgeWhere($age, $params);
+    }
+    if ($missing === 'serial') {
+        $where[] = "(a.serial IS NULL OR a.serial = '')";
+    } elseif ($missing === 'purchase_date') {
+        $where[] = 'a.purchase_date IS NULL';
+    } elseif ($missing === 'label') {
+        // Created in this app — Snipe-IT imports came with a QR label already on the device.
+        $where[] = 'a.snipeit_id IS NULL';
+    }
+    $whereSql = ' WHERE ' . implode(' AND ', $where);
+
+    $filterParams = [];
+    if ($q !== '')          $filterParams['q']        = $q;
+    if ($catFilter !== [])  $filterParams['category'] = $catFilter;
+    if ($statFilter !== [] || $deployed) $filterParams['status'] = array_merge($statFilter, $deployed ? ['deployed'] : []);
+    if ($locFilter !== [])  $filterParams['location'] = $locFilter;
+    if ($assigned !== '')   $filterParams['assigned'] = $assigned;
+    if ($deleted)           $filterParams['deleted']  = '1';
+    if ($auditBefore !== '') $filterParams['audit_before'] = $auditBefore;
+    if ($auditAfter !== '')  $filterParams['audit_after']  = $auditAfter;
+    if ($audit !== '')       $filterParams['audit']        = $audit;
+    if ($warranty !== '')    $filterParams['warranty'] = $warranty;
+    if ($warranty === 'soon' && $wDays !== 90) $filterParams['warranty_days'] = $wDays;
+    if ($mfFilter !== [])    $filterParams['manufacturer'] = $mfFilter;
+    if ($model > 0)          $filterParams['model']    = $model;
+    if ($age !== '')         $filterParams['age']      = $age;
+    if ($missing !== '')     $filterParams['missing']  = $missing;
+
+    return [
+        'whereSql' => $whereSql,
+        'params'   => $params,
+        'filterParams' => $filterParams,
+        'q' => $q, 'catFilter' => $catFilter, 'statFilter' => $statFilter, 'deployed' => $deployed,
+        'locFilter' => $locFilter, 'assigned' => $assigned, 'deleted' => $deleted,
+        'auditBefore' => $auditBefore, 'auditAfter' => $auditAfter, 'audit' => $audit,
+        'warranty' => $warranty, 'wDays' => $wDays, 'mfFilter' => $mfFilter, 'model' => $model,
+        'age' => $age, 'missing' => $missing,
+    ];
+}
+
+$router->get('/inventory', function () {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    $db = Database::connect();
+
+    if (isset($_GET['reset'])) {
+        redirect('/inventory');
+    }
+
+    extract(assetListFilters());
+
+    $sortable = [
+        'tag' => 'a.asset_tag', 'name' => 'a.name', 'serial' => 'a.serial', 'model' => 'm.name',
+        'category' => 'c.name', 'status' => 's.name', 'location' => 'l.name',
+        'assigned' => 'COALESCE(u.last_name, al.name, pa.asset_tag, a.import_assignee)',
+        'purchase_date' => 'a.purchase_date', 'created_at' => 'a.created_at',
+        'warranty_end' => 'a.warranty_end', 'last_audit' => 'a.last_audit_at', 'acquired' => ASSET_ACQUIRED,
+    ];
+    $sort     = requestScalar('sort', 'tag');
+    $dir      = strtolower(requestScalar('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+    $orderCol = $sortable[$sort] ?? 'a.asset_tag';
+    $orderSql = " ORDER BY {$orderCol} " . strtoupper($dir) . ', a.asset_tag ASC';
+
+    if (requestScalar('export') === 'csv') {
+        $stmt = $db->prepare(assetSelect() . $whereSql . $orderSql);
+        $stmt->execute($params);
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="inventory-' . date('Y-m-d') . '.csv"');
+        $out = fopen('php://output', 'wb');
+        fputcsv($out, ['Tag', 'Name', 'Serial', 'Model', 'Model No.', 'Category', 'Manufacturer', 'Status', 'Location', 'Assigned To', 'Purchase Date', 'Cost', 'Warranty (months)', 'Warranty Start', 'Warranty End', 'Warranty Coverage', 'Warranty Lookup Error', 'EOL', 'Last Audit', 'Next Audit', 'Notes']);
+        foreach ($stmt as $a) {
+            fputcsv($out, [
+                $a['asset_tag'], $a['name'], $a['serial'], $a['model_name'], $a['model_number'], $a['category_name'],
+                $a['manufacturer_name'], Assets::statusLabel($a), $a['location_name'], Assets::assigneeLabel($a),
+                $a['purchase_date'], $a['purchase_cost'], $a['warranty_months'], $a['warranty_start'], $a['warranty_end'], $a['warranty_service'], $a['warranty_error'],
+                $a['eol_date'], $a['last_audit_at'], $a['next_audit_date'], $a['notes'],
+            ]);
+        }
+        fclose($out);
+        exit;
+    }
+
+    $countStmt = $db->prepare(
+        'SELECT COUNT(*) FROM assets a JOIN asset_models m ON m.id = a.model_id JOIN asset_categories c ON c.id = m.category_id
+         JOIN asset_statuses s ON s.id = a.status_id LEFT JOIN locations l ON l.id = a.location_id' . $whereSql
+    );
+    $countStmt->execute($params);
+    $total      = (int) $countStmt->fetchColumn();
+    $perPage    = inventoryListPerPage((int) Auth::id());
+    $totalPages = max(1, (int) ceil($total / $perPage));
+    $page       = max(1, min($totalPages, (int) requestScalar('page', '1')));
+
+    $stmt = $db->prepare(assetSelect() . $whereSql . $orderSql . " LIMIT {$perPage} OFFSET " . (($page - 1) * $perPage));
+    $stmt->execute($params);
+
+    render('inventory/index', [
+        'assets'       => $stmt->fetchAll(),
+        'total'        => $total,
+        'page'         => $page,
+        'perPage'      => $perPage,
+        'totalPages'   => $totalPages,
+        'sort'         => $sort,
+        'dir'          => $dir,
+        'filterParams' => $filterParams,
+        'qFilter'      => $q,
+        'catFilter'    => $catFilter,
+        'statFilter'   => $statFilter,
+        'deployed'     => $deployed,
+        'deployedCount' => (int) $db->query("SELECT COUNT(*) FROM assets a JOIN asset_statuses s ON s.id = a.status_id WHERE s.kind = 'deployable' AND a.assigned_type IS NOT NULL AND a.deleted_at IS NULL")->fetchColumn(),
+        'locFilter'    => $locFilter,
+        'assigned'     => $assigned,
+        'deleted'      => $deleted,
+        'auditBefore'  => $auditBefore,
+        'auditAfter'   => $auditAfter,
+        'audit'        => $audit,
+        'warranty'     => $warranty,
+        'wDays'        => $wDays,
+        'mfFilter'     => $mfFilter,
+        'modelFilter'  => $model > 0 ? $db->query('SELECT id, name FROM asset_models WHERE id = ' . $model)->fetch() : null,
+        'age'          => $age,
+        'missing'      => $missing,
+        'manufacturers' => $db->query('SELECT mf.id, mf.name, COUNT(a.id) AS n FROM asset_manufacturers mf LEFT JOIN asset_models m ON m.manufacturer_id = mf.id LEFT JOIN assets a ON a.model_id = m.id AND a.deleted_at IS NULL GROUP BY mf.id ORDER BY mf.name')->fetchAll(),
+        // Extra columns, shown when the list is answering that question.
+        'showCols'     => [
+            'warranty' => $warranty !== '',
+            'audit'    => $auditBefore !== '' || $auditAfter !== '' || $audit !== '',
+            'acquired' => $age !== '',
+        ],
+        'categories'   => $db->query('SELECT c.id, c.name, COUNT(a.id) AS n FROM asset_categories c LEFT JOIN asset_models m ON m.category_id = c.id LEFT JOIN assets a ON a.model_id = m.id AND a.deleted_at IS NULL GROUP BY c.id ORDER BY c.name')->fetchAll(),
+        'statuses'     => $db->query('SELECT s.*, (SELECT COUNT(*) FROM assets a WHERE a.status_id = s.id AND a.deleted_at IS NULL) AS n FROM asset_statuses s ORDER BY s.sort_order, s.name')->fetchAll(),
+        'locations'    => $db->query('SELECT id, name FROM locations ORDER BY name')->fetchAll(),
+        'users'        => Assets::canManage() && !$deleted ? assetCheckoutUsers($db) : [],
+        // Pickers for the bulk-edit modal.
+        'bulkModels'    => Assets::canManage() && !$deleted ? $db->query('SELECT m.id, m.name, c.name AS category_name FROM asset_models m JOIN asset_categories c ON c.id = m.category_id ORDER BY c.name, m.name')->fetchAll() : [],
+        'bulkSuppliers' => Assets::canManage() && !$deleted ? $db->query('SELECT id, name FROM asset_suppliers ORDER BY name')->fetchAll() : [],
+        'deletedCount' => (int) $db->query('SELECT COUNT(*) FROM assets WHERE deleted_at IS NOT NULL')->fetchColumn(),
+    ]);
+});
+
+/**
+ * Legacy Snipe-IT QR codes encode https://inventory.wpl.ca/hardware/{snipe id}.
+ * With inventory.* pointed at this app, send them to the asset on the
+ * canonical host so the login cookie applies.
+ */
+$router->get('/hardware/{id}', function (array $p) {
+    $db = Database::connect();
+    $s  = $db->prepare('SELECT id FROM assets WHERE snipeit_id = ?');
+    $s->execute([(int) $p['id']]);
+    $id = $s->fetchColumn();
+    if ($id === false) {
+        http_response_code(404);
+        render('errors/404', ['layout' => 'app', 'pageTitle' => 'Asset not found']);
+    }
+    redirect(appUrl() . '/inventory/' . (int) $id, 301);
+});
+
+/** Audit mode: scan tag after tag; each scan stamps last_audit_at. */
+$router->get('/inventory/audit', function () {
+    Auth::requirePermission('assets.manage');
+    $db     = Database::connect();
+    $months = (int) getSetting('asset_audit_interval_months', '12');
+    render('inventory/audit', [
+        'locations'      => $db->query('SELECT id, name FROM locations ORDER BY name')->fetchAll(),
+        'myLocationId'   => (int) (Auth::user()['location_id'] ?? 0),
+        'defaultNext'    => $months > 0 ? date('Y-m-d', strtotime("+{$months} months")) : '',
+        'intervalMonths' => $months,
+    ]);
+});
+
+$router->post('/inventory/audit/scan', function () {
+    Auth::requirePermission('assets.manage');
+    header('Content-Type: application/json');
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Session expired — reload the page.']);
+        exit;
+    }
+    $db   = Database::connect();
+    $post = static fn (string $k): string => is_string($_POST[$k] ?? null) ? (string) $_POST[$k] : '';
+    $code = trim($post('code'));
+    $at   = (int) $post('location_id') ?: null;
+    $next = $post('next_audit_date');
+    if ($next !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $next)) {
+        $next = '';
+    }
+    $id = Assets::resolveScan($db, $code);
+    if ($id === null) {
+        echo json_encode(['found' => false, 'code' => $code]);
+        exit;
+    }
+    $stmt = $db->prepare(assetSelect() . ' WHERE a.id = ?');
+    $stmt->execute([$id]);
+    $a    = $stmt->fetch();
+    $prev = $a['last_audit_at'];
+    $d    = Assets::audit($db, $id, $at, $next ?: null, Auth::id());
+    echo json_encode([
+        'found'      => true,
+        'code'       => $code,
+        'id'         => $id,
+        'tag'        => $a['asset_tag'],
+        'name'       => $a['name'],
+        'model'      => $a['model_name'],
+        'location'   => $a['location_name'],
+        'mismatch'   => !empty($d['mismatch']),
+        'assigned'   => $a['assigned_type'] === 'user' ? $a['assigned_user_name'] : ($a['assigned_type'] === null ? ($a['import_assignee'] ?? '') : Assets::assigneeLabel($a)),
+        'status'     => Assets::statusLabel($a),
+        'prev_audit' => $prev ? date('M j, Y', strtotime($prev)) : null,
+        'next_audit' => $d['next'] ?? null,
+    ]);
+    exit;
+});
+
+/* ── QR label printing (assets.manage) ── */
+
+/**
+ * Built-in label-printer presets: key => [display name, label width mm,
+ * label height mm, label stock / ribbon supplies note]. One entry per common
+ * label printer with its usual asset-tag media; saved per-preset overrides
+ * (padding, QR size, fonts, fields, stock note) live in the
+ * asset_label_profiles setting as JSON, as do named custom sizes (custom_*).
+ */
+function assetLabelPresets(): array
+{
+    return [
+        'dymo_lw450_30334'  => ['Dymo LabelWriter 450 — 30334 multipurpose (57 × 32 mm)', 57.2, 31.8,
+            'Dymo 30334 labels — direct thermal, no ribbon or ink'],
+        'dymo_lw450_30252'  => ['Dymo LabelWriter 450 — 30252 address (89 × 28 mm)', 88.9, 28.6,
+            'Dymo 30252 labels — direct thermal, no ribbon or ink'],
+        'dymo_lw550'        => ['Dymo LabelWriter 550 — 30334 multipurpose (57 × 32 mm)', 57.2, 31.8,
+            'Dymo 30334 labels — the 550 only feeds genuine chipped Dymo stock; direct thermal, no ribbon'],
+        'zebra_zd411t'      => ['Zebra ZD411t — 2 × 1 in (51 × 25 mm)', 50.8, 25.4,
+            '2 × 1 in thermal-transfer labels (Zebra Z-Select 4000T paper, or Z-Ultimate 3000T polyester for durable asset tags) + wax ribbon such as Zebra 2300; also runs direct-thermal stock (Z-Select 4000D) with no ribbon'],
+        'zebra_zd421'       => ['Zebra ZD421 — 2.25 × 1.25 in (57 × 32 mm)', 57.2, 31.8,
+            '2.25 × 1.25 in labels; the ZD421t needs a wax ribbon (e.g. Zebra 2300), the ZD421d takes direct-thermal stock with no ribbon'],
+        'zebra_gk420d'      => ['Zebra GK420d — 2 × 1 in (51 × 25 mm)', 50.8, 25.4,
+            'Direct thermal only — 2 × 1 in DT labels (e.g. Zebra Z-Select 4000D), no ribbon'],
+        'brother_ql800'     => ['Brother QL-800 — DK-1201 address (90 × 29 mm)', 90.3, 29.0,
+            'Brother DK-1201 rolls — direct thermal, no ribbon or ink'],
+        'brother_ql820nwb'  => ['Brother QL-820NWB — DK-1204 multipurpose (54 × 17 mm)', 54.3, 17.1,
+            'Brother DK-1204 rolls — direct thermal, no ribbon or ink'],
+        'brother_pt_p750w'  => ['Brother P-touch P750W — TZe 24 mm tape (72 × 24 mm)', 72.0, 24.0,
+            'Brother TZe-251 24 mm laminated tape (black on white) — the ink ribbon is built into the tape cassette'],
+        'rollo'             => ['Rollo — 2 × 1 in (51 × 25 mm)', 50.8, 25.4,
+            '2 × 1 in direct-thermal labels, any brand — no ribbon or ink'],
+        'munbyn_itpp941'    => ['Munbyn ITPP941 — 2.25 × 1.25 in (57 × 32 mm)', 57.2, 31.8,
+            '2.25 × 1.25 in direct-thermal labels — no ribbon or ink'],
+        'phomemo_m110'      => ['Phomemo M110 — 40 × 30 mm', 40.0, 30.0,
+            'Phomemo 40 × 30 mm direct-thermal labels — no ribbon or ink'],
+        'custom'            => ['New custom size…', 60.0, 30.0, ''],
+    ];
+}
+
+/**
+ * Print QR code labels. ?ids=1,2,3 prints those assets; ?set=new prints every
+ * live asset without a legacy Snipe-IT label (snipeit_id IS NULL — imported
+ * assets already carry a printed QR code); ?set=all prints everything live.
+ * The QR encodes {appUrl}/inventory/{id}, which resolveScan() and any phone
+ * camera both understand.
+ */
+$router->get('/inventory/labels', function () {
+    Auth::requirePermission('assets.manage');
+    $db     = Database::connect();
+    $select = 'SELECT a.id, a.asset_tag, a.name, a.serial, m.name AS model_name
+               FROM assets a JOIN asset_models m ON m.id = a.model_id';
+    $set    = requestScalar('set');
+    $ids    = array_values(array_filter(array_map('intval', explode(',', requestScalar('ids')))));
+    $assets = [];
+    if ($set === 'new' || $set === 'all') {
+        $assets = $db->query($select . ' WHERE a.deleted_at IS NULL' . ($set === 'new' ? ' AND a.snipeit_id IS NULL' : '') . ' ORDER BY a.asset_tag LIMIT 2000')->fetchAll();
+    } elseif ($set === 'filter') {
+        // Everything matching the inventory list's current filters (the list's Labels button carries them here).
+        $f    = assetListFilters();
+        $stmt = $db->prepare(assetSelect() . $f['whereSql'] . ' ORDER BY a.asset_tag LIMIT 2000');
+        $stmt->execute($f['params']);
+        $assets = $stmt->fetchAll();
+    } elseif ($ids !== []) {
+        $ids  = array_slice($ids, 0, 2000);
+        $stmt = $db->prepare($select . ' WHERE a.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY a.asset_tag');
+        $stmt->execute($ids);
+        $assets = $stmt->fetchAll();
+    }
+    // Saved named custom sizes join the dropdown; the "New custom size…" sentinel stays last.
+    $profiles = json_decode(getSetting('asset_label_profiles', '{}'), true) ?: [];
+    $presets  = assetLabelPresets();
+    $newCustom = $presets['custom'];
+    unset($presets['custom']);
+    foreach ($profiles as $k => $p) {
+        if (str_starts_with($k, 'custom_') && !empty($p['name'])) {
+            $presets[$k] = [(string) $p['name'], (float) ($p['w'] ?? 60), (float) ($p['h'] ?? 30), (string) ($p['stock'] ?? '')];
+        }
+    }
+    $presets['custom'] = $newCustom;
+    render('inventory/labels', [
+        'assets'         => $assets,
+        'presets'        => $presets,
+        'profiles'       => $profiles,
+        'selectedPreset' => getSetting('asset_label_preset', 'dymo_lw450_30334'),
+        'labelBase'      => appUrl(),
+        'newCount'       => (int) $db->query('SELECT COUNT(*) FROM assets WHERE deleted_at IS NULL AND snipeit_id IS NULL')->fetchColumn(),
+        'allCount'       => (int) $db->query('SELECT COUNT(*) FROM assets WHERE deleted_at IS NULL')->fetchColumn(),
+    ]);
+});
+
+/** Save the label layout for one printer preset and remember it as the default. */
+$router->post('/inventory/labels/settings', function () {
+    Auth::requirePermission('assets.manage');
+    header('Content-Type: application/json');
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Session expired — reload the page.']);
+        exit;
+    }
+    $presets = assetLabelPresets();
+    $key     = (string) ($_POST['preset'] ?? '');
+    $all     = json_decode(getSetting('asset_label_profiles', '{}'), true) ?: [];
+
+    if (($_POST['action'] ?? '') === 'delete') {
+        if (!str_starts_with($key, 'custom_') || !isset($all[$key])) {
+            http_response_code(422);
+            echo json_encode(['error' => 'Only saved custom sizes can be deleted.']);
+            exit;
+        }
+        unset($all[$key]);
+        setSetting('asset_label_profiles', json_encode($all));
+        if (getSetting('asset_label_preset', '') === $key) {
+            setSetting('asset_label_preset', 'dymo_lw450_30334');
+        }
+        logAudit('asset.label_settings_changed', null, null, 'deleted=' . $key);
+        echo json_encode(['ok' => true, 'reload' => true]);
+        exit;
+    }
+
+    // "New custom size…" + a name becomes its own named preset (custom_<slug>).
+    $name   = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 60);
+    $reload = false;
+    if ($key === 'custom' && $name !== '') {
+        $key    = 'custom_' . trim(substr(preg_replace('/[^a-z0-9]+/', '-', strtolower($name)), 0, 40), '-');
+        $reload = true;
+    }
+    $isCustom = str_starts_with($key, 'custom_');
+    if (!$isCustom && !isset($presets[$key])) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Unknown printer preset.']);
+        exit;
+    }
+    $num     = static fn(string $k, float $min, float $max): float => max($min, min($max, (float) ($_POST[$k] ?? 0)));
+    $profile = [
+        'w'      => $num('w', 10, 300),
+        'h'      => $num('h', 8, 300),
+        'pad'    => $num('pad', 0, 20),
+        'qr'     => $num('qr', 6, 100),
+        'f1'     => $num('f1', 4, 40),
+        'f2'     => $num('f2', 4, 40),
+        'fields' => array_values(array_intersect(['tag', 'name', 'model', 'serial'], array_map('strval', (array) ($_POST['fields'] ?? [])))),
+        'stock'  => mb_substr(trim((string) ($_POST['stock'] ?? '')), 0, 300),
+    ];
+    if ($isCustom) {
+        $profile['name'] = $name !== '' ? $name : (string) ($all[$key]['name'] ?? 'Custom');
+        $reload = $reload || $profile['name'] !== (string) ($all[$key]['name'] ?? '');
+    }
+    $all[$key] = $profile;
+    setSetting('asset_label_profiles', json_encode($all));
+    setSetting('asset_label_preset', $key);
+    logAudit('asset.label_settings_changed', null, null, 'preset=' . $key);
+    echo json_encode(['ok' => true, 'reload' => $reload, 'preset' => $key]);
+    exit;
+});
+
+/** Typeahead for the ticket-side picker: live assets matching q, the requester's own first. */
+$router->get('/inventory/search', function () {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    header('Content-Type: application/json');
+    $db  = Database::connect();
+    $q   = trim(requestScalar('q'));
+    $uid = (int) requestScalar('user_id', '0');
+    if ($q === '' && $uid === 0) {
+        echo json_encode([]);
+        exit;
+    }
+    $where  = ['a.deleted_at IS NULL'];
+    $params = [];
+    if ($q !== '') {
+        $where[] = '(a.asset_tag LIKE ? OR a.name LIKE ? OR a.serial LIKE ? OR m.name LIKE ?)';
+        array_push($params, "%$q%", "%$q%", "%$q%", "%$q%");
+    } else {
+        $where[] = 'a.assigned_type = "user" AND a.assigned_id = ?';
+        $params[] = $uid;
+    }
+    $stmt = $db->prepare(
+        assetSelect() . ' WHERE ' . implode(' AND ', $where)
+        . ' ORDER BY (a.assigned_type = "user" AND a.assigned_id = ?) DESC, a.asset_tag LIMIT 10'
+    );
+    $stmt->execute([...$params, $uid]);
+    $out = [];
+    foreach ($stmt as $a) {
+        $out[] = [
+            'id'       => (int) $a['id'],
+            'tag'      => $a['asset_tag'],
+            'name'     => $a['name'],
+            'model'    => $a['model_name'],
+            'status'   => Assets::statusLabel($a),
+            'color'    => Assets::statusColor($a),
+            'assigned' => Assets::assigneeLabel($a),
+            'mine'     => $a['assigned_type'] === 'user' && (int) $a['assigned_id'] === $uid,
+        ];
+    }
+    echo json_encode($out);
+    exit;
+});
+
+$router->get('/inventory/models/{id}/image', function (array $p) {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    $stmt = Database::connect()->prepare('SELECT image FROM asset_models WHERE id = ?');
+    $stmt->execute([(int) $p['id']]);
+    assetServeFile('models/' . basename((string) $stmt->fetchColumn()), null);
+});
+
+$router->get('/inventory/{id}/image', function (array $p) {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    $stmt = Database::connect()->prepare('SELECT image FROM assets WHERE id = ?');
+    $stmt->execute([(int) $p['id']]);
+    assetServeFile('images/' . basename((string) $stmt->fetchColumn()), null);
+});
+
+$router->get('/inventory/{id}/files/{fid}', function (array $p) {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    $stmt = Database::connect()->prepare('SELECT stored_name, original_name FROM asset_files WHERE id = ? AND asset_id = ?');
+    $stmt->execute([(int) $p['fid'], (int) $p['id']]);
+    $f = $stmt->fetch();
+    if (!$f) {
+        http_response_code(404);
+        exit('Not found');
+    }
+    assetServeFile('files/' . basename($f['stored_name']), $f['original_name']);
+});
+
+/* ── Ticket ⇄ asset links (shared by the agent and admin ticket pages) ── */
+
+/** Load a ticket the current staff user may act on, or redirect back with an error. */
+function assetLinkTicket(PDO $db, int $ticketId): array
+{
+    if (!Auth::isStaff()) {
+        Auth::requireStaff();
+    }
+    $stmt = $db->prepare('SELECT * FROM tickets WHERE id = ?');
+    $stmt->execute([$ticketId]);
+    $ticket = $stmt->fetch();
+    if (!$ticket || !userCanAccessTicket($db, Auth::user(), $ticket)) {
+        flash('error', 'Ticket not found.');
+        redirect(Auth::isAdmin() ? '/admin/tickets' : '/agent/tickets');
+    }
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect(staffTicketUrl($ticketId));
+    }
+    return $ticket;
+}
+
+$router->post('/tickets/{id}/assets', function (array $p) {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    assetLinkTicket($db, $id);
+    $assetId = (int) ($_POST['asset_id'] ?? 0);
+    $stmt = $db->prepare('SELECT id FROM assets WHERE id = ? AND deleted_at IS NULL');
+    $stmt->execute([$assetId]);
+    if ($stmt->fetchColumn() === false) {
+        flash('error', 'Asset not found.');
+    } elseif (Assets::link($db, $id, $assetId, Auth::id())) {
+        flash('success', 'Asset ' . Assets::describe($db, $assetId) . ' linked.');
+    }
+    redirect(staffTicketUrl($id) . '#ticketAssetsCard');
+});
+
+$router->post('/tickets/{id}/assets/{assetId}/remove', function (array $p) {
+    Auth::requirePermission('assets.view', 'assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    assetLinkTicket($db, $id);
+    if (Assets::unlink($db, $id, (int) $p['assetId'], Auth::id())) {
+        flash('success', 'Asset unlinked.');
+    }
+    redirect(staffTicketUrl($id) . '#ticketAssetsCard');
+});
+
+/** Stream a file from storage/attachments/assets/; a download name makes it an attachment. */
+function assetServeFile(string $rel, ?string $downloadName): never
+{
+    $path = ROOT_DIR . '/storage/attachments/assets/' . $rel;
+    if (basename($rel) === '' || !is_file($path)) {
+        http_response_code(404);
+        exit('Not found');
+    }
+    session_write_close();
+    header('Content-Type: ' . (mime_content_type($path) ?: 'application/octet-stream'));
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: private, max-age=86400');
+    if ($downloadName !== null) {
+        header('Content-Disposition: attachment; filename="' . str_replace('"', '', $downloadName) . '"');
+    }
+    readfile($path);
+    exit;
+}
+
+/* ── Create / edit / check out / check in / delete / files (assets.manage) ── */
+
+/** Columns the create/edit form posts, in the order the history diff reports them. */
+const ASSET_FORM_FIELDS = ['asset_tag', 'name', 'serial', 'model_id', 'status_id', 'location_id', 'default_location_id', 'supplier_id', 'order_number', 'purchase_date', 'purchase_cost', 'warranty_months', 'eol_date', 'next_audit_date', 'notes'];
+
+/** Catalog lists the form needs. */
+function assetFormData(PDO $db): array
+{
+    return [
+        'models'    => $db->query('SELECT m.id, m.name, c.name AS category_name, mf.name AS manufacturer_name FROM asset_models m JOIN asset_categories c ON c.id = m.category_id LEFT JOIN asset_manufacturers mf ON mf.id = m.manufacturer_id ORDER BY c.name, m.name')->fetchAll(),
+        'statuses'  => $db->query('SELECT id, name FROM asset_statuses ORDER BY sort_order, name')->fetchAll(),
+        'locations' => $db->query('SELECT id, name FROM locations ORDER BY name')->fetchAll(),
+        'suppliers' => $db->query('SELECT id, name FROM asset_suppliers ORDER BY name')->fetchAll(),
+        'users'     => assetCheckoutUsers($db),
+        'nextTag'   => assetNextTagPreview($db),
+    ];
+}
+
+/** People an asset can be checked out to. */
+function assetCheckoutUsers(PDO $db): array
+{
+    return $db->query('SELECT id, first_name, last_name, email FROM users WHERE is_external = 0 ORDER BY first_name, last_name')->fetchAll();
+}
+
+/**
+ * Apply the form's "Assigned to" picker (co_type / co_user_id / co_location_id)
+ * after the row itself is saved: check out when the target changed, check in
+ * when it was cleared, leave an "another asset" assignment alone.
+ */
+function assetFormAssign(PDO $db, int $id, ?array $before): void
+{
+    $type = (string) ($_POST['co_type'] ?? '');
+    if (!in_array($type, ['', 'user', 'location'], true)) {
+        return;
+    }
+    $haveType = $before['assigned_type'] ?? null;
+    if ($type === '') {
+        if ($haveType !== null) {
+            Assets::checkin($db, $id, Auth::id());
+        }
+        return;
+    }
+    $wantId = (int) ($_POST[$type === 'user' ? 'co_user_id' : 'co_location_id'] ?? 0);
+    if ($type !== $haveType || $wantId !== (int) ($before['assigned_id'] ?? 0)) {
+        if (Assets::checkout($db, $id, $type, $wantId, Auth::id()) === null) {
+            flash('error', 'Saved, but the person or ' . strtolower(label('location.singular')) . ' to check it out to was not found.');
+        }
+    }
+}
+
+/** What nextTag() would hand out, without advancing the counter. */
+function assetNextTagPreview(PDO $db): string
+{
+    return getSetting('asset_tag_prefix', '') . str_pad(getSetting('asset_tag_next', '1'), (int) getSetting('asset_tag_zerofill', '5'), '0', STR_PAD_LEFT);
+}
+
+/** Validate + normalise the posted form; returns [row, error]. */
+function assetFormRow(PDO $db, ?int $editingId): array
+{
+    $int  = static fn(string $k): ?int => ($_POST[$k] ?? '') === '' ? null : (int) $_POST[$k];
+    $str  = static fn(string $k): ?string => trim((string) ($_POST[$k] ?? '')) === '' ? null : trim((string) $_POST[$k]);
+    $row = [
+        'asset_tag' => trim((string) ($_POST['asset_tag'] ?? '')), 'name' => $str('name'), 'serial' => $str('serial'),
+        'model_id' => $int('model_id'), 'status_id' => $int('status_id'),
+        'location_id' => $int('location_id'), 'default_location_id' => $int('default_location_id'), 'supplier_id' => $int('supplier_id'),
+        'order_number' => $str('order_number'), 'purchase_date' => $str('purchase_date'),
+        'purchase_cost' => ($_POST['purchase_cost'] ?? '') === '' ? null : round((float) $_POST['purchase_cost'], 2),
+        'warranty_months' => $int('warranty_months'), 'eol_date' => $str('eol_date'), 'next_audit_date' => $str('next_audit_date'),
+        'notes' => $str('notes'),
+    ];
+    foreach (['purchase_date', 'eol_date', 'next_audit_date'] as $d) {
+        if ($row[$d] !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $row[$d])) {
+            return [$row, 'Dates must be YYYY-MM-DD.'];
+        }
+    }
+    if ($row['model_id'] === null || $row['status_id'] === null) {
+        return [$row, 'Model and status are required.'];
+    }
+    if ($row['asset_tag'] !== '') {
+        $s = $db->prepare('SELECT id FROM assets WHERE asset_tag = ? AND id <> ?');
+        $s->execute([$row['asset_tag'], $editingId ?? 0]);
+        if ($s->fetchColumn() !== false) {
+            return [$row, 'Asset tag ' . $row['asset_tag'] . ' is already in use.'];
+        }
+    }
+    return [$row, null];
+}
+
+/** Store an uploaded asset photo under images/; returns the stored name or null. */
+function assetStoreImage(string $field, int $assetId): ?string
+{
+    if (empty($_FILES[$field]['tmp_name']) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return null;
+    }
+    $mime = (string) mime_content_type($_FILES[$field]['tmp_name']);
+    if (!isset(Assets::IMAGE_TYPES[$mime]) || (int) $_FILES[$field]['size'] > UPLOAD_MAX_SIZE) {
+        flash('error', 'Photo must be a PNG, JPEG, GIF or WebP under ' . (UPLOAD_MAX_SIZE / 1048576) . ' MB.');
+        return null;
+    }
+    $dir = ROOT_DIR . '/storage/attachments/assets/images/';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0775, true);
+    }
+    $name = 'asset_' . $assetId . '_' . bin2hex(random_bytes(4)) . '.' . Assets::IMAGE_TYPES[$mime];
+    return move_uploaded_file($_FILES[$field]['tmp_name'], $dir . $name) ? $name : null;
+}
+
+/** Columns the list's bulk edit can set => the table that validates an id (null = a plain value). */
+const ASSET_BULK_FIELDS = [
+    'model_id' => 'asset_models', 'status_id' => 'asset_statuses', 'location_id' => 'locations', 'default_location_id' => 'locations',
+    'supplier_id' => 'asset_suppliers', 'order_number' => null, 'purchase_date' => null, 'purchase_cost' => null,
+    'warranty_months' => null, 'eol_date' => null, 'next_audit_date' => null,
+];
+
+/**
+ * Bulk edit from the list: the ticked assets (ids=1,2,3), else everything
+ * matching the list filters carried in the query string. Only the boxes that
+ * were filled in are changed; blank means "leave as is".
+ */
+$router->post('/inventory/bulk-edit', function () {
+    Auth::requirePermission('assets.manage');
+    $db   = Database::connect();
+    $back = (string) ($_POST['return'] ?? '');
+    $back = preg_match('~^/inventory([?#]|$)~', $back) ? $back : '/inventory';
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect($back);
+    }
+    $set = [];
+    foreach (ASSET_BULK_FIELDS as $col => $table) {
+        $v = is_string($_POST[$col] ?? null) ? trim($_POST[$col]) : '';
+        if ($v === '') {
+            continue;
+        }
+        if ($table !== null) {
+            $s = $db->prepare("SELECT id FROM `{$table}` WHERE id = ?");
+            $s->execute([(int) $v]);
+            if ($s->fetchColumn() === false) {
+                flash('error', 'That ' . str_replace('_', ' ', substr($col, 0, -3)) . ' no longer exists.');
+                redirect($back);
+            }
+            $set[$col] = (int) $v;
+        } elseif (str_ends_with($col, '_date')) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+                flash('error', 'Dates must be YYYY-MM-DD.');
+                redirect($back);
+            }
+            $set[$col] = $v;
+        } elseif ($col === 'purchase_cost') {
+            $set[$col] = number_format((float) $v, 2, '.', '');
+        } elseif ($col === 'warranty_months') {
+            $set[$col] = max(0, (int) $v);
+        } else {
+            $set[$col] = mb_substr($v, 0, 100);
+        }
+    }
+    if ($set === []) {
+        flash('error', 'Nothing to change — fill in at least one box.');
+        redirect($back);
+    }
+    $ids = array_filter(array_map('intval', explode(',', is_string($_POST['ids'] ?? null) ? $_POST['ids'] : '')));
+    if ($ids === []) {
+        $f = assetListFilters();
+        if ($f['filterParams'] === [] || $f['deleted']) {
+            flash('error', 'Tick the assets to change, or filter the list first.');
+            redirect($back);
+        }
+        $stmt = $db->prepare('SELECT a.id FROM assets a JOIN asset_models m ON m.id = a.model_id JOIN asset_categories c ON c.id = m.category_id
+                              JOIN asset_statuses s ON s.id = a.status_id LEFT JOIN locations l ON l.id = a.location_id' . $f['whereSql']);
+        $stmt->execute($f['params']);
+        $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+    if (count($ids) > 2000) {
+        flash('error', 'That is ' . number_format(count($ids)) . ' assets — bulk edit changes at most 2,000 at a time. Narrow the filter.');
+        redirect($back);
+    }
+    $db->beginTransaction();
+    $n = Assets::bulkUpdate($db, $ids, $set, Auth::id());
+    $db->commit();
+    logAudit('asset.bulk_updated', null, 'asset', 'changed=' . $n . ' of=' . count($ids) . ' fields=' . implode(',', array_keys($set)));
+    flash('success', $n . ' asset' . ($n === 1 ? '' : 's') . ' updated' . ($n < count($ids) ? ' (' . (count($ids) - $n) . ' already had those values)' : '') . '.');
+    redirect($back);
+});
+
+$router->get('/inventory/create', function () {
+    Auth::requirePermission('assets.manage');
+    render('inventory/form', ['editing' => null] + assetFormData(Database::connect()));
+});
+
+$router->post('/inventory/create', function () {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect('/inventory/create');
+    }
+    [$row, $err] = assetFormRow($db, null);
+    if ($err !== null) {
+        flashInput($_POST);
+        flash('error', $err);
+        redirect('/inventory/create');
+    }
+    if ($row['asset_tag'] === '') {
+        $row['asset_tag'] = Assets::nextTag($db);
+    }
+    $row['created_by'] = Auth::id();
+    $cols = array_keys($row);
+    $db->prepare('INSERT INTO assets (`' . implode('`, `', $cols) . '`) VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')')
+       ->execute(array_values($row));
+    $id = (int) $db->lastInsertId();
+    if ($img = assetStoreImage('image', $id)) {
+        $db->prepare('UPDATE assets SET image = ? WHERE id = ?')->execute([$img, $id]);
+    }
+    Assets::logHistory($db, $id, 'create', [], Auth::id());
+    logAudit('asset.created', $id, 'asset', 'tag=' . $row['asset_tag']);
+    assetFormAssign($db, $id, null);
+    flash('success', 'Asset ' . $row['asset_tag'] . ' created.');
+    redirect('/inventory/' . $id);
+});
+
+$router->get('/inventory/{id}/edit', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $stmt = $db->prepare('SELECT * FROM assets WHERE id = ?');
+    $stmt->execute([(int) $p['id']]);
+    $editing = $stmt->fetch();
+    if (!$editing) {
+        flash('error', 'Asset not found.');
+        redirect('/inventory');
+    }
+    render('inventory/form', ['editing' => $editing] + assetFormData($db));
+});
+
+$router->post('/inventory/{id}/edit', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect("/inventory/{$id}/edit");
+    }
+    $stmt = $db->prepare('SELECT * FROM assets WHERE id = ?');
+    $stmt->execute([$id]);
+    $before = $stmt->fetch();
+    if (!$before) {
+        flash('error', 'Asset not found.');
+        redirect('/inventory');
+    }
+    [$row, $err] = assetFormRow($db, $id);
+    if ($err !== null || $row['asset_tag'] === '') {
+        flashInput($_POST);
+        flash('error', $err ?? 'Asset tag is required.');
+        redirect("/inventory/{$id}/edit");
+    }
+    if ($img = assetStoreImage('image', $id)) {
+        $row['image'] = $img;
+    }
+    $sets = implode(', ', array_map(static fn(string $c): string => "`$c` = ?", array_keys($row)));
+    $db->prepare("UPDATE assets SET {$sets} WHERE id = ?")->execute([...array_values($row), $id]);
+    $changes = Assets::changes($before, $row, ASSET_FORM_FIELDS);
+    if ($changes !== [] || isset($row['image'])) {
+        Assets::logHistory($db, $id, 'update', $changes === [] ? [] : ['changes' => $changes], Auth::id());
+        logAudit('asset.updated', $id, 'asset', 'tag=' . $row['asset_tag'] . ' fields=' . implode(',', array_keys($changes)));
+    }
+    assetFormAssign($db, $id, $before);
+    flash('success', 'Asset updated.');
+    redirect('/inventory/' . $id);
+});
+
+$router->post('/inventory/{id}/checkout', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    $back = assetReturnUrl($id);
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect($back);
+    }
+    $type = (string) ($_POST['assigned_type'] ?? '');
+    $key  = match ($type) { 'user' => $_POST['user_id'] ?? 0, 'location' => $_POST['location_id'] ?? 0, default => $_POST['asset_tag'] ?? '' };
+    $name = Assets::checkout($db, $id, $type, $key, Auth::id(), trim((string) ($_POST['note'] ?? '')));
+    if ($name === null) {
+        flash('error', 'Choose who or where to check this asset out to.');
+        redirect($back === "/inventory/{$id}" ? "/inventory/{$id}?tab=details" : $back);
+    }
+    flash('success', 'Checked out to ' . $name . '.');
+    redirect($back);
+});
+
+$router->post('/inventory/{id}/checkin', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db   = Database::connect();
+    $id   = (int) $p['id'];
+    $back = assetReturnUrl($id);
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect($back);
+    }
+    $from = Assets::checkin($db, $id, Auth::id(), trim((string) ($_POST['note'] ?? '')));
+    if ($from === null) {
+        flash('error', 'That asset is not checked out.');
+        redirect($back);
+    }
+    flash('success', 'Checked in from ' . $from . '.');
+    redirect($back);
+});
+
+/** Ask Dell / Lenovo for this asset's warranty now. */
+$router->post('/inventory/{id}/warranty', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $id = (int) $p['id'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect("/inventory/{$id}?tab=details");
+    }
+    $r = Warranty::refresh(Database::connect(), $id, Auth::id());
+    if ($r['ok']) {
+        flash('success', 'Warranty ' . ($r['end'] < date('Y-m-d') ? 'expired on ' : 'ends on ') . date('M j, Y', strtotime($r['end'])) . '.');
+    } else {
+        flash('error', $r['error'] . '.');
+    }
+    redirect("/inventory/{$id}?tab=details");
+});
+
+/** Where a checkout/check-in lands: the filtered list or the ticket it was done from (return=), else the asset. */
+function assetReturnUrl(int $id): string
+{
+    $back = (string) ($_POST['return'] ?? '');
+    return preg_match('~^/(inventory|admin/tickets|agent/tickets)([/?#]|$)~', $back) ? $back : "/inventory/{$id}";
+}
+
+$router->post('/inventory/{id}/delete', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect("/inventory/{$id}");
+    }
+    $db->prepare('UPDATE assets SET deleted_at = NOW(), assigned_type = NULL, assigned_id = NULL WHERE id = ? AND deleted_at IS NULL')->execute([$id]);
+    Assets::logHistory($db, $id, 'delete', [], Auth::id());
+    logAudit('asset.deleted', $id, 'asset', null);
+    flash('success', 'Asset deleted. It stays in the list under "Show deleted" and can be restored.');
+    redirect("/inventory/{$id}");
+});
+
+$router->post('/inventory/{id}/restore', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect("/inventory/{$id}");
+    }
+    $db->prepare('UPDATE assets SET deleted_at = NULL WHERE id = ?')->execute([$id]);
+    Assets::logHistory($db, $id, 'restore', [], Auth::id());
+    logAudit('asset.restored', $id, 'asset', null);
+    flash('success', 'Asset restored.');
+    redirect("/inventory/{$id}");
+});
+
+$router->post('/inventory/{id}/files', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect("/inventory/{$id}?tab=files");
+    }
+    $f = $_FILES['file'] ?? null;
+    if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        flash('error', 'Choose a file to upload.');
+        redirect("/inventory/{$id}?tab=files");
+    }
+    $mime = (string) mime_content_type($f['tmp_name']);
+    if (!in_array($mime, UPLOAD_ALLOWED_TYPES, true) || (int) $f['size'] > UPLOAD_MAX_SIZE) {
+        flash('error', 'That file type or size is not allowed (see Settings › Attachments).');
+        redirect("/inventory/{$id}?tab=files");
+    }
+    $dir = ROOT_DIR . '/storage/attachments/assets/files/';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0775, true);
+    }
+    $stored = 'asset_' . $id . '_' . bin2hex(random_bytes(6)) . '.' . safeUploadExtension($mime, (string) $f['name']);
+    if (!move_uploaded_file($f['tmp_name'], $dir . $stored)) {
+        flash('error', 'Upload failed.');
+        redirect("/inventory/{$id}?tab=files");
+    }
+    $db->prepare('INSERT INTO asset_files (asset_id, uploaded_by, original_name, stored_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?)')
+       ->execute([$id, Auth::id(), (string) $f['name'], $stored, $mime, (int) $f['size']]);
+    Assets::logHistory($db, $id, 'file_uploaded', ['filename' => (string) $f['name']], Auth::id());
+    flash('success', 'File uploaded.');
+    redirect("/inventory/{$id}?tab=files");
+});
+
+$router->post('/inventory/{id}/files/{fid}/delete', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect("/inventory/{$id}?tab=files");
+    }
+    $stmt = $db->prepare('SELECT stored_name, original_name FROM asset_files WHERE id = ? AND asset_id = ?');
+    $stmt->execute([(int) $p['fid'], $id]);
+    if ($f = $stmt->fetch()) {
+        $db->prepare('DELETE FROM asset_files WHERE id = ?')->execute([(int) $p['fid']]);
+        $path = ROOT_DIR . '/storage/attachments/assets/files/' . basename($f['stored_name']);
+        if (is_file($path)) {
+            unlink($path);
+        }
+        Assets::logHistory($db, $id, 'file_deleted', ['filename' => $f['original_name']], Auth::id());
+        flash('success', 'File removed.');
+    }
+    redirect("/inventory/{$id}?tab=files");
+});
+
+/* ── Settings › Inventory: tag numbering + catalog (assets.manage) ── */
+
+/** Field specs per catalog kind: [name, label, type, required?, default]. */
+function assetCatalogSpec(string $kind): ?array
+{
+    $kinds = ['deployable' => 'Deployable', 'pending' => 'Pending', 'undeployable' => 'Undeployable', 'archived' => 'Archived'];
+    return [
+        'categories' => ['title' => 'Categories', 'singular' => 'Category', 'table' => 'asset_categories', 'order' => 'name',
+            'fields' => [['name', 'Name', 'text', true]],
+            'columns' => [['name', 'Name']],
+            'in_use' => 'SELECT COUNT(*) FROM asset_models WHERE category_id = t.id'],
+        'manufacturers' => ['title' => 'Manufacturers', 'singular' => 'Manufacturer', 'table' => 'asset_manufacturers', 'order' => 'name',
+            'fields' => [['name', 'Name', 'text', true], ['url', 'Website', 'url'], ['support_url', 'Support URL', 'url'], ['support_phone', 'Support phone', 'text'], ['support_email', 'Support email', 'email']],
+            'columns' => [['name', 'Name'], ['url', 'Website'], ['support_phone', 'Support phone']],
+            'in_use' => 'SELECT COUNT(*) FROM asset_models WHERE manufacturer_id = t.id'],
+        'suppliers' => ['title' => 'Suppliers', 'singular' => 'Supplier', 'table' => 'asset_suppliers', 'order' => 'name',
+            'fields' => [['name', 'Name', 'text', true], ['contact', 'Contact', 'text'], ['phone', 'Phone', 'text'], ['email', 'Email', 'email'], ['url', 'Website', 'url'], ['address', 'Address', 'textarea'], ['notes', 'Notes', 'textarea']],
+            'columns' => [['name', 'Name'], ['contact', 'Contact'], ['phone', 'Phone'], ['email', 'Email']],
+            'in_use' => 'SELECT COUNT(*) FROM assets WHERE supplier_id = t.id'],
+        'statuses' => ['title' => 'Statuses', 'singular' => 'Status', 'table' => 'asset_statuses', 'order' => 'sort_order, name',
+            'fields' => [['name', 'Name', 'text', true], ['kind', 'Kind', 'select', true, 'deployable'], ['color', 'Colour', 'color', false, '#6c757d'], ['sort_order', 'Sort order', 'number', false, '0'], ['notes', 'Notes', 'textarea']],
+            'columns' => [['color', 'Status'], ['kind', 'Kind'], ['sort_order', 'Order']],
+            'options' => ['kind' => $kinds],
+            'in_use' => 'SELECT COUNT(*) FROM assets WHERE status_id = t.id'],
+        'models' => ['title' => 'Models', 'singular' => 'Model', 'table' => 'asset_models', 'order' => 'name',
+            'fields' => [['name', 'Name', 'text', true], ['model_number', 'Model number', 'text'], ['category_id', 'Category', 'select', true], ['manufacturer_id', 'Manufacturer', 'select'], ['eol_months', 'End of life (months)', 'number'], ['notes', 'Notes', 'textarea']],
+            'columns' => [['name', 'Name'], ['model_number', 'Model no.'], ['category_name', 'Category'], ['manufacturer_name', 'Manufacturer'], ['eol_months', 'EOL (months)']],
+            'in_use' => 'SELECT COUNT(*) FROM assets WHERE model_id = t.id'],
+    ][$kind] ?? null;
+}
+
+function assetCatalogCounts(PDO $db): array
+{
+    return [
+        'models' => (int) $db->query('SELECT COUNT(*) FROM asset_models')->fetchColumn(),
+        'categories' => (int) $db->query('SELECT COUNT(*) FROM asset_categories')->fetchColumn(),
+        'manufacturers' => (int) $db->query('SELECT COUNT(*) FROM asset_manufacturers')->fetchColumn(),
+        'suppliers' => (int) $db->query('SELECT COUNT(*) FROM asset_suppliers')->fetchColumn(),
+        'statuses' => (int) $db->query('SELECT COUNT(*) FROM asset_statuses')->fetchColumn(),
+    ];
+}
+
+$router->get('/admin/settings/inventory', function () {
+    Auth::requirePermission('assets.manage');
+    $db = Database::connect();
+    render('admin/settings/inventory', [
+        'kind' => null, 'spec' => null, 'counts' => assetCatalogCounts($db),
+        'tagPrefix' => getSetting('asset_tag_prefix', ''), 'tagZerofill' => getSetting('asset_tag_zerofill', '5'),
+        'tagNext' => getSetting('asset_tag_next', '1'), 'nextTagPreview' => assetNextTagPreview($db),
+        'auditInterval' => getSetting('asset_audit_interval_months', '12'),
+        'dellClientId'  => getSetting('warranty_dell_client_id', ''),
+        'dellSecretSet' => getSetting('warranty_dell_client_secret', '') !== '',
+        'lenovoIdSet'   => getSetting('warranty_lenovo_client_id', '') !== '',
+        'warrantyCounts' => $db->query(
+            "SELECT COUNT(*) AS looked_up, SUM(a.warranty_end < CURDATE()) AS expired, SUM(a.warranty_end >= CURDATE()) AS active
+             FROM assets a WHERE a.deleted_at IS NULL AND a.warranty_end IS NOT NULL"
+        )->fetch(),
+    ]);
+});
+
+$router->post('/admin/settings/inventory', function () {
+    Auth::requirePermission('assets.manage');
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect('/admin/settings/inventory');
+    }
+    if (($_POST['section'] ?? '') === 'warranty') {
+        // Secrets: blank keeps the stored value (the boxes are never pre-filled); Clear removes it.
+        $keep = static fn(string $key, string $field) => isset($_POST[$field . '_clear']) ? ''
+            : (trim((string) ($_POST[$field] ?? '')) !== '' ? trim((string) $_POST[$field]) : getSetting($key, ''));
+        $before = ['warranty_dell_client_id' => getSetting('warranty_dell_client_id', ''), 'warranty_dell_client_secret' => getSetting('warranty_dell_client_secret', ''), 'warranty_lenovo_client_id' => getSetting('warranty_lenovo_client_id', '')];
+        $after  = [
+            'warranty_dell_client_id'     => trim((string) ($_POST['dell_client_id'] ?? '')),
+            'warranty_dell_client_secret' => $keep('warranty_dell_client_secret', 'dell_client_secret'),
+            'warranty_lenovo_client_id'   => $keep('warranty_lenovo_client_id', 'lenovo_client_id'),
+        ];
+        foreach ($after as $k => $v) {
+            setSetting($k, $v);
+        }
+        logAuditChange('asset.warranty_settings_changed', null, null, $before, $after, ['warranty_dell_client_secret', 'warranty_lenovo_client_id']);
+        flash('success', 'Warranty lookup settings saved.');
+        redirect('/admin/settings/inventory#warranty');
+    }
+    setSetting('asset_tag_prefix', trim((string) ($_POST['asset_tag_prefix'] ?? '')));
+    setSetting('asset_tag_zerofill', (string) max(0, min(12, (int) ($_POST['asset_tag_zerofill'] ?? 5))));
+    setSetting('asset_tag_next', (string) max(1, (int) ($_POST['asset_tag_next'] ?? 1)));
+    setSetting('asset_audit_interval_months', (string) max(0, min(120, (int) ($_POST['asset_audit_interval_months'] ?? 12))));
+    logAudit('asset.tag_settings_changed', null, null, 'prefix=' . trim((string) ($_POST['asset_tag_prefix'] ?? '')) . ' next=' . (int) ($_POST['asset_tag_next'] ?? 1));
+    flash('success', 'Inventory settings saved.');
+    redirect('/admin/settings/inventory');
+});
+
+$router->get('/admin/settings/inventory/{kind}', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $spec = assetCatalogSpec($p['kind']);
+    if ($spec === null) {
+        redirect('/admin/settings/inventory');
+    }
+    $db = Database::connect();
+    $extra = $p['kind'] === 'models' ? ', (SELECT name FROM asset_categories c WHERE c.id = t.category_id) AS category_name, (SELECT name FROM asset_manufacturers m WHERE m.id = t.manufacturer_id) AS manufacturer_name' : '';
+    $rows = $db->query("SELECT t.*, ({$spec['in_use']}) AS in_use{$extra} FROM `{$spec['table']}` t ORDER BY {$spec['order']}")->fetchAll();
+    $editing = null;
+    if (($eid = (int) requestScalar('edit', '0')) > 0) {
+        foreach ($rows as $r) {
+            if ((int) $r['id'] === $eid) {
+                $editing = $r;
+            }
+        }
+    }
+    $options = $spec['options'] ?? [];
+    if ($p['kind'] === 'models') {
+        $options['category_id']     = $db->query('SELECT id, name FROM asset_categories ORDER BY name')->fetchAll(PDO::FETCH_KEY_PAIR);
+        $options['manufacturer_id'] = $db->query('SELECT id, name FROM asset_manufacturers ORDER BY name')->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
+    render('admin/settings/inventory', [
+        'kind' => $p['kind'], 'spec' => $spec, 'rows' => $rows, 'editing' => $editing, 'options' => $options,
+        'counts' => assetCatalogCounts($db),
+    ]);
+});
+
+$router->post('/admin/settings/inventory/{kind}', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $spec = assetCatalogSpec($p['kind']);
+    if ($spec === null) {
+        redirect('/admin/settings/inventory');
+    }
+    $back = '/admin/settings/inventory/' . $p['kind'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect($back);
+    }
+    $db  = Database::connect();
+    $id  = (int) ($_POST['id'] ?? 0);
+    $row = [];
+    foreach ($spec['fields'] as $f) {
+        [$name, $label, $type] = $f;
+        $val = trim((string) ($_POST[$name] ?? ''));
+        if ($val === '' && !empty($f[3])) {
+            flashInput($_POST);
+            flash('error', $label . ' is required.');
+            redirect($back . ($id ? "?edit={$id}" : ''));
+        }
+        if ($type === 'select' && isset($spec['options'][$name]) && $val !== '' && !isset($spec['options'][$name][$val])) {
+            $val = array_key_first($spec['options'][$name]);
+        }
+        $row[$name] = $val === '' ? null : (in_array($type, ['number'], true) || str_ends_with($name, '_id') ? (int) $val : $val);
+    }
+    $dup = $db->prepare("SELECT id FROM `{$spec['table']}` WHERE LOWER(name) = LOWER(?) AND id <> ?" . ($p['kind'] === 'models' ? ' AND category_id = ?' : ''));
+    $dup->execute($p['kind'] === 'models' ? [$row['name'], $id, $row['category_id']] : [$row['name'], $id]);
+    if ($dup->fetchColumn() !== false) {
+        flashInput($_POST);
+        flash('error', $spec['singular'] . ' "' . $row['name'] . '" already exists.');
+        redirect($back . ($id ? "?edit={$id}" : ''));
+    }
+    if ($id > 0) {
+        $sets = implode(', ', array_map(static fn(string $c): string => "`$c` = ?", array_keys($row)));
+        $db->prepare("UPDATE `{$spec['table']}` SET {$sets} WHERE id = ?")->execute([...array_values($row), $id]);
+        logAudit('asset_catalog.updated', $id, $p['kind'], 'name=' . $row['name']);
+        flash('success', $spec['singular'] . ' updated.');
+    } else {
+        $cols = array_keys($row);
+        $db->prepare("INSERT INTO `{$spec['table']}` (`" . implode('`, `', $cols) . '`) VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')')->execute(array_values($row));
+        logAudit('asset_catalog.created', (int) $db->lastInsertId(), $p['kind'], 'name=' . $row['name']);
+        flash('success', $spec['singular'] . ' added.');
+    }
+    redirect($back);
+});
+
+$router->post('/admin/settings/inventory/{kind}/{id}/delete', function (array $p) {
+    Auth::requirePermission('assets.manage');
+    $spec = assetCatalogSpec($p['kind']);
+    if ($spec === null) {
+        redirect('/admin/settings/inventory');
+    }
+    $back = '/admin/settings/inventory/' . $p['kind'];
+    if (!verifyCsrf($_POST['_token'] ?? '')) {
+        flash('error', 'Invalid request.');
+        redirect($back);
+    }
+    $db = Database::connect();
+    $id = (int) $p['id'];
+    $s = $db->prepare("SELECT name, ({$spec['in_use']}) AS in_use FROM `{$spec['table']}` t WHERE id = ?");
+    $s->execute([$id]);
+    $r = $s->fetch();
+    if (!$r) {
+        redirect($back);
+    }
+    if ((int) $r['in_use'] > 0) {
+        flash('error', $spec['singular'] . ' "' . $r['name'] . '" is in use by ' . (int) $r['in_use'] . ' record(s) and cannot be deleted.');
+        redirect($back);
+    }
+    $db->prepare("DELETE FROM `{$spec['table']}` WHERE id = ?")->execute([$id]);
+    logAudit('asset_catalog.deleted', $id, $p['kind'], 'name=' . $r['name']);
+    flash('success', $spec['singular'] . ' deleted.');
+    redirect($back);
+});
+
+$router->get('/inventory/{id}', function (array $p) {
+    Auth::requireAuth();
+    if (!Assets::canView()) {
+        // A scanned asset label: without inventory access, report a problem with the device instead.
+        redirect(Assets::newTicketUrl((int) $p['id']));
+    }
+    $db = Database::connect();
+    $id = (int) $p['id'];
+
+    $stmt = $db->prepare(assetSelect() . ' WHERE a.id = ?');
+    $stmt->execute([$id]);
+    $asset = $stmt->fetch();
+    if (!$asset) {
+        http_response_code(404);
+        render('errors/404', ['layout' => 'app', 'pageTitle' => 'Asset not found']);
+    }
+
+    // Tickets linked to this asset, each one checked against the viewer's
+    // access (confidential types/groups) — hidden ones are counted, not shown.
+    $stmt = $db->prepare(
+        'SELECT t.*, tam.linked_at, CONCAT(r.first_name, " ", r.last_name) AS requester_name,
+                CONCAT(ag.first_name, " ", ag.last_name) AS agent_name, tt.name AS type_name
+         FROM ticket_asset_map tam
+         JOIN tickets t ON t.id = tam.ticket_id
+         LEFT JOIN users r  ON r.id = t.created_by
+         LEFT JOIN users ag ON ag.id = t.assigned_to
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE tam.asset_id = ?
+         ORDER BY t.created_at DESC'
+    );
+    $stmt->execute([$id]);
+    $tickets = [];
+    $hiddenTickets = 0;
+    $viewer = Auth::user();
+    foreach ($stmt as $t) {
+        if (userCanAccessTicket($db, $viewer, $t)) {
+            $tickets[] = $t;
+        } else {
+            $hiddenTickets++;
+        }
+    }
+
+    $stmt = $db->prepare(
+        'SELECT h.*, CONCAT(u.first_name, " ", u.last_name) AS user_name
+         FROM asset_history h LEFT JOIN users u ON u.id = h.user_id
+         WHERE h.asset_id = ? ORDER BY h.created_at DESC, h.id DESC'
+    );
+    $stmt->execute([$id]);
+    $history = $stmt->fetchAll();
+
+    $stmt = $db->prepare(
+        'SELECT f.*, CONCAT(u.first_name, " ", u.last_name) AS uploader_name
+         FROM asset_files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.asset_id = ? ORDER BY f.created_at DESC'
+    );
+    $stmt->execute([$id]);
+    $files = $stmt->fetchAll();
+
+    $stmt = $db->prepare(
+        'SELECT a.id, a.asset_tag, a.name, m.name AS model_name, s.name AS status_name, s.color AS status_color
+         FROM assets a JOIN asset_models m ON m.id = a.model_id JOIN asset_statuses s ON s.id = a.status_id
+         WHERE a.assigned_type = "asset" AND a.assigned_id = ? AND a.deleted_at IS NULL ORDER BY a.asset_tag'
+    );
+    $stmt->execute([$id]);
+    $children = $stmt->fetchAll();
+
+    render('inventory/view', [
+        'asset'         => $asset,
+        'tickets'       => $tickets,
+        'hiddenTickets' => $hiddenTickets,
+        'history'       => $history,
+        'files'         => $files,
+        'children'      => $children,
+        'tab'           => requestScalar('tab', 'tickets'),
+        'users'         => Assets::canManage() ? assetCheckoutUsers($db) : [],
+        'locations'     => Assets::canManage() ? $db->query('SELECT id, name FROM locations ORDER BY name')->fetchAll() : [],
+    ]);
+});

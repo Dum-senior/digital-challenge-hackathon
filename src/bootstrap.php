@@ -1,0 +1,102 @@
+<?php
+
+declare(strict_types=1);
+
+require_once ROOT_DIR . '/vendor/autoload.php';
+require_once ROOT_DIR . '/config/version.php';
+require_once ROOT_DIR . '/src/helpers.php';
+require_once ROOT_DIR . '/src/Database.php';
+require_once ROOT_DIR . '/src/Auth.php';
+require_once ROOT_DIR . '/src/Router.php';
+require_once ROOT_DIR . '/src/Sla.php';
+require_once ROOT_DIR . '/src/Assets.php';
+require_once ROOT_DIR . '/src/Domains.php';
+require_once ROOT_DIR . '/src/Warranty.php';
+require_once ROOT_DIR . '/src/TimeDiagnostics.php';
+require_once ROOT_DIR . '/src/Holidays.php';
+require_once ROOT_DIR . '/src/AI.php';
+require_once ROOT_DIR . '/src/RecurringTickets.php';
+require_once ROOT_DIR . '/src/CronJobs.php';
+require_once ROOT_DIR . '/src/PWA.php';
+require_once ROOT_DIR . '/src/Dashboard.php';
+require_once ROOT_DIR . '/src/Teams.php';
+require_once ROOT_DIR . '/src/TeamsBot.php';
+
+// Load environment configuration
+loadEnv(ROOT_DIR . '/.env');
+
+// Upload configuration
+define('UPLOAD_MAX_SIZE', (int) env('UPLOAD_MAX_SIZE', '20971520'));
+define('UPLOAD_ALLOWED_TYPES', array_map('trim', explode(',', env('UPLOAD_ALLOWED_TYPES', 'application/pdf,image/jpeg,image/png'))));
+define('ATTACHMENT_STORAGE_PATH', ROOT_DIR . '/storage/attachments/');
+
+// Error reporting.
+//
+// Production hides errors from the browser but must still RECORD them. The old
+// `error_reporting(0)` suppressed the log as well as the screen — log_errors has
+// no effect on a level that reports nothing — so every production fatal became a
+// bare "HTTP ERROR 500" with no trace anywhere on the box. Keep display off,
+// turn the log on.
+if (env('APP_DEBUG', 'false') === 'true') {
+    ini_set('display_errors', '1');
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', '0');
+    error_reporting(E_ALL);
+}
+ini_set('log_errors', '1');
+if (is_dir(ROOT_DIR . '/storage/logs')) {
+    ini_set('error_log', ROOT_DIR . '/storage/logs/php-error.log');
+}
+
+// Run any pending database migrations automatically
+require ROOT_DIR . '/database/migrate.php';
+
+// Start session
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
+session_set_cookie_params([
+    'httponly' => true,
+    'samesite' => 'Lax',
+    'secure'   => $isHttps,
+]);
+session_start();
+
+// Baseline security response headers. Set before any output so they apply to
+// every response (HTML, JSON, redirects).
+//
+// CSP note: script-src still allows 'unsafe-inline' because the templates rely
+// on inline <script> blocks and inline event handlers (onclick=…). Removing it
+// requires migrating every one of those to a per-request nonce or external
+// file — a templating refactor tracked separately, not a config flip. The
+// directives below are otherwise locked down (object-src 'none', frame-ancestors
+// 'none', base-uri/form-action 'self') so the inline allowance is the only
+// remaining loosening.
+if (!headers_sent()) {
+    header('X-Frame-Options: DENY');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    // camera=(self): the inventory audit and floor pages scan QR codes with getUserMedia.
+    header('Permissions-Policy: geolocation=(), microphone=(), camera=(self)');
+    if ($isHttps) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+    header(
+        "Content-Security-Policy: default-src 'self'; "
+      . "script-src 'self' 'unsafe-inline'; "
+      . "style-src 'self' 'unsafe-inline'; "
+      . "font-src 'self' data:; "
+      . "img-src 'self' data: blob:; "
+      . "connect-src 'self'; "
+      . "object-src 'none'; "
+      . "frame-ancestors 'none'; "
+      . "base-uri 'self'; "
+      . "form-action 'self'"
+    );
+}
+
+// Create router, load routes, dispatch
+$router = new Router();
+require ROOT_DIR . '/src/routes.php';
+$router->dispatch($_SERVER['REQUEST_METHOD'], $_SERVER['REQUEST_URI']);

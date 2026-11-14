@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= e($pageTitle) ?> &ndash; <?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?> Help Center</title>
+    <?php require ROOT_DIR . '/templates/partials/pwa-head.php'; ?>
+    <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --ld-primary: <?= e(getSetting('branding_primary_color', '#4f46e5')) ?>;
+            --ld-primary-hover: <?= e(getSetting('branding_primary_hover', '#4338ca')) ?>;
+        }
+        body { background-color: #f8fafc; }
+        .pub-navbar {
+            background: linear-gradient(135deg, <?= e(getSetting('branding_navbar_start', '#1e1b4b')) ?> 0%, <?= e(getSetting('branding_navbar_end', '#312e81')) ?> 100%);
+            padding: .75rem 0;
+        }
+        .pub-navbar .navbar-brand { font-weight: 700; letter-spacing: -.5px; color: #fff !important; font-size: 1.1rem; }
+        .pub-navbar .nav-link { color: rgba(255,255,255,.8) !important; font-size: .875rem; }
+        .pub-navbar .nav-link:hover { color: #fff !important; }
+        .pub-navbar .btn-login {
+            border: 1px solid rgba(255,255,255,.35); color: #fff; font-size: .8rem; padding: .3rem .85rem;
+            border-radius: 6px; text-decoration: none;
+        }
+        .pub-navbar .btn-login:hover { background: rgba(255,255,255,.15); color: #fff; }
+        .pub-search-wrap { max-width: 420px; }
+        .pub-search-wrap input { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); color: #fff; border-radius: 6px; }
+        .pub-search-wrap input::placeholder { color: rgba(255,255,255,.5); }
+        .pub-search-wrap input:focus { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4); color: #fff; box-shadow: none; }
+        #pub-search-results { position: absolute; top: 100%; left: 0; right: 0; z-index: 1050; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; }
+        #pub-search-results a { display: block; padding: .6rem 1rem; text-decoration: none; color: #1e293b; font-size: .875rem; border-bottom: 1px solid #f1f5f9; }
+        #pub-search-results a:last-child { border-bottom: none; }
+        #pub-search-results a:hover { background: #f8fafc; }
+        #pub-search-results .text-muted { font-size: .75rem; }
+        .pub-footer { background: #1e293b; color: rgba(255,255,255,.5); font-size: .8rem; padding: 1.5rem 0; margin-top: 3rem; }
+
+        /* Skip-to-main link (WCAG 2.4.1) */
+        .skip-link {
+            position: absolute; top: -40px; left: 0;
+            background: var(--ld-primary); color: #fff;
+            padding: 8px 16px; text-decoration: none; z-index: 2000;
+            border-radius: 0 0 4px 0; font-weight: 600;
+        }
+        .skip-link:focus { top: 0; color: #fff; outline: 2px solid #fff; outline-offset: -4px; }
+        main:focus { outline: none; }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <nav class="pub-navbar" aria-label="Primary">
+        <div class="container d-flex align-items-center gap-3">
+            <a class="navbar-brand me-3" href="/kb">
+                <i class="bi bi-book me-1" aria-hidden="true"></i><?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?> Help Center
+            </a>
+
+            <div class="pub-search-wrap flex-grow-1 position-relative" role="search">
+                <label for="pubSearchInput" class="visually-hidden">Search knowledge base articles</label>
+                <input type="text" id="pubSearchInput" class="form-control form-control-sm"
+                       placeholder="Search articles…" autocomplete="off"
+                       role="combobox" aria-expanded="false"
+                       aria-controls="pub-search-results"
+                       aria-autocomplete="list" aria-haspopup="listbox">
+                <div id="pub-search-results" role="listbox" aria-label="Search results" style="display:none;"></div>
+            </div>
+
+            <a class="btn-login ms-2" href="/login">Staff Login</a>
+        </div>
+    </nav>
+
+    <main id="main-content" tabindex="-1" class="container py-4">
+        <?php if (!empty($breadcrumbs)): ?>
+        <nav aria-label="Breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <?php foreach ($breadcrumbs as $crumb): ?>
+                    <?php if (isset($crumb['url'])): ?>
+                        <li class="breadcrumb-item"><a href="<?= e($crumb['url']) ?>" class="text-decoration-none"><?= e($crumb['label']) ?></a></li>
+                    <?php else: ?>
+                        <li class="breadcrumb-item active" aria-current="page"><?= e($crumb['label']) ?></li>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </ol>
+        </nav>
+        <?php endif; ?>
+
+        <?php if (!empty($_SESSION['_flash_success'] ?? null)): ?>
+        <div class="alert alert-success alert-dismissible fade show" role="alert" aria-live="polite" aria-atomic="true">
+            <?= e($_SESSION['_flash_success']) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <?php unset($_SESSION['_flash_success']); ?>
+        <?php endif; ?>
+
+        <?= $content ?>
+    </main>
+
+    <footer class="pub-footer">
+        <div class="container d-flex justify-content-between align-items-center">
+            <span><?= e(getSetting('branding_app_name', 'OpenHelpDesk')) ?> Help Center</span>
+            <span>Powered by OpenHelpDesk</span>
+        </div>
+    </footer>
+
+    <script src="/assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script>
+    (function () {
+        const input   = document.getElementById('pubSearchInput');
+        const results = document.getElementById('pub-search-results');
+        if (!input) return;
+        function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        let timer;
+        function setOpen(open) {
+            results.style.display = open ? 'block' : 'none';
+            input.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        input.addEventListener('input', function () {
+            clearTimeout(timer);
+            const q = this.value.trim();
+            if (q.length < 2) { setOpen(false); return; }
+            timer = setTimeout(function () {
+                fetch('/kb/search?q=' + encodeURIComponent(q))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.length) { setOpen(false); return; }
+                        results.innerHTML = data.map(a =>
+                            `<a href="/kb/articles/${encodeURIComponent(a.slug)}" role="option">
+                                <div>${esc(a.title)}</div>
+                                <div class="text-muted">${esc(a.category_name)} › ${esc(a.folder_name)}</div>
+                            </a>`
+                        ).join('');
+                        setOpen(true);
+                    });
+            }, 250);
+        });
+        document.addEventListener('click', function (e) {
+            if (!input.contains(e.target) && !results.contains(e.target)) {
+                setOpen(false);
+            }
+        });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') setOpen(false);
+        });
+    })();
+    </script>
+    <?php require ROOT_DIR . '/templates/partials/pwa-install.php'; ?>
+    <?php require ROOT_DIR . '/templates/partials/table-resize.php'; ?>
+</body>
+</html>

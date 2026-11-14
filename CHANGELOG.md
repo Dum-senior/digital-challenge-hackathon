@@ -1,0 +1,4411 @@
+# Changelog
+
+All notable changes to OpenHelpDesk will be documented in this file.
+
+Follows [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
+- **MAJOR** — breaking changes
+- **MINOR** — new backwards-compatible features
+- **PATCH** — backwards-compatible bug fixes
+
+To release a new version: update `config/version.php`, add a dated entry below under `## Unreleased`, then move it to a new versioned section.
+
+---
+
+## 2.239.0 &mdash; 2026-11-13
+
+### Added
+- **Scheduled inventory expiry digest.** Inventory › Reports has a new **Email digest** tab (for people with *Manage assets*) that schedules one email listing warranties ending within a look-ahead window (default 90 days), warranties that ended since the last digest, end-of-life dates coming up, and how many audits are overdue — each asset linked, long lists cut at 40 with a link to the rest.
+  - **Schedule.** Monthly on a day of the month (1–28) or weekly on a weekday. It ships **off**; switching it on starts the clock that day, so the first digest arrives on the next scheduled day. A scheduled day with nothing to report sends nothing, and a day the server missed is caught up on the next run.
+  - **Recipients.** All administrators, extra email addresses, or both. The tab shows who it goes to and what it would contain if it were sent today.
+  - **Send me a test now** emails the digest to you alone, without moving the schedule.
+- **New cron job: Inventory Digest** (`scripts/process-asset-digest.php`, daily at 7:30 am) on Settings › Cron Jobs, with Dry run / Run now like the others. It must be in the server's crontab for the digest to go out; it does nothing while the digest is off or on days that are not a scheduled day.
+
+## 2.238.0 &mdash; 2026-11-13
+
+### Added
+- **Import assets from a CSV file.** A new **Import** button on the Inventory page adds many assets at once, in three steps like Import Users:
+  1. **Upload.** Any column names work. The page explains every column and offers an example file (`import-assets-sample.csv`) to fill in.
+  2. **Match columns.** Each field shows the column from your file it was matched to and the first values in it; change any that were missed or matched wrongly. Columns nothing uses are listed so none is overlooked. The inventory list's own CSV export matches automatically.
+  3. **Preview.** Counts of assets to create, update, skip and leave out, the models and suppliers the import would add to the catalog, and every row with a problem or warning by line number — before anything is saved.
+- **How rows are handled.** Only *Model* is required; it is matched by name or model number, and a model not in the catalog is created when the row has a Category (plus its Manufacturer, if given). A blank asset tag gets the next automatic tag. Status and location are matched by name — an unknown status falls back to a default you choose, an unknown location is left blank and flagged. Dates in any common form are accepted, `$` and commas in costs are ignored, and a serial number already on another asset is flagged. New suppliers are created. Nothing is checked out by an import.
+- **Update existing assets from a file.** On the matching step, choose what happens when a row's asset tag already exists: skip the row (the default), or update that asset with the row's non-blank cells. Export the list as CSV, fill in the missing purchase dates or serials, and import it back — each change lands in the asset's History, and a blank cell never erases anything.
+- The import runs as one transaction: if any row fails, nothing is changed. Up to 5,000 rows per file. Needs *Manage assets*.
+
+## 2.237.0 &mdash; 2026-11-13
+
+### Added
+- **Bulk edit from the inventory list.** A new **Edit** button next to Labels changes many assets at once: tick assets and it reads "Edit (n ticked)"; with nothing ticked and a filter on it reads "Edit (N filtered)" and covers the whole filtered list, every page. Set any of model, status, location, default location, supplier, order number, purchase date, purchase cost, warranty months, end-of-life date or next audit date — only the boxes you fill in are changed, blank ones stay as they are on each asset. Each changed asset gets its own History entry showing old and new values. At most 2,000 assets per edit; deleted assets are never touched. Needs *Manage assets*. (Manufacturer and category belong to the model, so those are still changed under Settings › Inventory › Models.)
+
+## 2.236.0 &mdash; 2026-11-13
+
+### Added
+- **Named custom label sizes.** On the label print page, pick **New custom size…**, give it a name (e.g. "Avery 2 × 1 in"), set the dimensions and save — it becomes its own entry in the printer dropdown, editable and deletable like any preset.
+- **Label stock / ribbon notes.** Every printer preset has a free-text supplies note — which label SKU and ribbon/ink it takes — shown and editable right on the print page and saved with the preset. The built-in printers come pre-filled: Dymo 30334/30252 rolls (direct thermal, the 550 needs genuine chipped stock), Zebra ZD411t thermal-transfer labels (Z-Select 4000T paper or Z-Ultimate 3000T polyester) + wax ribbon such as Zebra 2300, ZD421 t/d variants, GK420d direct-thermal only, Brother DK-1201/DK-1204 rolls and TZe-251 tape, and direct-thermal rolls for Rollo, Munbyn and Phomemo.
+
+## 2.235.0 &mdash; 2026-11-13
+
+### Added
+- **Print labels for a filtered set.** With filters on (a location, a category, checked out to a person, a search…), the inventory list's **Labels** button now reads "Labels (N filtered)" and prints every matching asset — all pages, not just the visible one. Ticking assets still overrides it ("Labels (n ticked)"), and with no filters it opens the label chooser as before. A print run caps at 2,000 labels and says so.
+- **"Missing: QR label" filter.** The list's Missing filter gains *QR label (created here, not imported)* — the assets added in this app, which never got a Snipe-IT label. Combine it with any other filter, e.g. unlabeled assets at one branch.
+
+## 2.234.0 &mdash; 2026-11-13
+
+### Added
+- **Print QR code labels for assets.** A new **Labels** button on the Inventory page (and **Print label** on each asset) opens a print page where each label carries a QR code that opens the asset when scanned — the same codes Audit mode and the new-ticket flow already understand. Print one asset, a ticked selection from the list, every asset, or just **Assets without a QR label** (assets created here — Snipe-IT imports already have one).
+  - **Label printer presets.** Pick your printer and the page lays labels out at that exact label size: Dymo LabelWriter 450 (30334 and 30252 stock) and 550, Zebra ZD411t, ZD421 and GK420d, Brother QL-800, QL-820NWB and P-touch P750W, Rollo, Munbyn ITPP941, Phomemo M110, or a custom size.
+  - **Adjustable layout, saved per printer.** Width, height, margin, QR size, font sizes and which fields appear (tag, name, model, serial) can all be changed, previewed at true size, and saved per printer; the last-used printer becomes the default.
+  - **Nothing gets cut off.** Each label prints as its own page of exactly the label size, so a batch feeds one label after another. In the print dialog pick the matching label size, margins **None**, scale **100%** — the page has a tips section for Dymo and Zebra quirks.
+
+## 2.233.0 &mdash; 2026-11-13
+
+### Added
+- **Inventory reports.** A new **Reports** button on the Inventory page opens seven reports. Every number links to the matching assets in the inventory list, where you can download them as CSV. Each report's table also downloads as CSV.
+  - **Overview:** totals by category, location, status, manufacturer or model. Shows how many are deployed, in warranty, out of warranty or unknown, and how many have and have not been audited in your audit interval.
+  - **Warranty:** in warranty, out of warranty, ending within a window you choose (30, 90, 180 or 365 days, or any number), unknown, and failed lookups with the reason. Includes a list of the warranties that end next.
+  - **Audit:** pick a date, or the last 3, 6, 12 or 24 months, to see what has and has not been audited since. Also shows what was never audited and what is past its next audit date, by location (or any grouping) with a progress bar.
+  - **Age:** assets in age bands from under 1 year to 7+ years, counted from the purchase date, or from the start of the manufacturer's warranty when there is no purchase date.
+  - **Checked out:** who holds which devices. Filter by category and a minimum count, for example "people with 2 or more laptops".
+  - **Activity:** every check-out, check-in, audit, edit, warranty update, deletion and ticket link in a date range, filtered by action.
+  - **Data quality:** assets with no serial number, location, manufacturer or purchase date; Snipe-IT assignees with no account; failed warranty lookups; serial numbers shared by several assets (placeholders like `XXXXX` show up here); and Dell or Lenovo serials that cannot be looked up.
+- **Look up all warranties at once.** The Warranty report has **Look up all** (every Dell and Lenovo asset with a serial number) and **Only the ones due** (never looked up, or last looked up over 30 days ago). It works through them 10 at a time with a progress bar and a running log, and you can stop it at any point. The daily job still does 150 a day; this is for doing the whole inventory now. Keep the page open while it runs (Lenovo takes about two seconds an asset). Dell is included once a TechDirect key is saved.
+- **More inventory list filters:** manufacturer (including "none"), model, warranty ending within a number of days you choose, failed warranty lookups, never audited, past the next audit date, audited since a date, age band, and missing serial number or purchase date. When a warranty, audit or age filter is on, the list adds a **Warranty ends**, **Last audit** or **Acquired** column you can sort by. The CSV gains a **Warranty Lookup Error** column.
+
+### Fixed
+- **Lenovo and Dell serials typed with hyphens can now be looked up.** Serials like `PF-4NRA05`, and label scans containing a `/`, were rejected as invalid. Spaces, hyphens and other punctuation are now ignored. This covers 21 ThinkPad X1 Yoga Gen 8s on our system, which would otherwise never have been looked up.
+
+## 2.232.1 &mdash; 2026-11-13
+
+### Fixed
+- **Fresh installs get the Domains tables.** `database/schema.sql` now declares `domains` (including the ignored-hosts and internal-DNS columns from migrations 092 and 093) and `domain_alerts_sent`. Before this, a new install would show an error on Settings → Domains. Existing installs are unaffected.
+- **"Inventory" and the "What happens next" pop-up can be renamed on the Labels page.** Settings → Labels listed these labels under *Not wired up yet* even though the app uses them. `nav.inventory` is also now in the default labels file.
+- **Test suite back to green** (861 tests). Two staff ticket-create tests still posted the form without a type, location and priority, which the form has required for a while, so the ticket was never created. One of them had been passing without checking that a ticket was made; it now checks. The list-vs-export test now loads the list 50 per page, so it no longer flags tickets that were only on page 2.
+
+## 2.232.0 &mdash; 2026-11-13
+
+### Added
+- **Emails sent late from the queue say so.** Every email sent from the Email Queue, by **Send all now** or the automatic retry, now starts with a yellow note: *"This message was delayed. It waited 2 hours 15 minutes in the email queue (queued Nov 12 at 2:14 pm) and may be out of date. Please login to the HelpDesk to get the most up to date information on your tickets."* Waits of two days or more read in days. The plain-text version carries the same note. Turn it off with the new switch at the top of **Settings → Email Queue**; it is on by default. The retry interval and the switch now save together with one **Save** button.
+
+## 2.231.0 &mdash; 2026-11-13
+
+### Added
+- **Failed emails are retried automatically.** Emails that failed to send are now retried every 30 minutes for up to 3 days, for example ones that failed during a Microsoft outage. Change the interval at the top of **Settings → Email Queue** (5–1440 minutes, or 0 to turn it off); the page shows when the last retry ran. Emails held by `MAIL_ENABLED=false` are never retried, so turning outbound mail back on still never sends that backlog by itself. Retries run as part of the 5-minute SLA job, so no new cron line is needed.
+
+### Fixed
+- **A Microsoft outage no longer freezes ticket saves.** Ticket emails go out while the person saving waits. During the 2026-11-12 Microsoft 365 outage each email took 20–30 seconds to fail, so a save that notified a five-person group could hang for about two minutes.
+  - **Circuit breaker:** after one email fails *slowly* (5 seconds or more), the rest of the emails for that save go straight to the queue without trying. **Send all now** and the automatic retry stop early in the same way. A quick failure, such as one bad address, doesn't trip it.
+  - **Shorter waits on Microsoft:** every Microsoft Graph call (sending mail, reading inbound mail, the out-of-office check) gives up after 5 seconds trying to connect or 10 seconds with no data. Before, it waited up to 30 seconds. A large attachment upload that keeps moving is not cut off.
+  - **Send all now** now reports how many emails are left in the queue, including any it didn't try after a stall.
+
+## 2.230.1 &mdash; 2026-11-12
+
+### Fixed
+- **Fresh installs get the new inventory columns.** `database/schema.sql` now declares the warranty columns and index from migration 095 and `ticket_type_tasks.link_person_assets` from migration 094, so a new install matches an upgraded one. Existing installs are unaffected; their migrations already added them.
+
+## 2.230.0 &mdash; 2026-11-12
+
+### Added
+- **Warranty looked up from the manufacturer.** Dell and Lenovo assets now get their warranty from the manufacturer by serial number / service tag. An asset's **Details** tab shows whether the warranty is **Expired** (with the date it ended and how long ago) or **In warranty** (with the end date and days left; amber within 90 days), when it started, the coverage (e.g. *3Y On-site, 9X5*), and when it was last looked up. Staff who manage the inventory can press **Look up warranty** to ask right away.
+  - A new daily **Warranty Lookups** job (Settings → Cron Jobs, `scripts/process-warranty-lookups.php`) looks up up to 150 assets a run, oldest first, and asks again every 30 days. It sends no email. A changed end date is recorded in the asset's **History**.
+  - **Lenovo** works with no setup, through the public lookup Lenovo's own support site uses. It is unofficial and can stop working without notice; saving a ClientID from your Lenovo account manager under **Settings → Inventory → Warranty lookup** switches to Lenovo's official Warranty API. Serial numbers scanned from the whole Lenovo label (`1S` + model + serial) are trimmed to the 8-character serial automatically.
+  - **Dell** needs a free TechDirect Warranty API key (client ID + secret) under **Settings → Inventory → Warranty lookup**; until one is saved, Dell assets are skipped. Only 7-character service tags are looked up.
+  - HP and other makes are not looked up; their hand-entered **Warranty (months)** still shows.
+  - The Inventory list has a **Warranty** filter (Expired, Ends within 90 days, In warranty, Unknown), and the CSV export has Warranty Start, Warranty End and Warranty Coverage columns.
+  - Migration 095 adds `assets.warranty_start`, `warranty_end`, `warranty_service`, `warranty_checked_at` and `warranty_error`.
+
+## 2.229.1 &mdash; 2026-11-12
+
+### Fixed
+- **Internal-only servers in the SSL check are labelled correctly.** A server that only exists on the internal network (for example one carrying the `*.wpl.ca` wildcard) can be added to a domain's **Hosts to check**; its certificate is read through this server's own DNS and counts toward expiry alerts like any other host. Its **internal view** badge no longer claims a public address failed to answer, the **Internal DNS** toggle is hidden on hosts with no public address (it would change nothing), and the **Hosts to check** help text now says internal-only names are welcome.
+
+## 2.229.0 &mdash; 2026-11-12
+
+### Added
+- **Task tickets can link the person's devices.** Each task ticket row under **Admin → Ticket Types → Edit → Task tickets** has a new **Link the person's devices** switch, shown when the type's form has a person (user picker) field. When it is on, every device checked out to the person picked in a ticked person field is linked to that task ticket as it is created — e.g. on **Employee Offboarding**, the **Offboarding - IT** task arrives with the leaver's laptop, phone and so on in its **Assets** card, so IT knows what to collect. If nobody's devices are checked out to that person, an internal note on the task says so. Off by default; tasks already created are not changed. Migration 094 adds `ticket_type_tasks.link_person_assets`.
+- **Check in from the ticket.** Each checked-out device in a ticket's **Assets** card now has a **Check in** button for staff who manage the inventory. It checks the device in, records the ticket number in the device's history, and returns to the ticket.
+
+## 2.228.0 &mdash; 2026-11-12
+
+### Added
+- **Check a host through internal DNS first.** On **Settings → Domains → (domain)**, each row of **Hosts and SSL certificates** has an **Internal DNS** toggle next to **Ignore**. The SSL check normally reads a host's certificate from its public address and only falls back to this server's own DNS when the public address does not answer. For a name that exists both inside and outside the network, the public address can reach the wrong box from inside (often the firewall), so the row showed *Wrong name* or the firewall's certificate. With the toggle on, the host is read through internal DNS first and the public address becomes the fallback. Turning it on or off re-checks that one host straight away; the setting is kept for every later check and expiry alert.
+
+## 2.227.0 &mdash; 2026-11-12
+
+### Added
+- **New ticket from an asset.** An asset's page now has a **New ticket** button. It opens the New Ticket form with a note saying which device the ticket will be linked to, and the location already set to where the device is; the device is linked as soon as the ticket is created, so it appears in the ticket's **Assets** card and on the device's **Tickets** tab.
+- **Scanning an asset label reports a problem with that device.** Anyone who scans an asset label (or opens an asset link) without access to the inventory used to get an access error. They now land on the New Ticket form for that device instead — portal users on the portal form, staff on the staff form — showing only the device's tag and model. Old Snipe-IT labels work the same way. People who can see the inventory still get the asset page. No migration.
+
+## 2.226.2 &mdash; 2026-11-12
+
+### Fixed
+- **Merging tickets keeps their linked assets.** Merging a ticket into another (single or bulk, from the agent or admin ticket list) copied its CCs and tags to the surviving ticket but dropped the devices linked in its **Assets** card. They are now copied as well, the same way closing a ticket as a duplicate already did; the merged ticket keeps its own links, so it still shows on each device's **Tickets** tab. Merges done before this release are not repaired. No migration.
+
+## 2.226.1 &mdash; 2026-11-12
+
+### Fixed
+- **Camera scanning works again on phones.** The inventory **Audit** page and the floor page's QR scanner showed *Camera unavailable: Permission denied* without ever asking for the camera, because a site-wide security header (`Permissions-Policy`) switched the camera off for every page. The header now allows the camera for the helpdesk's own pages only; embedded third-party content still cannot use it, and location and microphone stay off. The browser still asks for permission the first time. No migration.
+
+## 2.226.0 &mdash; 2026-11-12
+
+### Added
+- **Hosts on a domain can be ignored.** Every host in the **Hosts and SSL certificates** table on a domain's page now has an **Ignore** button at the start of its row. An ignored host leaves the table, the SSL verdict counts on the Domains list and every expiry alert (page, dashboard and email), which clears the permanent "broken" verdicts caused by records that point at someone else's servers, such as Microsoft enrolment names and Google verification hosts. Ignored hosts are still checked, and are listed with their last result under a collapsible **Ignored hosts** section beneath the table, each with a **Restore** button. Nothing is ignored by default. Migration 092 adds `domains.ignored_hosts`.
+
+## 2.225.1 &mdash; 2026-11-12
+
+### Fixed
+- **Re-checking a domain with many hosts no longer takes minutes.** With a Cloudflare token a zone can list dozens of hosts, most of which have no web server, and each one was waited on in turn (147 seconds for 42 hosts). Port 443 is now probed on every host at once before any certificate is read, which brought the same check down to about 26 seconds with identical results.
+- **Certificates read through internal DNS are labelled.** When a host's public address does not answer from the helpdesk server, the certificate is read through the server's own DNS, which on a split-horizon network can be a different, internal server. Those rows now carry an *internal view* tag on the domain page, and the alert panel and email digest say *as seen inside the network*. No migration.
+
+## 2.225.0 &mdash; 2026-11-12
+
+### Added
+- **Domains: track the domains you own, their mail setup and their certificates.** A new admin-only page, **Settings → Domains**, lists each root domain with its registrar and registration expiry (looked up through RDAP, then WHOIS), its MX records, an SPF / DKIM / DMARC verdict with the raw records, and the SSL certificate served by the root and by every host listed under it (issuer, expiry, whether it matches the name and is trusted). DNS is asked of a public resolver (default `1.1.1.1`) so results show what the internet sees rather than the internal DNS view. With an optional read-only Cloudflare API token the whole zone is listed and every host and DKIM selector is found automatically; without one, only the root, the hosts you list and the common DKIM selectors are checked.
+- **Expiry alerts for domains and certificates.** Anything expiring inside the alert window (default 30 days, configurable on the page) is flagged on the Domains page and on the admin dashboard. A new daily **Domain Checks** cron job re-checks every domain and emails all administrators one digest of what has newly entered the window, again at 7 days, and once expired. The job is listed under Settings → Cron Jobs with Dry run / Run now and must be added to the crontab to run. Migration 091 adds the `domains` and `domain_alerts_sent` tables.
+
+## 2.224.1 &mdash; 2026-11-12
+
+### Fixed
+- **A status banner's "Posted by" now names whoever last posted it.** The byline showed the banner's original creator next to the last-updated time, so editing or re-posting someone else's old banner credited them with today's post. The banner strip and the Status Banners list now show the last person to edit, clear or re-post it, falling back to the creator. No migration.
+
+## 2.224.0 &mdash; 2026-11-12
+
+### Changed
+- **An internal note can now be marked as the solution.** Internal-note rows in the agent and admin timelines carry the same **Mark as solution** button as public replies, replacing the old *internal — can't be the solution* hint, and the route no longer refuses them. The note stays staff-only: the staff banner is tagged *internal note, not visible to the requester*, and the portal shows no banner, badge or anchor because its timeline never loads internal notes. No migration.
+
+## 2.223.0 &mdash; 2026-11-11
+
+### Added
+- **A little winter fun.** While the brand icon is the snowflake, five quick clicks on it let it snow: flakes fall, the screen frosts over, and you can draw in the frost with a finger or the mouse. **Defrost** at the top of the screen (or Esc) melts it and hands the page back. It's one cosmetic overlay that writes nothing to the database, touches no ticket data, and is suppressed for anyone with `prefers-reduced-motion` set. The Halloween ghost's click handling is now shared with it. Intentional; please don't "fix" it ([templates/partials/navbar.php](templates/partials/navbar.php)).
+
+## 2.222.0 &mdash; 2026-11-11
+
+### Added
+- **Branding themes.** A new **Themes** card on Settings → Branding saves the live colours (the four main colours and the four timeline colours) and the fallback icon under a name, so a seasonal look no longer has to be re-entered by hand. **Apply** beside a saved theme switches the helpdesk to it at once, the theme matching the live colours is marked **Active**, and saving under an existing name replaces it. The logo and app name are not part of a theme. Themes are kept in one `branding_themes` settings row, so there is no migration.
+
+## 2.221.1 &mdash; 2026-11-11
+
+### Changed
+- **The survey block in emails now says what each button does.** Under *Was your issue resolved?* a line explains that the requester can reopen the ticket if it isn't fixed, or rate their experience if it is, and the green button reads **Yes, leave feedback** (was *Yes, it was resolved!*). Applies to the closed/resolved notice that carries the survey and to the standalone survey email.
+
+## 2.221.0 &mdash; 2026-11-11
+
+### Changed
+- **Closing a ticket sends the requester one email instead of two.** When the status that triggers the satisfaction survey also sends a resolved/closed notice, the survey buttons now sit inside that notice and no separate survey email follows. The standalone survey email is still used where no notice goes out (*Send & set status* on the agent ticket page, *Close and request feedback*, the API and Teams bot, or a requester who has switched off closed notices). The combined email uses the *Ticket Resolved* / *Ticket Closed* template wording. Close-menu reasons (duplicate, won't fix, no response…) still send no survey.
+
+### Fixed
+- **Admin *Send & set status* to Closed no longer sends three emails.** The admin ticket page sent the reply, the survey and the closed notice; it now sends the reply and one closed notice carrying the survey.
+
+## 2.220.0 &mdash; 2026-11-11
+
+### Changed
+- **Recalculate All now applies edited SLA policies to existing tickets.** Until now the button on *Settings → SLA Policies* only re-judged each ticket against the deadlines it was given when created, so changing a policy, the business hours or a holiday never reached open tickets — a ticket that breached under the old target stayed breached. It now works every open ticket's deadlines out again from its original SLA start using what is saved now, keeps the time earlier pauses already credited, moves a due date that was following the SLA, and adds an *SLA recalculated from the current policy* note to the timeline. Tickets imported without SLA, tickets that never had an SLA clock and closed tickets are left alone; no notifications are sent and the tickets are not marked as updated. The cron job is unchanged.
+
+## 2.219.0 &mdash; 2026-11-10
+
+### Added
+- **Choose how many assets the Inventory list shows per page.** The list footer now reads *Showing 1–50 of N* with a **per page** picker (10 / 25 / 50 / 100, default 50). Changing it reloads the same filtered, sorted view and remembers your choice, so page links and later visits keep it. Same rule the ticket lists use.
+
+## 2.218.1 &mdash; 2026-11-10
+
+### Changed
+- **A deployed asset no longer also says "Ready to Deploy".** Wherever an asset's status is shown — the Inventory list and asset page, the ticket page's Assets card, a user's Assets block, the global search and ticket typeahead results, the audit-scan table and the CSV export — a *Ready to Deploy* asset that is checked out now shows only **Deployed**. The stored status is unchanged; it reappears as soon as the asset is checked in.
+
+## 2.218.0 &mdash; 2026-11-10
+
+### Added
+- **Check out from the asset form and from the list.** The Add/Edit asset form gains a **Checked out to** picker (nobody / a person / a branch): saving with a person or branch checks the asset out to them (its location follows the target, as the Check out button does), changing it re-checks it out, and choosing *nobody* checks it in to the default location. An asset checked out to another asset is left alone by the form. On the Inventory list every unassigned row shows a small **Check out** button beside *Assigned to* that opens a modal (person or branch, optional note) and returns to the same filtered page. Both reuse the one checkout/check-in path, so history, audit log and the *Deployed* badge behave exactly as before.
+
+## 2.217.0 &mdash; 2026-11-10
+
+### Added
+- **Inventory › Audit mode (physical inventory by scanning).** New **Audit mode** button on the Inventory list (requires *Manage inventory*) opens `/inventory/audit`: pick where you are, optionally type a next-audit date, then scan tag after tag with no taps in between — a text field keeps focus for USB barcode scanners (Enter or Tab submits), and on phones and tablets the rear camera starts automatically and decodes QR codes (jsQR, self-hosted), with a beep and vibration per scan. Each scan stamps the asset's **last audit** and **next audit date** (typed date, else today + the new **Settings › Inventory › Audit interval**, default 12 months; 0 leaves it unchanged), writes an *Audited at …* history row, and adds the asset to a newest-first table (code, tag, name, location, checked-out-to, previous audit). An asset whose recorded location differs from where it was scanned is highlighted **not here** — its location is never changed. Unknown codes show as a red *Not found* row; rescanning the same asset refreshes its row instead of duplicating it; the list survives a page reload on that device.
+- **Old Snipe-IT QR labels keep working.** Scanner input is resolved from a Snipe-IT URL (`…/hardware/{id}` via the imported Snipe-IT id), one of our asset URLs, an exact tag, a bare number zero-padded to the configured tag width (`26` → `00026`), or a serial. `GET /hardware/{id}` now 301-redirects to the matching asset on the app's own host, so pointing `inventory.wpl.ca` at the helpdesk makes every existing label open the right asset.
+- **"Not audited since" filter** on the Inventory list (includes never-audited assets), carried through sorting, paging and the CSV export, which also gains *Last Audit* and *Next Audit* columns.
+
+## 2.216.0 &mdash; 2026-11-10
+
+### Added
+- **"Set due dates" permission.** The Due Date field on the New Ticket form and on the ticket page's Update form now shows only for permission levels holding the new **Tickets › Set due dates** permission (`tickets.set_due_date`); the server ignores a posted due date without it, including the API. Admins always have it. It is granted to no level on upgrade, so grant it from Settings › Users & Access › Permission Levels to the levels that should set due dates. Due dates set by a type's date field (e.g. Start Date) are unaffected.
+
+## 2.215.0 &mdash; 2026-11-04
+
+### Added
+- **"Deployed" option in the Inventory status filter.** Inventory › Filters › Status now ends with a **Deployed** checkbox (with its count) that lists every asset in a deployable status that is checked out to a person, location or other asset — the same rule as the *Deployed* badge on each row. It combines with the real statuses like the other checkboxes, survives sorting, paging and the CSV download, and clears with the rest.
+
+## 2.214.0 &mdash; 2026-11-03
+
+### Added
+- **Manage the inventory (phase 5 of the asset inventory).** Permission levels with *Manage inventory* (admins always) get an **Add asset** button and, on every asset: **Edit** (all identity, purchase and lifecycle fields, optional photo; the tag auto-numbers when left blank; every field change is logged old → new), **Check out** to a person, a location or another asset with an optional note (a person's asset moves to their location), **Check in** (back to the default location), **Delete** (soft — listed under *Show deleted* and restorable) and file upload/removal on the Files tab, all written to the asset's history and the audit log. New **Settings › Inventory** page: asset-tag numbering (prefix, digits, next number) plus catalogs for Models, Categories, Manufacturers, Suppliers and Statuses with add/edit/delete — a record in use cannot be deleted, duplicate names are refused.
+
+## 2.213.0 &mdash; 2026-11-03
+
+### Added
+- **Link assets to tickets (phase 4 of the asset inventory).** The agent and admin ticket pages get an **Assets** card (shared partial, shown to staff who can view the inventory): the assets linked to the ticket with status, assignee, serial and an unlink control; the requester's own checked-out devices as one-click links; and a typeahead over the whole inventory (tag, name, serial, model — the requester's devices sort first). Linking and unlinking write an internal timeline entry on the ticket and a history entry on the asset, so the asset's **Tickets** tab and the ticket's timeline always agree. Endpoints `POST /tickets/{id}/assets` and `POST /tickets/{id}/assets/{assetId}/remove` are CSRF-checked and gated on the viewer's access to that ticket. Closing a ticket as a duplicate copies its linked assets onto the original; merging two users moves checked-out assets, history and link attribution to the kept account.
+
+## 2.212.0 &mdash; 2026-11-03
+
+### Added
+- **Inventory pages (phase 3 of the asset inventory).** New **Inventory** entry on the sidebar for admins and for any permission level granted *View inventory*. `/inventory` lists every asset with tag, name, model + manufacturer, category, serial, status (plus a *Deployed* badge when a deployable asset is checked out), who or where it is assigned to, and location — searchable by tag/name/serial/model, filterable by category, status, location and assignment (including "Snipe-IT assignee with no account"), sortable on every column, paged at 50, with a CSV download of the filtered list and a toggle for soft-deleted assets. `/inventory/{id}` shows the asset with tabs: **Tickets** (every ticket linked to the asset, each one checked against the viewer's ticket access — confidential ones are counted, not shown), **Details** (identity, purchase and lifecycle fields, notes, assets checked out to it), **History** (checkouts, check-ins, audits, uploads, and field changes with old → new values) and **Files** (downloads). Model and asset images are served through `/inventory/...` so they work on the PHP dev server too. The global search gets an **Assets** tab and group for anyone who can view the inventory, and the admin user page shows an **Assets** card listing what is checked out to that person. `/inventory/search` returns JSON for the ticket-side picker (next phase).
+
+## 2.211.0 &mdash; 2026-11-03
+
+### Added
+- **Snipe-IT importer (phase 2 of the asset inventory).** `php scripts/import-snipeit.php --source=<backup folder or zip> --user-domain=example.org [--verify-csv=export.csv] [--alias-location="Snipe name=Local name"] [--alias-user="username=email"] [--apply]` loads a Snipe-IT backup into the inventory: statuses, categories, manufacturers, suppliers, models, every asset (soft-deleted ones keep their `deleted_at`), the whole action log as asset history (checkouts, check-ins, field changes with old/new values, audits, uploads), model images and uploaded asset files. Dry run by default — the dump goes into a staging schema, everything is mapped inside a transaction, a report prints (counts, live assets per location, Snipe users with no helpdesk account) and the transaction rolls back. Snipe users carry no email, so they match as `username@--user-domain`; an asset checked out to someone with no account stays unassigned with the Snipe username in `import_assignee`. A user-assigned asset takes the user's helpdesk location. Locations match by name or alias; soft-deleted Snipe locations are skipped. Asset-tag auto-numbering is set to continue Snipe's sequence. `--verify-csv` checks tag, serial, model, status, deployed flag and assignee of every row in Snipe's own export. Only `db-dumps/*.sql`, model/asset images and asset files are read from the zip — never its `.env`, OAuth keys or password hashes. Safe to re-run; licenses, accessories, consumables and components are reported but not imported.
+
+## 2.210.0 &mdash; 2026-11-03
+
+### Added
+- **Asset inventory — schema and core (phase 1 of the Snipe-IT replacement).** New tables `asset_categories`, `asset_manufacturers`, `asset_suppliers`, `asset_models`, `asset_statuses`, `assets`, `asset_history`, `asset_files` and `ticket_asset_map` (migration 088 + schema.sql). An asset is described by its model (category and manufacturer live there, so furniture is just another model), can be assigned to a user, a location or another asset, keeps a soft-delete timestamp and a `snipeit_id` so the importer can upsert. Default statuses Ready to Deploy / Pending / Broken / Archived are seeded only on an empty table. Asset tags auto-number from the new `asset_tag_prefix` / `asset_tag_zerofill` / `asset_tag_next` settings. New permissions **View inventory** (`assets.view`) and **Manage inventory** (`assets.manage`) under an Inventory category — granted to no role yet, so nothing changes for users until Permission Levels is updated. `src/Assets.php` holds tag numbering, the history log, and the ticket ⇄ asset link/unlink that writes an internal timeline row on the ticket and a history row on the asset. No pages yet — those are the next phases.
+
+## 2.209.0 &mdash; 2026-10-28
+
+### Added
+- **Halloween easter egg: Pac-Man in the top bar.** While the navbar icon is the Font Awesome ghost (`fa-solid fa-ghost`), clicking the ghost five times in quick succession sends Pac-Man in from the left to chase it across the bar. At the middle the ghost turns red and chases Pac-Man back off the left edge, then settles into its usual spot and fades back to its normal colour. The real icon is only hidden while the animation runs and both sprites float above the bar, so the bar and its words don't move or change. Clicks on the ghost now wait half a second for another click before going to the home page; the app name beside it still goes there straight away. Skipped when the browser asks for reduced motion. Change the icon back after Halloween and the egg goes with it.
+
+## 2.208.0 &mdash; 2026-10-27
+
+### Changed
+- **Type, location and priority are required on the staff New Ticket form.** Both **Admin → Tickets → New Ticket** and the agent version now need all three before the ticket can be saved, and the server rejects a submission without them. Before, a ticket left as *Unclassified* went to the default group (Information Technology), so every IT member got its new-ticket email even when it belonged to another team. Location and priority now always show on this form, even for types whose form layout hides them (*Collections/Discover Job Requests*, *Deputy Tickets*, *Customer Experience*), so a staff-picked priority is no longer swapped for the default. The portal form is unchanged.
+
+## 2.207.0 &mdash; 2026-10-26
+
+### Added
+- **Overview by Group scheduled report.** A new **Overview by Group** report type on **Admin → Settings → Scheduled Reports**. The email has the same overview totals as before (total, open, resolved, SLA breached), plus a **By Group** table with the same four counts for each group, busiest first. Tickets with no group are listed as *No Group*. To switch an existing Overview email over, edit the schedule and change its Report Type.
+
+### Fixed
+- **SLA Violations schedules saved as Overview.** *SLA Violations* was in the Report Type picker, but the save handler did not accept it and quietly stored *Overview* instead. It now saves and sends as SLA Violations.
+
+## 2.206.1 &mdash; 2026-10-26
+
+### Fixed
+- **Report ticket links 403'd for non-admin staff.** The SLA Violations, SLA Compliance and Unresolved Tickets reports linked every ticket to the admin ticket view, which only full-admin roles may open. Any agent whose role has *reports.view* could open the report but got "permission denied" on the ticket. Links now go to the admin view for admins and the agent view for everyone else (new `staffTicketUrl()` helper).
+
+## 2.206.0 &mdash; 2026-10-26
+
+### Added
+- **Microsoft Teams helpdesk bot.** Staff can add the helpdesk to any Teams chat or channel and talk to it: **new Printer jammed | details** opens a ticket, **my tickets** lists their open ones, **status 123** shows a ticket card with the latest reply, **comment 123 …** adds a reply, **close 123 [note]**, **reopen 123** and (for agents) **resolve 123** change status. Cards carry *Send reply*, *Close* / *Reopen* and *Open in helpdesk* buttons. People are matched by the same Entra object id SSO stores, so there is no extra sign-up; ticket access follows the same rules as the REST API, and confidential tickets are never shown in Teams. Set up on **Admin → Settings → Microsoft Teams → Helpdesk bot**: enter the Azure Bot's App ID, tenant and secret (or leave them blank to reuse the SSO app), copy the messaging endpoint into Azure, check the credentials, and download the ready-made Teams app package to upload into Teams. Every request is verified against Microsoft's Bot Framework signing keys (issuer, audience, expiry, reply address) before anything is read. Docs on **Admin → Docs → Microsoft Teams**.
+
+### Changed
+- The REST API's per-ticket access rule now lives in a shared `userCanAccessTicket()` helper, used by both the API and the bot so the two cannot drift apart.
+
+## 2.205.0 &mdash; 2026-10-26
+
+### Added
+- **A ticket type's due date can come from one of its date fields.** On **Admin → Ticket Types → Edit** there is a new **Due date comes from** picker listing the date fields on that type's form. Pick one, e.g. *Start Date* on *New Staff Member*, and the ticket's due date is set from it. The New Ticket form then hides its own Due Date box for that type, so agents no longer see two dates, and task tickets get the same due date. Changing the date in the Custom Fields panel later moves the due date on the ticket and its task tickets too. The Form Builder shows the Due Date box as a locked system row with "Hidden · from Start Date" (or "Optional") and a link to the setting, so it is clear where the field went.
+
+## 2.204.0 &mdash; 2026-10-26
+
+### Changed
+- **Task tickets list the handed-over details in the description.** Each task ticket's description now starts with a compact two-column table of the location and every field copied to that team, in form order, e.g. Start Date, Job Title, Direct Supervisor. The new-ticket and assignment emails carry the description, so each team sees the details in the email instead of only in the ticket's Custom Fields panel. Fields the team was not given are still left out.
+
+## 2.203.0 &mdash; 2026-10-21
+
+### Added
+- **Phone-number format for text fields.** In the form builder, a text field can now be set to **Format: Phone number**. As the number is typed it is formatted as (###) ###-####, and a leading country code 1 is dropped. The ticket can't be submitted until the number is complete.
+- **Lowest allowed value for number fields.** Number and decimal fields can now have a minimum. Set it to 1 to accept positive numbers only, for example an Employee ID.
+
+### Changed
+- **Task tickets show the location in the description.** The description of each task ticket now names the location, e.g. "Location: Main Library". It used to appear only in the Details panel, so it was easy to miss, and it now reaches the new-ticket emails too.
+- **No hint under person-picker fields.** Fields such as Direct Supervisor no longer show the line "Pick a name from the list so the ticket is linked to the right person."
+
+## 2.202.0 &mdash; 2026-10-21
+
+### Added
+- **Task tickets: one ticket can now create tickets for other teams.** Built for new-employee onboarding. HR files one **New Employee** ticket, and the helpdesk creates a separate ticket for IT, for Facilities and for Payroll, each in that team's own queue. Set this up under **Admin → Ticket Types → Edit → Task tickets**:
+  - Pick the ticket type each task ticket is created as. The task ticket goes to that type's Default Group.
+  - Tick the custom fields each task ticket carries. A team only sees the fields picked for it, so IT never sees the starting wage.
+  - The HR ticket lists every task ticket with its team, assignee and status ("2 of 3 done").
+  - Each task ticket links back to the HR ticket. Replies on a task ticket go to whoever filed the HR ticket.
+  - When every task ticket is closed, the HR ticket is resolved automatically and its requester is emailed. If someone reopens it, it stays open.
+- **A ticket type can be limited to its own group.** The new option *Only members of the Default Group can create these tickets* hides the type from everyone else. This covers the agent and admin New Ticket forms, the portal, floor quick-create and the API. Admins are included: an admin who needs to file one must join the group.
+
+## 2.201.2 &mdash; 2026-10-20
+
+### Fixed
+- **Floor views now show replies and descriptions with their formatting.** The simplified floor ticket pages (requester and agent) stripped the formatting from agent replies and ticket descriptions. Paragraphs ran together and HTML codes such as `&nbsp;` showed up in the text, so a reply ended with "Matthew&nbsp;". Formatted replies now keep their paragraphs, line breaks and links, the same as on the full ticket page, and pass through the same filter that removes unsafe markup. Plain-text replies keep their line breaks, and their web links can now be clicked.
+
+## 2.201.1 &mdash; 2026-10-20
+
+### Fixed
+- **Agent replies on the requester's ticket page no longer show raw HTML.** Opening a ticket from the **View Ticket** button in a notification email showed agent comments as code (`<p>Thanks…</p><p>Matthew&nbsp;</p>`) instead of formatted text. The requester's ticket page now formats these replies the same way the agent and admin pages do, with the same filter that removes unsafe markup.
+
+## 2.201.0 &mdash; 2026-10-19
+
+### Added
+- **Clearing or sending the Email Queue is now in the audit log.** **Flush queue** records who deleted the held emails, how many there were, and the dates they were queued. **Send all now** records who sent the backlog and how many emails went out or failed. Before, both actions left no trace, so a cleared queue couldn't be traced back to anyone.
+
+## 2.200.0 &mdash; 2026-10-19
+
+### Added
+- **Creating a backup now shows a progress bar.** After you click **Create Backup Now**, the page shows how far along the backup is and what it's doing: dumping each database table, collecting files, then compressing them. Before, the browser tab just spun until the backup finished. The success or error message appears when it's done, as before.
+- **Backups can leave out ticket attachments.** Tick **Leave out ticket attachments** on **Settings → Backup** for a smaller, faster backup. The database and everything else are still included, and the empty `storage/attachments/` folder is kept so uploads work after a restore. These backups are named `…_no-attachments.zip` and tagged **No attachments** in the list.
+
+## 2.199.0 &mdash; 2026-10-19
+
+### Added
+- **Outgoing email can go through Microsoft Graph instead of SMTP.** A new **Send Mail Via** choice under **Settings → Email** sends as the **From Address** mailbox, with the same app registration that Inbound Mail already uses. With it, one Microsoft 365 mailbox can both send and receive helpdesk mail, and no separate SMTP account or password is needed. SMTP is still the default, so nothing changes until an admin switches it.
+- The app registration needs `Mail.Send` and `Mail.ReadWrite` on that mailbox. The **Setup Guide** now explains how to limit both permissions to the helpdesk mailbox with Exchange RBAC for Applications, rather than granting them for every mailbox in the tenant.
+- Attachments of any size are sent, including big forwarded tickets. Failures still wait in the **Email Queue**, and the error says which step failed: creating the draft, attaching a file, or sending.
+
+### Changed
+- When mail is sent through Graph, the app-secret expiry warning now says that all helpdesk email will stop, not only reply-by-email.
+
+## 2.198.0 &mdash; 2026-10-19
+
+### Changed
+- **The ticket page now keeps its details up to date.** When someone else changes the status, priority, assignee, group, type or due date, the header badges, the **Details** card and the **Update Ticket** panel all update within about 8 seconds, without pressing F5. Before, only the timeline updated, and the rest of the page kept showing the old values.
+- **Your own unsaved changes are kept.** If you've already changed a field in **Update Ticket**, it stays as you set it, and only the fields you haven't touched update.
+
+### Fixed
+- **Saving the ticket no longer undoes other people's changes.** Before, the **Update Ticket** panel kept the values from when you opened the ticket. If someone else changed the priority, assignee, group, type or due date in the meantime, and you then saved a change to a different field, their change was quietly reverted. The panel now picks up their changes within about 8 seconds, so this only happens if you save within those few seconds.
+- Changes made by automations, which add nothing to the timeline, now update the page too. Before, they only showed a "This ticket was updated" banner asking you to refresh.
+
+## 2.197.0 &mdash; 2026-10-19
+
+### Changed
+- **The ticket list now updates itself.** On **All Tickets** (admin and agent), new tickets and changes made by other staff (status, priority, assignee, and so on) appear within 30 seconds, without pressing F5. The list also updates as soon as you switch back to its tab or use Back to return to it. Your filters, sort and page stay as they are. To avoid disrupting your work, the update waits while you have tickets selected, a quick-edit menu or the filter panel open, or a ticket preview card showing.
+
+## 2.196.0 &mdash; 2026-10-19
+
+### Changed
+- **Choose 10, 15, 20 or 50 tickets per page.** On **All Tickets** (admin and agent), use the selector next to "Showing 1–15 of N" at the bottom of the list. The admin list now has this selector too. The default is 15, which fits on a 1080p screen with the page links still visible, so you no longer have to scroll to reach the bottom of the list. Your choice is remembered for your account and applies to both lists until you change it. The old 25, 100 and 200 sizes are gone.
+
+## 2.195.2 &mdash; 2026-10-19
+
+### Fixed
+- **Ticket-list columns no longer paint over each other.** On **All Tickets** (admin and agent) and the agent dashboard, a long **Assigned To** name ran into the **Group** column. It now ends in "…" in front of its dropdown arrow, and you can hover to see the full name. Every other cell in these tables also stays inside its own column now. That matters when a column ends up narrower than its contents, for example after you drag a column to resize it.
+- **Names that fit no longer get a stray "…".** Columns were sized a fraction of a pixel too narrow, and before the icon font had loaded, so the widest name in a column (for example "TestAdmin User" or "East Branch") could be cut off by one letter. Columns are now sized after fonts load and rounded up to the next whole pixel. This also applies to every other resizable table on the site.
+
+## 2.195.1 &mdash; 2026-10-19
+
+### Fixed
+- **Long requester names no longer spill into the Location column.** On **All Tickets** (admin and agent) and the agent dashboard, a **Created By** name that is wider than its column now ends in "…" instead of running over the **Location** column. Hover the cell to see the full name. Shortened **Location** names show their full name on hover too.
+
+### Changed
+- **The ticket-list "Created" column is now called "Opened".** It is the date the ticket was submitted. It sits next to **Due** in the **Columns** picker, and it is easier to tell apart from **Created By**.
+
+## 2.195.0 &mdash; 2026-10-16
+
+### Added
+- **See and change a user's email notifications from their edit page.** **Admin → Users → Edit** now has an **Email Notifications** section with the same switches the person sees under **My Profile → Email Notifications**: agent, other and submitted-ticket emails for staff, and the requester emails for end users. Change any switch and click **Update User** to save it. Each change is written to the audit log as `user.notify_prefs_updated` with the old and new value. An email still only goes out when its site-wide switch under **Settings → Email Notifications** is on. The switches shown follow the user's saved permission level, so if you change the level, save first and then set the switches.
+
+## 2.194.0 &mdash; 2026-10-16
+
+### Added
+- **Minimum match for similar past tickets.** **Settings → Automation → AI Classification** has a new **Minimum match to show** field under the similar past tickets switch. Past tickets the AI scores below it are hidden from the panel. For example, set it to 80 to list only tickets rated 80% or higher. The default is 0, so the panel looks the same until you change it. A new value also applies to results the panel has already cached, with no new AI call.
+
+## 2.193.2 &mdash; 2026-10-16
+
+### Fixed
+- **Logging time from the close reminder now finishes the close.** When you close a time-tracked ticket with no time logged and choose **Log time** in the reminder, the card's button now reads **Save &amp; close ticket**. Saving your time completes the close you started, and sends your reply first if you used **Send &amp; change status**. Before this, the time saved but the ticket stayed open. The close only continues if you came from the reminder. Using **Log time** on its own, or folding the form away, just saves the time.
+
+## 2.193.1 &mdash; 2026-10-16
+
+### Fixed
+- **Tickets showed "updated" at odd hours, like 3:40 AM, when nobody was working.** When an SLA moved to **warning** or **breached**, the background SLA check also set the ticket's last-updated time, so dashboards and **Recent tickets** showed the time of that check as if someone had worked on the ticket. A change in SLA state no longer counts as activity. This also stops the "this ticket has changed, refresh" banner from appearing on an open ticket when its SLA state changes. Creation times and clocks were always correct (server, database and PHP are all on America/Toronto). Tickets already affected will show the right time again after their next real update.
+
+## 2.193.0 &mdash; 2026-10-15
+
+### Added
+- **SVG logos.** **Admin → Settings → Branding → Upload New Logo** now accepts SVG files. Each SVG is cleaned when it is uploaded: scripts, event handlers, links, embedded content and animations are removed, and only the drawing is kept. Single-colour icons, such as the SVGs you download from Font Awesome or Bootstrap Icons, are made white so they show up on the navbar. As a second safeguard, the server tells browsers not to run anything in an SVG that is opened directly.
+- **The logo shows on the sign-in pages.** An uploaded logo now replaces the icon on the sign-in, forgot-password, reset-password, two-factor and location-picker pages, not just in the navbar.
+
+### Fixed
+- **Logo uploads on a fresh install.** The `public/uploads/branding` folder is not part of the code, so on a new server (including ours) uploading a logo failed without any message. The folder is now created on the first upload, and you see an error if the file can't be saved.
+
+## 2.192.0 &mdash; 2026-10-15
+
+### Added
+- **Font Awesome icons for the branding icon.** **Admin → Settings → Branding → Fallback Icon** now takes a free Font Awesome icon such as `fa-solid fa-house`, as well as a Bootstrap Icon such as `bi-building`. You can paste the `<i class="…">` snippet that fontawesome.com or icons.getbootstrap.com copies, and the live preview updates as you type. The icon shows in the top-left of the navbar when no logo is uploaded, and on the sign-in, forgot-password, reset-password, two-factor and location-picker pages. Font Awesome Free 7.3.1 is bundled with the app, and its stylesheet only loads when a Font Awesome icon is chosen.
+
+### Changed
+- When the Fallback Icon is left blank it now saves as `bi-headset`, the icon the navbar already showed by default. Before, the Branding page suggested a different icon from the one actually shown.
+
+## 2.191.0 &mdash; 2026-10-15
+
+### Added
+- **Satisfaction by group.** **Reports → Satisfaction** has a new **By Group** table. For each group it shows surveys sent, responses, response rate and average rating for the selected dates. Use its **Export CSV** button to download it. A ticket's survey counts toward the group the ticket is in now, so a ticket moved to another group before it was resolved counts for the new group.
+
+## 2.190.1 &mdash; 2026-10-15
+
+### Fixed
+- **Saving a ticket no longer unassigns it.** The ticket page's **Assigned To** box only lists staff in the ticket's group. If a ticket was assigned to someone outside that list, the box showed "Unassigned", and saving any other field (due date, status, priority) quietly unassigned the ticket. This happened on tickets the Freshdesk import gave to a duplicate portal account, and on tickets owned by staff who aren't in the ticket's group. The current assignee now always shows in the box, marked **(not in group)** when that applies, so they stay assigned unless you pick someone else. Fixed on both the agent and admin ticket pages.
+
+## 2.190.0 &mdash; 2026-10-15
+
+### Added
+- **@Mentioned staff can open the ticket.** Before, if you @mentioned a colleague on a ticket outside their groups, they got the alert (and from 2.189.0 the email) but saw "You do not have access to this ticket" when they clicked it. Being mentioned now lets them open it, the same way being a watcher or CC does. A mention never opens a confidential ticket.
+- **Mentioned tickets show on the agent Tickets list.** A ticket outside your groups that someone @mentioned you on now appears on your Tickets list with an **@Mentioned** badge, so you know it isn't one of yours. This works in the table, inbox and card views. Tick **Filters → Mentions → Hide @Mentioned Tickets** to leave them out. Saved filters remember that choice, and Export CSV follows it. These tickets do not show on dashboards, Kanban, the wallboard or the floor view.
+
+## 2.189.0 &mdash; 2026-10-15
+
+### Added
+- **Email when someone @mentions you.** Staff already got a bell alert when a colleague @mentioned them in a reply or note. They now get an email too, with the message and a link to the ticket. Each person can turn it off under **My Profile → Email Notifications → @Mentions**. It is on by default for everyone. On a confidential ticket the person can't open, the email leaves out the subject and the message, the same way the bell alert does.
+
+## 2.188.2 &mdash; 2026-10-15
+
+### Fixed
+- **Inbound email stopped crash-looping for good.** After 2.188.1 the same job got one step further and crashed again, this time on `Class "Teams" not found` while sending the ticket-created notice. It was still making one "Spam Quarantine Report" ticket a minute. The helpers now also load the Teams and Auth classes, which the notify and assign steps use, so the background email job has every class those helpers touch. `Auth::id()` just returns nothing outside a signed-in web session.
+
+### Changed
+- **SpamTitan quarantine reports are dropped, like out-of-office replies.** An email whose body starts with "This is your Spam Quarantine Report" no longer opens a ticket or gets added to one. It is marked read and skipped. A person who forwards one to ask for a message to be released still gets a ticket, because their own text comes first.
+
+## 2.188.1 &mdash; 2026-10-15
+
+### Fixed
+- **Inbound email no longer turns one message into a new ticket every minute.** The email job crashed right after creating a ticket, before it marked the message as read (`Class "AIClassifierFactory" not found`). The AI routing helpers need a class that only the web app loaded, and the email job doesn't use the web app's startup code. So the next run read the same unread message again and made another ticket. On helpdesk.wpl.ca one "Spam Quarantine Report" became over 600 Information Technology tickets this way. The helpers now load that class themselves, so every background job has it. Inbound tickets also now get their SLA dates (2.187.1), since that step came after the crash.
+
+## 2.188.0 &mdash; 2026-10-15
+
+### Added
+- **Settings → Ticket Reminders replaces Stale Tickets.** It's built around one rule: don't send customers automated "we haven't forgotten you" filler. Instead, nudge the person who owns the ticket to send a real update. Nothing on the page emails the customer by itself.
+  - **The due date follows the SLA.** A ticket's due date is set to its SLA resolution date and moves with it when the SLA moves (a pause ends, a reopen, a priority or type change). A due date someone set by hand is never overwritten. Open tickets that had an SLA but no due date were given one.
+  - **Due Date is editable on the ticket page.** It's a new field in the Update Ticket panel on both the agent and admin views, with the SLA target shown underneath. Saving a date later than the SLA target opens a box with a ready-to-edit reply telling the customer why it's taking longer and when to expect it. **Send reply & save** sends it as a normal public reply; **Save without replying** is still allowed. The SLA itself doesn't move, so SLA reports stay honest.
+  - **Overdue reminder:** emails the owner once, the day after the due date, if the ticket is still open. Moving the due date later sets up a new reminder for the new date.
+  - **Update-due reminder:** emails the owner when the customer hasn't had a public reply from staff in 15 days (adjustable from 1 to 365). Any public reply resets the count, and it repeats while the silence lasts.
+  - Optionally, unassigned tickets go to the group's managers instead; otherwise they get no reminder. Waiting on Customer tickets are skipped. **Coverage** defaults to *new tickets only*, so turning reminders on never emails about the backlog. Both reminder emails are off until you turn them on, and their wording is editable under Email Templates.
+- Reminders run inside the 5-minute **SLA Recalculation** job, so there's no cron line to add. A dry run of that job on Cron Jobs previews what would be sent.
+
+### Removed
+- **Stale Tickets.** That covers the settings page, its hourly cron job (`scripts/process-stale-tickets.php`, so remove it from your crontab if you scheduled it), the per-type Stale Threshold, the three Stale email templates and their toggles, the requester "we haven't forgotten you" email, and the Run Now button. The no-group sweep that rode the stale job now rides the SLA job.
+
+## 2.187.1 &mdash; 2026-10-15
+
+### Fixed
+- **Emailed tickets now get SLA due dates.** Tickets opened from an inbound email, and tickets created by splitting another ticket, never started their SLA clock, so they had no first-response or resolution due date and never showed a warning or breach. Every other way of creating a ticket already did this. On helpdesk.wpl.ca this was most new tickets (only 17 of 644 opened since go-live had an SLA). New tickets from both paths now get their SLA dates as soon as they're created. Tickets that already exist are unchanged.
+
+## 2.187.0 &mdash; 2026-10-14
+
+### Changed
+- **A deactivated Resolved status is now hidden everywhere.** Turning Resolved off under Settings → Ticket Statuses already removed it from the status dropdowns. It now also disappears from the places that listed it by hand: the **Send & change status** menu on the agent and admin ticket pages, the escalation-rule status picker, and the API's status list (which now returns your configured statuses and labels). On the floor view the **Resolve** button becomes **Close**. An emailed `#resolve` command is ignored while Resolved is inactive, the same rule every other status change already followed.
+- **"Resolved Today" counts Closed tickets too.** The agent dashboard card, the *Resolved Today* ticket-list filter, the wallboard drill-down and the API dashboard count only counted tickets in Resolved, so they showed 0 for teams that close tickets. They now count every ticket that moved to Resolved or Closed today. Duplicate, won't-fix and no-response closes are left out, matching the dashboard widget of the same name, which now shares the same query.
+- Help pages and `DOCS.md` updated for both changes and for 2.186.0's email-reply handling.
+
+## 2.186.0 &mdash; 2026-10-14
+
+### Changed
+- **Emailed replies are never dropped any more — only out-of-office, vacation and bounce mail is.** A reply that can't be added to its ticket now opens a new ticket with the person's message instead of being silently discarded: a requester replying to a **Closed** ticket, a reply from an address with no account, or a reply to a ticket that no longer exists. The new ticket keeps the original's type and group (so a confidential thread stays confidential), gets a clean subject, and both tickets carry an internal note linking them. A reply to a merged-away ticket goes on the ticket it was merged into. Staff replies still land on the ticket even when it's closed, so `#open` and the other commands keep working. A reply with nothing left after quote-stripping (typed below the quote, or attachments only) is kept whole instead of dropped.
+- **Out-of-office detection is stricter about what it drops.** Subject keywords now only count at the start of the subject, so a real reply such as "RE: [Ticket #12] Out of office not working" is no longer mistaken for an auto-reply. Exchange bounces, delivery reports and mailer-daemon mail are now recognised too, so they can't open tickets.
+
+### Fixed
+- **The assigned agent is now told when the requester replies by email**, the same in-app and email alert a portal comment already sent. Emailed replies used to land on the ticket without telling anyone.
+
+## 2.185.0 &mdash; 2026-10-14
+
+### Added
+- **"Requested by Me" ticket filter.** Staff who open tickets for themselves (say, a Marketing staff member asking IT about their own computer) can now find them from the ticket list: **Filters → Requester → Requested by Me**. Available on both the agent and admin ticket lists, works with saved filters, and applies to CSV export.
+
+## 2.184.1 &mdash; 2026-10-14
+
+### Changed
+- **Help documentation brought up to date with every release so far.** Every in-app help page (Admin Docs, Agent Help and Portal Help) and `DOCS.md` was checked against the current code and rewritten where it had fallen behind. Menu paths now follow the Settings left nav, features that never existed or were removed are gone, and features that were never documented are now covered: the Close split-button and its options, merge moving the conversation, split, drafts and undo send, time tracking, the full permission-level catalogue, the Email Queue, email-to-ticket, the Cron Jobs page, recurring tickets, scheduled reports, Import Users, Labels and more.
+- **New help pages.** Admin Docs gains *Reports* and *System &amp; Maintenance* (status banners, server time, backup, Danger Zone, REST API). Agent Help gains *Creating Tickets*, *Knowledge Base*, *Profile &amp; Notifications*, *Status Banners* and *Manager Tools*. *Importing Tickets* is now *Importing Data* (tickets and users), and *Branding* is now *Branding &amp; Labels*.
+- **Corrections to wrong claims.** Removed: self-registration, the welcome email, IMAP inbound mail, the KB revision Restore button, the Publish All button, named SLA policies, the Reply Added and Status Changed automation triggers, and the Set location and internal-note automation actions. Also corrected: groupless staff see almost no tickets rather than all of them, editing KB articles needs the *Create &amp; delete KB articles* permission, and the portal's My Requests list opens on Submitted requests only.
+
+### Fixed
+- **Admin Docs → Single Sign-On was blank.** The page was an empty stub that showed only the docs nav. It now covers account matching, the location prompt, every setting and the login error messages.
+
+## 2.184.0 &mdash; 2026-10-14
+
+### Added
+- **Reply, Forward and Add Note buttons under the timeline too** (agent and admin ticket pages). The top set under the description stays. A second set now sits below the last timeline entry, so with oldest-first sorting you can answer from beside the newest reply without scrolling back up. The composer opens under whichever set you click, and moving it keeps your unsent text.
+
+## 2.183.0 &mdash; 2026-10-14
+
+### Added
+- **Close split-button on the ticket page** (agent and admin), beside Back. The green **Close** closes the ticket and emails the requester the standard "ticket closed" notice, exactly like closing from the Update Ticket panel. The arrow offers: *Close without notifying*, *Close and notify*, *Close and request feedback* (satisfaction survey, greyed out when surveys are off), *Close as duplicate* (pick the original), *Close as won't fix* (reason required), *Close as no response*, *Close and merge*, *Close and create KB article* (opens a draft prefilled with the problem and the resolution), *Close and reopen on reply* (N days), and *Close and schedule follow-up* (a notification on the ticket at the time you pick). The options that ask for input have a message box: ticked *Email the requester* sends it as a reply, blank sends the standard closed email, unticked saves it as an internal note. The resolution-note prompt and the "someone else changed the status" guard still apply. Closed tickets show a *Duplicate of #…*, *Won't fix* or *No response* badge, or *Reopens on reply until …*.
+- **Reopen on reply** works from portal replies, emailed replies and the API. Email replies to a ticket in its window are no longer dropped as "closed".
+- **Follow-up reminders** go out from the SLA cron job (every 5 minutes, already required), so no new cron line is needed.
+
+### Changed
+- **Merge now moves the conversation.** The merged ticket's replies, internal notes, forwards and attachments move into the primary ticket in date order, along with its original request. Before, they stayed behind on the closed ticket. This applies to the Merge button, *Close and merge*, and bulk merge (agent and admin).
+- **Resolved counts leave out tickets closed as duplicate, won't fix or no response**: the Reports overview "Tickets resolved" figure, the dashboard "Resolved today" tile and the "Created vs resolved" chart.
+
+## 2.182.2 &mdash; 2026-10-14
+
+### Fixed
+- **Ticket action buttons (Watch, Escalate, Split, Merge, Back) no longer jump around** on the agent and admin ticket pages. A long subject used to push them onto their own line above the Description; a short one left them top-right above CC. On desktop they now always sit top-right and a long subject wraps beside them. Phones are unchanged: the buttons still drop below the title.
+
+## 2.182.1 &mdash; 2026-10-14
+
+### Changed
+- **Reply, Forward and Add Note now sit directly under the ticket description** (agent and admin ticket pages) instead of below the whole timeline, so staff no longer scroll past every reply and note to answer a ticket. The reply box opens in the same spot, right above the newest timeline entry. The agent tour and the Working Tickets help page now describe the new spot.
+
+## 2.182.0 &mdash; 2026-10-14
+
+### Added
+- **Time Spent report** (Reports → Time Spent): total time logged, tickets worked, average per ticket and agents logging for the period; hours per day (or per month for windows over ~3 months); time by ticket type and by group with the average per ticket; and the 25 tickets that took the most time, with who worked them. Export CSV lists every ticket.
+- **Agent Time report** (Reports → Agent Time): hours per agent (chart and table with share of total, tickets, entries, average per ticket, days logged, average per day), an agent × ticket type grid, and a per-agent timesheet (pick an agent or click a name). Export CSV gives every time entry in the period, for one agent or everyone.
+- Both reports count time on the date the work was done, leave out timers still running, and hide the subject and note of confidential tickets. Documented under Admin Docs → Tickets → Time Tracking.
+
+## 2.181.0 &mdash; 2026-10-14
+
+### Added
+- **Time tracking on tickets.** A new **Time Tracking** card on the ticket page (agent and admin views, under Update Ticket) lets agents start/stop a live timer or log time by hand (hours, minutes, date worked, optional note). The card shows the ticket's total and every entry with who logged it; agents can edit or delete their own entries, admins anyone's. The timer is kept on the server, so it survives a page reload, and starting a timer on another ticket stops the one already running (one live timer per agent). Changes save in place without reloading the page, so a half-written reply is never lost.
+- **Choose which ticket types track time.** Admin → Ticket Types → edit a type → "Track time spent on these tickets" (off by default, so nothing changes until a type is opted in). The Settings Matrix gains a Time tracking column. Turning it off later keeps time already logged visible on the ticket.
+- **Reminder when closing without time.** Closing a time-tracked ticket from the ticket page (the Update form or the reply box's "Send & change status") with nothing logged asks first: log time now, or close without logging.
+
+### Fixed
+- Removing the confidential flag from a ticket type (the password re-check step) no longer silently switches off its "Prompt for a resolution note before the owner closes" setting.
+
+## 2.180.3 &mdash; 2026-10-14
+
+### Fixed
+- **Phones: pages fit the screen.** 62 of 127 pages were wider than a phone (Galaxy S Ultra, 384px), so the browser zoomed the whole page out: content slid left and right, and a large grey band showed under the page. Causes: the `min-w-0` class used by the settings layout and admin dashboard was never defined (Bootstrap 5 has no such utility), the settings menu sat in a fixed 190px column beside the content instead of stacking, page-header toolbars and the report date pickers never wrapped, and the form builder grid could not shrink. All 127 pages now fit at 384px. Wide tables scroll inside their own box instead of dragging the page, and on phones the long settings menu folds behind an "All settings" button.
+- **Phones: the hamburger menu works.** The navbar had a fixed 56px height, so the opened menu spilled below it as white text on the light page background, behind the page content, which looked like nothing happened. The bar now grows to hold the menu (and scrolls if it is taller than the screen), and the menu includes the Dashboard / Tickets / Knowledge Base / Settings links, which on phones were missing because the icon rail is hidden there. Desktop navbar height is unchanged.
+
+## 2.180.2 &mdash; 2026-10-13
+
+### Fixed
+- **No more duplicate emails when a ticket is opened.** A CC automation that matched the requester's own ticket (e.g. a branch supervisor CC'd on every ticket from their branch, opening one themselves) sent them a "You were added as a CC" email on top of their "ticket received" confirmation; it now skips the requester. The "New ticket" group alert also skips the requester, the assignee, and anyone already emailed about the ticket in the same request (such as a CC rule), so a person who is both CC'd and in the notified group gets one email instead of two.
+
+## 2.180.1 &mdash; 2026-10-13
+
+### Fixed
+- **"New ticket" group emails go to the ticket's own group.** The alert picked its audience from the ticket type's group, and shared types with no group (Collections/Discover Job Requests, Customer Experience/Circulation, Deputy Tickets) fell back to emailing every group with "notify on new ticket" on, so Finance and IT were alerted about Collections tickets. The ticket's group now wins, then the type's group; only a ticket with neither still notifies every opted-in group.
+
+## 2.180.0 &mdash; 2026-10-13
+
+### Added
+- **AI Token Usage report shows estimated cost in CAD.** Each model's tokens are priced at Anthropic's published USD list rate for that model, then converted at the Bank of Canada's daily USD/CAD rate (fetched automatically, cached, re-checked twice a day). New "Est. cost (CAD)" card with period-over-period change, a cost column on the by-feature and by-model tables (the model table also shows the USD rate used), and per-bucket cost in the chart tooltip. Models with no price on file (e.g. OpenAI) show "No price on file" and are listed under the table instead of being guessed at.
+
+## 2.179.1 &mdash; 2026-10-13
+
+### Fixed
+- **AI Token Usage report now counts similar-ticket matching.** The report summed skill classification, group routing and duplicate detection but left out the similar-tickets AI calls, so totals were understated. They now appear as a "Similar tickets" source.
+
+## 2.179.0 &mdash; 2026-10-13
+
+### Added
+- **Freshdesk importer: `--newest-first` and `--to`.** A full import takes hours at Freshdesk's rate limit; `--newest-first` works from the most recent ticket backwards so current work lands first, and `--to` caps the range so an interrupted newest-first run resumes where it stopped (the progress log prints the exact flags).
+
+## 2.178.1 &mdash; 2026-10-13
+
+### Fixed
+- **Freshdesk importer no longer skips tickets raised by a deleted Freshdesk user.** Freshdesk strips a deleted agent or contact to "Deleted Agent" with no email, which left those tickets (and their replies and attachments) un-importable. They are now created under one shared placeholder requester, "Deleted Freshdesk user" (`deleted-user@import.invalid`, a domain that can never receive mail).
+
+## 2.178.0 &mdash; 2026-10-13
+
+### Added
+- **Freshdesk importer: `scripts/import-freshdesk-conversations.php`.** Freshdesk's CSV export leaves out archived tickets and carries no replies, notes or attachments. This CLI walks every Freshdesk ticket id over the v2 API: tickets not yet imported are created (mapped like the CSV importer, SLA-exempt with no clock started), every reply and note is added to the timeline with its original author and time (private notes stay internal), and every attachment — the ticket's own and each reply's — is downloaded into attachment storage, along with Freshdesk-hosted inline images. An archived Freshdesk ticket is never left open: new ones are created closed, existing ones still showing open are closed with a timeline note. Dry run by default (`--apply` to write), honours Freshdesk's rate limit, resumable with `--from`, and safe to re-run — it only fills gaps. Inserts directly, so no emails, Teams messages or notifications are sent.
+
+## 2.177.1 &mdash; 2026-10-13
+
+### Fixed
+- **Staff CC'd on a ticket can now open it.** A CC automation (e.g. "Eastside Tickets CC") could add an agent from another group; the CC email linked to the agent ticket view, which said "You do not have access to this ticket" because only the assignee and watchers were exempt from the group check. Being CC'd now grants the same access as watching: the ticket opens from the email and appears in the agent's ticket list. Confidential tickets are unchanged (CC still grants nothing there).
+
+## 2.177.0 &mdash; 2026-10-09
+
+### Added
+- **Portal: confirm before commenting on a location-visible ticket you didn't open.** Tickets reached through the "My Location" toggle are informational. When the viewer isn't the requester and clicks into the comment box or the attachment picker, a modal explains the ticket wasn't opened by them and that comments from many people get confusing, with **Cancel** and **I want to add a comment anyway**. One confirmation per page load; requesters (including those whose own ticket was merged into this one) never see it.
+
+## 2.176.1 &mdash; 2026-10-09
+
+### Fixed
+- **New-ticket group notifications are now scoped to the ticket type's group.** Previously every member of every group with "notify on new ticket" enabled was emailed for every new ticket, so a Finance group member received IT tickets. A ticket whose type is tied to a group now notifies only that group (when it has the flag on); tickets with no type or an ungrouped type still notify all opted-in groups.
+
+## 2.176.0 &mdash; 2026-10-09
+
+### Added
+- **Email Queue (Admin → Settings → Email → Email Queue).** Every email the helpdesk cannot deliver — because `MAIL_ENABLED=false`, SMTP is not configured, or the SMTP server rejected it — is now held in a `mail_queue` table instead of being dropped. The page lists the backlog (recipient, subject, ticket, reason, attempts) with two actions: **Send all now** delivers every queued email immediately (on purpose bypassing the kill switch, after a confirm) and removes the ones that succeed; **Flush queue** deletes everything unsent. Nothing drains the queue automatically, so turning mail back on can never blast a backlog by itself.
+
+### Changed
+- The Send Test Email failure message now says when the real cause is `MAIL_ENABLED=false`, and points at the queue, instead of the generic "check your SMTP settings".
+
+## 2.175.3 &mdash; 2026-10-09
+
+### Fixed
+- **Power users (and any custom staff role) can now switch the ticket list to Compact or Card view.** The view-switcher endpoint and the profile page still checked for the literal roles `agent`/`admin`, so a user moved to the Power User role got "Not allowed" when changing layout, saw the portal-style notification options instead of the staff ones, and had no Two-Factor Authentication section. All three now use the staff-role check from the RBAC system. Reported by Kelly Kipfer.
+
+## 2.175.2 &mdash; 2026-10-08
+
+### Fixed
+- **Automation editor no longer silently re-points a rule whose target was deleted.** When a condition or action value referred to a ticket type, group, agent or location that no longer exists, the edit form showed the first item in the list as if it were selected, and saving quietly rewrote the rule to that item. The dropdown now shows "previous choice was deleted, pick again", is flagged red, and blocks saving until a real value is chosen. Found after the IT ticket type was removed on 2026-10-08 and a "Set ticket type" rule came back pointing at the wrong type.
+
+## 2.175.1 &mdash; 2026-10-08
+
+### Fixed
+- **Ticket submit no longer 500s when an automation points at a missing record.** A rule whose Set ticket type / Set group / Assign to agent / Set priority target was deleted (or never existed) raised a foreign-key error from inside the automation runner, after the ticket was already saved, so the requester saw an HTTP 500 and no confirmation. Each action now runs under its own guard: a failing action is skipped, logged to `storage/logs/php-error.log`, and noted on the ticket timeline ("could not apply 'set_type' (value '9999' no longer exists)"); the rest of the rule and the request continue. Same guard on the Run Now path. Surfaced on prod on 2026-10-08 by a Set ticket type rule (added in 2.174.0) with a stale type id.
+
+## 2.175.0 &mdash; 2026-10-08
+
+### Added
+- **SLA targets on the ticket forms.** A new **SLA notice** system field on the portal and staff create forms shows the first-response and resolution targets for the chosen ticket type + priority as soon as both are picked (e.g. "First response within 1 hour and resolution within 4 hours (business hours)"). It falls back to the type-independent policy when the type has no override, and stays hidden when no priority is chosen or no policy matches. Drag it anywhere on the form, hide it, or rename it per ticket type from Admin → Workflows → Form Builder like any other system field; the migration adds it directly after Priority on every existing type.
+- **"What happens next" modal after submitting.** When a new ticket starts SLA timers, the page the submitter lands on opens a modal with the actual due dates ("First response by Friday, Oct 9 at 10:30 AM"), computed from business hours and holidays. Nothing shows when no priority was chosen. Title, intro, row labels and footer are editable on the Labels page (`sla.notice_*`). No on/off setting: it appears only when SLA tracking is enabled and a policy matches.
+
+### Changed
+- `slaEmailTokens()` now builds its sentence through the shared `slaTargetSentence()` helper (same output as before).
+
+## 2.174.0 &mdash; 2026-10-08
+
+### Added
+- **Automations can set the ticket type.** New **Set ticket type** action on Admin → Settings → Automations, alongside Set group and Assign to agent. Covers tickets that came in as "I don't know what type" and were routed to a group by AI: a rule matching on Group can now stamp the matching type so type-based rules, reports, and SLA targets pick them up. Writes a timeline entry and recalculates SLA due dates like a manual type change. Works on creation, on update, and via Run Now.
+
+## 2.173.0 &mdash; 2026-10-08
+
+### Added
+- **Bulk-set Location Ticket Visibility from the user list.** Every row on Admin → Users now has a checkbox, with a select-all in the header. Tick one or more (or everyone, filtered or not) and a bar appears with **Enable** / **Disable** for Location Ticket Visibility, so turning it on for every user is two clicks instead of editing each account. The Location column shows an eye icon on users who have it, and each run writes one audit entry listing the users touched. Admins only (`users.manage`).
+## 2.172.2 &mdash; 2026-10-01
+
+### Fixed
+- **"Discard draft" on the new-ticket form now actually discards it.** Clicking Discard deleted the saved draft and reloaded the page, but the reload's page-hide autosave re-sent the still-filled form and brought the draft straight back, so the next new ticket opened with the old details. Autosave now stays off after Discard until you type again, and the page waits for the delete before reloading. Fixed in the shared draft script, so it covers the staff and portal create forms and the reply boxes.
+
+## 2.172.1 &mdash; 2026-10-01
+
+### Fixed
+- **The CC field on a form now actually autocompletes, everywhere.** Add a CC field to a ticket type and start typing a name or an email: matches appear after two characters, and Enter, Tab, a semicolon or a comma takes the highlighted one (or the first) and clears the box for the next person. Click a badge's × to drop someone.
+
+  Two things were broken before. On the portal the field searched an endpoint that only answered for staff, so a requester saw nothing however much they typed. On the agent/admin create form the field drew as a plain text box with no search behind it at all, and anything typed into it was thrown away on submit rather than saved as a CC. Both forms now share one script and the same directory lookup the Person field uses; the agent form's own CC box takes Tab, semicolon and comma too, and both kinds of CC survive an autosaved draft.
+
+## 2.172.0 &mdash; 2026-09-10
+
+### Added
+- **Ask a shared login who is actually at the keyboard.** On a shared computer people forget to sign out, and the next person to raise a ticket raises it as whoever is still signed in to Office 365 &mdash; so the ticket says *Circulation Desk* and the desk has no idea who to go back to. Three pieces now close that loop.
+
+  A user account can be marked **Shared account** on its record in Settings → Users. It is a label and nothing else: it grants no access, removes none, and changes nothing about how that account signs in or what it can see. What it does is give the rest of the system something to react to.
+
+  The **form builder** gained conditions. Every field on a ticket type now has a **Show when…** setting alongside its required/optional/hidden pill, with two tests available: *the person is signed in to a shared account*, and *another field on this form has a particular answer* (is exactly / is not / has any answer / is blank). Conditions are per ticket type, so the same field can be unconditional on one type and gated on another.
+
+  A condition can only ever **remove** a field, never add one. A field set to Hidden stays hidden whatever its condition says, and a field whose condition does not hold is treated as absent: not shown, not required, and its value not saved even if one is posted anyway. That last part is decided on the server, not in the browser, so hand-editing the page to reveal a gated field and submitting it writes nothing.
+
+  Finally, a new **Person** field type. It autocompletes against the staff directory as you type and stores the chosen person's *account*, not the text you typed &mdash; which is the entire point. A typed name gives you "sarah", "S. Chen" and the occasional "asdf", none of which join to anything; an account resolves to a current name and a working email address every time the ticket is opened, and keeps doing so after somebody changes their name or their address. Agents see the name and address on the ticket, both clickable. Half-typed text that was never picked from the list submits as blank rather than as a wrong guess, and the form says so while you are still typing.
+
+  Put together: tick **Shared account** on the desk login, add a **Person** field to the ticket types you care about, and set its condition to *shared account*. Staff signed in as themselves see the form exactly as they do today.
+
+  The directory lookup behind the Person field is a new endpoint rather than the existing CC search, which is staff-only and would have returned nothing on the portal &mdash; where this feature has to work. It is narrower in exchange: users flagged external can neither call it nor appear in its results, so an outside requester who arrived by email cannot read the staff directory through it, and shared accounts are excluded from results as well, since a shared login is never the answer to "who are you".
+
+### Fixed
+- **Typing in a custom field no longer loses characters.** The ticket form re-sorts its fields whenever the layout is re-evaluated, and re-sorting physically moves each field's container in the page, which drops focus from whatever is inside it. Re-evaluating on every keystroke &mdash; needed so a field gated on another field appears as soon as its trigger is answered &mdash; therefore ate characters mid-word. The order depends only on the ticket type, so the sort now runs when the type changes and never on a keystroke.
+
+## 2.171.1 &mdash; 2026-09-10
+
+### Fixed
+- **Custom fields filled in on the portal were silently thrown away.** The portal's ticket-create handler guarded its entire custom-field save block on a variable that was never assigned anywhere in the handler. An undefined variable is empty, so the guard was always false and the block never ran: every custom field a portal user filled in &mdash; text, dropdown, date, dependent, the lot &mdash; was discarded the moment the ticket was created, and any CC field on the portal form never reached `ticket_cc`, so those people were never added to the ticket and never notified.
+
+  Nothing surfaced this. The form rendered the fields, validated the required ones, accepted the submission and reported success; the values just never reached `ticket_field_values`. The admin create handler builds the equivalent list correctly and was unaffected, so the same form filled in by an agent saved fine &mdash; which is the kind of split that makes a report of it read as a mistake by the person filing it.
+
+  The portal handler now derives the list from the ticket type's own layout, the same way the admin one does, and excludes hidden fields so a stale value posted against a field the type doesn't show can't be written either. Tickets already created with dropped values cannot be recovered &mdash; the data never reached the database.
+
+## 2.171.0 &mdash; 2026-08-14
+
+### Added
+- **Choose what reopening a closed ticket does to its SLA timers, per ticket type.** Reopening a closed or resolved ticket used to do nothing at all to its SLA, and that was never a decision anyone made. Closed tickets leave SLA scope because the recalculation only scans open tickets &mdash; not because anything was paused &mdash; so no time was ever credited on the way back in. A ticket closed six months ago and reopened today went straight back under the due dates it already had and turned up breached on the next recalculation, five minutes later.
+
+  There is now a **When a closed ticket is reopened** setting on **Settings → SLA Policies**, with four choices:
+
+  - **Keep the original due dates** &mdash; exactly today's behaviour, and the default, so nothing changes on upgrade until someone picks otherwise.
+  - **Resume** &mdash; both due dates move out by the *business hours* the ticket spent closed, so the agent gets back whatever working time was left when it closed. A weekend spent closed on a Mon–Fri schedule credits nothing, the same accounting a pause already uses.
+  - **Restart both clocks** &mdash; a fresh window measured from the reopen, and a new first response is required. The response time being cleared is written into the ticket history first, so it is recoverable rather than silently dropped.
+  - **Restart the resolution clock only** &mdash; a fresh resolution window, but a first response already given still counts, so that target does not re-apply.
+
+  Any **ticket type** can override the site-wide choice on its own settings page, which is the point: a type whose tickets are reopened routinely can restart while the rest of the desk keeps its original targets. The **Type Settings Matrix** gained an *SLA on reopen* column showing each type's effective behaviour &mdash; highlighted where the type overrides it, dimmed where it inherits &mdash; so the whole configuration is readable on one screen.
+
+  Resuming needs to know when a ticket was closed, which nothing recorded before now: `updated_at` moves on every later edit and the timeline holds only a formatted status string. A new `sla_closed_at` column captures it. It is deliberately **not** backfilled &mdash; for a ticket closed before this release the moment is genuinely unknown, and inventing one would credit back a wrong amount of time, so *Resume* falls back to keeping the original dates for those. Two other cases fall back the same way rather than guessing: an SLA-exempt ticket never gains a clock on reopen, and neither does a ticket that never had one.
+
+### Fixed
+- **Every path that changes a ticket's status now handles SLA the same way.** The pause-and-resume logic was copy-pasted across seven call sites &mdash; the agent and admin ticket pages, the portal, two API endpoints, the floor view, and the automation runner &mdash; and reopen handling has to fire from all of them. That shape is exactly how a behaviour ends up working in one interface and silently not in another, so all seven now call a single `Sla::onStatusChanged()`.
+
+  Consolidating fixed a real bug in the two API endpoints, which resumed based on the *new* status being an open non-pausing one rather than the *old* status having been a pausing one. Moving a ticket from a waiting status straight to closed therefore never resumed it, leaving it flagged as paused permanently &mdash; and a paused ticket keeps whatever SLA state it had, forever, so it could never breach or recover no matter what happened next.
+
+- **SLA pause and close timestamps are written from PHP's clock, not the database's.** `sla_paused_at` was written with SQL `NOW()` but read back as server local time, which are two different settings: MySQL's session timezone and PHP's `date.timezone`. On any install where those disagree, the difference was credited as time the ticket spent paused. This is the same class of fault as the two timezone fixes in 2.168.1 and 2.168.2, and it contradicted the rule the SLA code states about itself &mdash; that everything it writes is in server local time. Installs whose clocks already agree, which is every install that has followed the Server Time page, see identical results before and after.
+
+## 2.170.0 &mdash; 2026-08-14
+
+### Added
+- **Ticket imports can now start SLA clocks on part of a file instead of all of it.** The SLA handling choice added in 2.168.0 was all-or-nothing per import, which is the wrong granularity for a real backlog. A legacy export usually contains one type &mdash; an archive category, a logging category &mdash; that is thousands of rows deep and years old, alongside recent tickets that genuinely should be timed. The only way to treat them differently was to split the CSV by hand before importing, which is not a serious option at ten thousand rows.
+
+  The preview screen now carries a **Which tickets get an SLA clock** panel, shown whenever the chosen handling is one that starts clocks. It lists every ticket type found in the file with its row count and the range of open dates it spans, each with a checkbox, plus an optional **only start clocks on tickets opened on or after** date. The two filters apply together: a ticket gets a clock only if its type is ticked *and* it is newer than the cutoff. Everything else is imported SLA-exempt &mdash; permanently, so a later priority or type edit can't start a clock on it either.
+
+  The date range per type is the part that makes the decision possible: "3,412 rows, opened between Mar 2016 and Nov 2020" is the fact that tells you a type has no business being timed against a service target, and it wasn't visible anywhere before confirming an import. A live count under the panel reports how many tickets are in the ticked types, and the completion message and audit entry both state how many rows were imported exempt and how many of those the scope excluded &mdash; a filter you can't confirm afterwards isn't worth much.
+
+  The cutoff compares against each row's open date *after* conversion out of the source timezone, since that is the reading the ticket is stored and displayed with. At the boundary that can differ from the raw CSV text by the source offset.
+
+  Two cases deliberately don't offer the panel. Choosing **Exclude from SLA** already covers the whole file, so narrowing it would be a choice with no effect. And a mapped Ticket Type column holding more than 60 distinct values &mdash; which in practice means it is pointed at the wrong CSV column, often Subject &mdash; suppresses the picker with a warning and a link back to the mapping step, rather than rendering a truncated list of types that would read as the complete one.
+
+### Fixed
+- **An imported ticket that gets no SLA clock is now marked exempt rather than left armed.** Under "start clocks now" or "apply from the original open date", a row that couldn't actually be given a clock &mdash; no priority mapped, or no SLA policy for its type and priority &mdash; was imported non-exempt with no due dates. That is the same latent state 2.168.0 removed for the *excluded* case: the first person to change the ticket's priority or type re-derived its due dates from the legacy `created_at`, landing both targets years in the past and flipping a years-old ticket straight to breached. Every imported row now starts exempt and only the rows that genuinely receive a clock are switched back, so "no clock" and "will never get a clock" are the same state again. The completion message names the count and its reason.
+
+## 2.169.0 &mdash; 2026-08-11
+
+### Added
+- **Settings → Scheduling → Server Time**, a read-only page that reads every clock the application depends on and says whether they agree. Time is configured in at least four independent places &mdash; the operating system, MySQL, PHP for the website, and PHP again for scheduled jobs, which loads a separate configuration file &mdash; and until now nothing surfaced a disagreement between them. That silence was the whole problem: a mismatch raises no error, it just writes timestamps that are wrong by a fixed amount. The two fixes in 2.168.1 and 2.168.2 both came from exactly this.
+
+  The page opens with a single verdict &mdash; all clocks agree, or the number that don't &mdash; followed by individual checks that each explain what was found and, where something is wrong, the specific command to fix it. Below that are the raw readings from every source, and a UTC cross-check that strips timezones away entirely so a genuine clock problem can be told apart from a configuration one. Those are separate faults with separate fixes: matching timezones can still sit on machines that disagree about the actual instant, which is an NTP problem rather than a settings one.
+
+  Comparisons are made on current UTC offset rather than timezone name, since two different names can describe the same offset and it is the offset that decides whether a stored timestamp survives the round trip. The page also states which differences are *fine*: a Business Hours timezone that differs from the server is supported and correct, because it governs only which hours SLA timers count. Nothing on the page changes any setting.
+
+## 2.168.2 &mdash; 2026-08-11
+
+### Fixed
+- **Imported ticket timestamps are no longer shifted by the server's UTC offset.** The CSV importer interpreted each row's date in the configured source timezone and then normalised it to **UTC** before storing it. But `tickets.created_at` and `updated_at` are MySQL `TIMESTAMP` columns, which read the literal they are given in the database session's timezone &mdash; so a value expressed in UTC was stored as though it were local, moving every imported ticket by the server's offset. On a Toronto server that is four hours: a ticket opened at 12:31 imported as 16:31, with nothing anywhere to indicate it had happened.
+
+  Parsing now yields **server local time**, matching the frame the rest of the database uses. The logic moved out of the import route into `parseImportDateTime()` so it can be tested directly, and the fallback path for unrecognised formats was switched from `gmdate()` to `date()` so it lands in the same frame as the main path.
+
+  Worth knowing: a source file whose timestamps carry their own UTC offset (ISO 8601, e.g. `2022-08-22T12:31:35-04:00`) has always been immune &mdash; PHP honours the stated offset and ignores the configured source timezone. If your legacy system can export that way, it removes the guesswork entirely.
+
+  Existing imported tickets were **not** affected on installs whose source timezone was left at the default `UTC`, since the conversion was then a no-op; no data migration is included, because a blanket shift would corrupt those correct rows.
+
+## 2.168.1 &mdash; 2026-08-10
+
+### Fixed
+- **SLA due dates are no longer skewed when Business Hours names a different timezone than the server.** SLA timers stored `first_response_due_at` and `resolution_due_at` formatted in the **business** timezone, but everything that reads them treats them as server local time &mdash; the ticket views parse them with a bare `new DateTimeImmutable()`, the ticket cards use `strtotime()`, and the SLA reports compare against SQL `NOW()`. Where the two timezones differed, every due date was wrong by the offset, in a way that produced no error and no warning: a business timezone behind the server marked brand-new tickets as **breached the instant they were created**, and one ahead of it silently handed out extra hours. The same mismatch ran in reverse when recalculating, where `created_at` &mdash; written by the database in server time &mdash; was being read back as if it were business time.
+
+  SLA now has one stated rule: everything it writes to the database is in server local time, and the business timezone governs only which wall-clock hours the timer is allowed to advance through. A migration re-expresses any already-stored due dates, and does nothing at all on installs where the two timezones already agree &mdash; which is every install that has never pointed Business Hours somewhere other than its own server.
+
+  This was latent rather than active: it only bites once someone changes the Business Hours timezone, which the settings page has always allowed.
+
+## 2.168.0 &mdash; 2026-08-10
+
+### Added
+- **Ticket imports now decide, explicitly, what SLA should do with the batch.** A CSV import brings in tickets carrying their original open date, often years old, and until now the importer simply never set the SLA columns. That had two consequences nobody had chosen. The imported backlog was silently absent from every SLA report and from the compliance percentage &mdash; on a 9,762-ticket import, "SLA compliance" was measuring the 19 tickets that weren't imported. And because the exclusion was only "no due dates yet" rather than a recorded decision, the first person to change a ticket's priority or type re-derived its due dates from `created_at`; on a ticket opened in 2022 that landed both targets years in the past and flipped it straight to breached. A bulk priority change or an automation with a *set priority* action could do that to hundreds of tickets in one click.
+
+  The column-mapping step now carries an **SLA handling** choice. **Exclude from SLA** is the default and matches how imports have always behaved, except that it's now permanent: the tickets are marked exempt, and every recompute path refuses to start a clock on them however they're later edited. **Start SLA clocks now** treats the backlog as if it landed today, giving agents a real response window. **Apply from original open date** reproduces each ticket's true historical SLA for honest reporting &mdash; and says plainly on the preview screen that still-open tickets past their target will import already breached. The preview screen shows the pending choice either way, so nobody confirms a large import without seeing it.
+
+### Fixed
+- **SLA timers no longer measure from the wrong instant on an imported ticket.** SLA arithmetic now counts from a new `sla_started_at` baseline rather than from `created_at`, which are the same moment for a normally-created ticket but can differ by years for an imported one. This also corrects the "approaching deadline" warning, which computes elapsed time as a fraction of the total window and previously read as 100% elapsed for any imported ticket the moment it got a clock.
+- **Saving a setting and reading it back in the same request now returns the new value.** `getSetting()` memoized each key for the life of the request but `setSetting()` only wrote the database row, so any code that saved a setting and then consulted it again during the same request acted on the pre-save value. The two now share one cache.
+- **A batch of tickets entering SLA at once no longer triggers a notification storm.** SLA state is now written truthfully when the clock is first set, instead of being recorded as *on track* and left for the next cron run to correct. Previously that correction registered as a transition into breach, firing an in-app notification and a Microsoft Teams post per ticket &mdash; so importing a large backlog under SLA would have posted thousands of times. Recalculation also stays silent on a ticket's first-ever computation, which is not a transition, and skips SLA-exempt tickets entirely.
+
+## 2.167.0 &mdash; 2026-08-10
+
+### Added
+- **Search-as-you-type box on the Users toolbar.** Finding one person meant opening the Filters panel, typing into its Search field, and submitting a full page reload &mdash; three steps and a round trip for the single most common thing you do on that page. There's now a search box sitting on the same row as **Filters / Who's Online / Merge Users / Add User**, and the table refreshes as you type (250&nbsp;ms debounce, in-flight requests cancelled, so a five-letter name is one request rather than five).
+
+  It refetches from the same `/admin/users` route rather than a separate lookup, so a typed search still respects whatever role, location and contact-type filters are active, keeps the current sort, and the regenerated column headers carry the search term through when you re-sort. The count badge switches to "N filtered" live, the URL stays shareable and reloadable (`?q=…`, via `replaceState`, so one keystroke isn't one Back-button press), and pressing Enter no longer reloads the page. The now-redundant Search field was removed from the Filters panel &mdash; the term is carried through it as a hidden field, so applying a filter from the panel doesn't silently drop what you typed. Search also no longer inflates the Filters badge count, which is now just the panel's own checkboxes.
+
+## 2.166.0 &mdash; 2026-08-04
+
+### Added
+- **Group picker on the Add User form, plus a no-group confirmation.** Creating an agent left them in no group, which means they log in to empty ticket lists &mdash; the fix was a second trip to Settings → Groups that was easy to forget. The Group Membership picker from the edit form is now on **Add User** too: hidden while the level is End User, revealed the moment you pick any staff level, and the groups you tick are assigned as part of the create.
+
+  Saving a staff user with no group now raises a modal instead of a browser confirm. It names the person and the level, spells out the three consequences (no tickets visible at all, never picked by auto-assignment, no new-ticket notifications), and offers **Pick a group** or **Create without a group** &mdash; the choice is still the admin's. Ticking a group after being warned re-arms the check rather than remembering the override. The same modal covers the edit form, worded "Save without a group". Levels that already see all tickets keep their own existing warning, and a user with Location Ticket Visibility isn't warned, because in neither case is "sees nothing" true.
+
+## 2.165.0 &mdash; 2026-08-04
+
+### Added
+- **Edit group membership from the user's own edit page.** Putting an agent in three groups meant opening all three groups and hunting for their name in the member grid &mdash; the relationship was only editable from the group side. The Group Membership block on **Admin → Users → Edit** is now a live picker instead of a row of read-only badges: one card per group with its member count, a lock icon on confidential groups, a link out to the group's own settings, and the same **Manager** sub-checkbox the group form has. A filter box appears once there are more than six groups.
+
+  It reacts to the permission level in the same form: hidden for end users, revealed the moment you pick a staff level (so you can promote and assign groups in one save), and it warns live when a staff user would be left in no group at all &mdash; wording that adapts to whether the level already sees all tickets or has Location visibility. Saving reports what changed ("added to 2 groups"), and unsaved picks now survive a validation bounce such as a duplicate email.
+
+  Writes are a diff, not a delete-and-reinsert, so every other member of each group (and their manager flags) is untouched. All the group-page safeguards are mirrored: adding someone to a confidential group confirms in a modal first and emails every existing member, the attempt is audited before any write, and each change lands in the group's history as `group.members_changed` / `group.managers_changed`. Editing here needs **Manage groups** on top of **Manage users** &mdash; otherwise the list stays read-only. Posts that never rendered the picker (API, import scripts) are ignored rather than treated as "remove from all groups".
+
+## 2.164.0 &mdash; 2026-08-04
+
+### Added
+- **Attachments box on the staff New Ticket form.** Agents and admins could only attach a file *after* the ticket existed &mdash; create it, open it, then upload through a reply. The create form now carries the same Attachments picker the portal has, and the files land on the ticket itself (no timeline row), exactly as a portal submission does. The success flash reports the count, and an image pasted into the description still routes through the inline-attachment path, so both sources end up in the same Attachments panel.
+
+  The field is driven by the per-type form layout like every other system field, so a ticket type that hides Attachments hides it here too &mdash; one config, both forms. Note the form is now `multipart/form-data`; the undo-send countdown and the "create anyway" duplicate override both re-submit natively, so a picked file survives either path.
+
+### Fixed
+- **Every ticket type's conditional text blocks rendered at once before a type was picked.** Opening the staff New Ticket form with Type still on "Unclassified" stacked up the Priority Examples block from *every* ticket type &mdash; on production that is eight of them in a row, most of a screen of guidance for types you hadn't chosen. Content-only fields (text blocks and images) are now hidden until a type is selected, then only that type's own blocks appear; real input fields keep previewing as optional the way they did. The portal form has behaved this way since the form builder shipped &mdash; the staff copy never got the same guard.
+
+## 2.163.1 &mdash; 2026-08-04
+
+### Fixed
+- **"Save Current Filter" silently dropped every on/off toggle.** The save routes stored only status/priority/type/location/agent/group and the search string, so you could tick "My Watched Tickets", save the filter, apply it a week later, and get an unwatched list back with nothing to indicate the filter had been saved incomplete. All of them now round-trip: `watched` and `has_attachment` on the admin panel, plus `resolved_today`, `escalated_to_me`, `created_today` and `due_today` on the agent panel. The browser was already POSTing them &mdash; the modal rebuilds its hidden inputs from the live URL &mdash; so the values were arriving at the server and being thrown away.
+
+  They are stored as the string `'1'`, not int `1`, which matters more than it looks: the templates decide which saved filter to highlight as *active* by strictly comparing the stored value against the request's own filter values, which are always strings. An int would parse, apply and filter correctly while the saved filter never lit up as active. Covered by a test that fails on exactly that substitution.
+
+- **Removing one applied-filter pill could take another filter with it.** The pill URLs, the save route and the active-filter highlight each carried their own hand-maintained list of which toggles exist, and the lists had already drifted. `created_today` / `due_today` were in none of them, so arriving from a wallboard drill-down and then removing any pill silently dropped the drill-down too. All three now read one `ticketBoolFilterKeys()` list.
+
+- **The wallboard drill-downs were invisible once applied.** `created_today` and `due_today` have no checkbox in the filter panel, and had no applied-filter pill either &mdash; so a drilled-down list looked like an ordinary one that was inexplicably short, with no way to clear the constraint except editing the URL. Both now get a removable pill like every other active filter.
+
+  `sla` and `created_within` remain unpersisted and unpilled: they are an enum and an integer rather than toggles, and want their own display treatment.
+
+---
+
+## 2.163.0 &mdash; 2026-08-04
+
+### Added
+- **"Has attachment" ticket filter, on every ticket list that has filters.** Admin tickets, agent tickets, the ticket list on a user's admin profile page, and the portal's My Requests all gained the filter, and both CSV exports (`/admin/tickets/export`, `/agent/tickets/export`) honour it so a download still matches the list it was taken from. It combines with every existing filter, shows up as a removable "Has Attachment" pill in the applied-filters strip, and is picked up by the AJAX list refresh like any other checkbox. `GET /api/v1/tickets` accepts `has_attachment=1` as well, documented in `openapi.json`.
+
+  **On the portal, an attachment on an internal note does not count.** A requester never sees those files, so matching on them would have returned a request whose attachment list renders empty &mdash; a filter that looks broken, and a hint that staff had left a private note on the ticket. The portal and the API (for non-staff callers) therefore match only on requester-visible attachments; staff panels match on all of them. Staff and requester views of the same ticket can legitimately disagree about whether it "has an attachment", and that is the intended behaviour.
+
+  The predicate is a single shared `ticketHasAttachmentSql()` helper using `EXISTS`, not a join: a ticket with five files must be listed once, and joining `ticket_attachments` would have returned it five times &mdash; inflating the paginator's `COUNT(*)` and eating five of the page's `LIMIT` slots. It needs no new index; `ticket_attachments.ticket_id` is already keyed.
+
+  Note the filter is not persisted by **Save Current Filter**, which stores only status/priority/type/location/agent/group/search &mdash; the same pre-existing limitation that applies to "My Watched Tickets".
+
+---
+
+## 2.162.0 &mdash; 2026-07-31
+
+### Fixed
+- **Pasting an image into a ticket returned HTTP 500.** Reported from production: attaching an image to a ticket failed outright. The editor (CKEditor 5, with `Base64UploadAdapter` enabled in seven templates) inlines a pasted or dropped image into the field as `<img src="data:image/png;base64,…">`. `tickets.description` and `ticket_timeline.details` are `TEXT` &mdash; 65,535 **bytes** &mdash; and production runs `STRICT_TRANS_TABLES`, so anything past roughly 48 KB of original image was not truncated but **rejected**, MySQL error 1406, surfacing as an uncaught `PDOException` and a bare 500. A typical screenshot is 100 KB&ndash;2 MB, i.e. 133 KB&ndash;2.7 MB once base64-encoded, so this failed every single time. No ticket in the production database has ever successfully stored a pasted image. The staff create form makes it worse: it has no file input at all, so the editor was the *only* way for staff to attach an image to a new ticket.
+
+  Pasted images are now decoded, validated and written to attachment storage before the insert, exactly like a file-picker upload, and the `src` is rewritten to point at them. What lands in the column is a ~40-byte URL instead of megabytes of base64. Wired into all six affected paths: staff create, admin reply, agent reply, portal create, portal reply, and portal edit. A 264 KB pasted PNG now stores a 156-byte description and one 264 KB attachment, round-tripping byte-for-byte.
+
+  Validation ignores the MIME the data URI *claims* &mdash; that is attacker-controlled text &mdash; and sniffs the decoded bytes instead. The sniffed type must pass both `attachmentIsImage()` (so never SVG, which can carry inline `<script>` under the app's `script-src 'unsafe-inline'` CSP) and the operator's `UPLOAD_ALLOWED_TYPES`, and must fit `UPLOAD_MAX_SIZE`. Anything failing those checks is removed from the body rather than left in place &mdash; leaving it would put the oversized data URI straight back into the insert and reproduce the original 500 &mdash; and the author is told why.
+
+- **A too-long body no longer 500s at all.** `textColumnOverflows()` now guards every one of those six paths, so an enormous paste that is *not* an image gets a "too long to save, please shorten it" message instead of an uncaught database exception.
+
+### Added
+- **Pasted images become real attachments.** They render inline where they were pasted *and* appear in the ticket's attachment list with a thumbnail, so an image is downloadable from one predictable place no matter how it was added. They are served by a new panel-neutral route, `GET /attachments/img/{token}`, because the same body HTML is rendered to admins, agents and the requester &mdash; a baked-in `/admin/...` link would 403 for the portal user who wrote it. Access mirrors the existing per-panel download routes exactly: staff go through `_apiRequireTicketAccess()` plus the admin confidential re-auth window, everyone else gets the portal rule (own ticket, or a non-confidential ticket at their location with `can_view_location_tickets`), and an image hanging off an internal note is never served to a requester. `Content-Disposition` stays `attachment`, as on the existing routes &mdash; browsers apply it to navigation, not to `<img>` subresources, so switching to `inline` would have re-opened the HTML/SVG XSS hole for no gain.
+
+  The URL carries an extension-free token rather than the stored filename. PHP's built-in server &mdash; used for local development and the test harness &mdash; intercepts any path with a known static extension and 404s it before the router runs, so an extension-bearing URL works under Apache but is dead everywhere else. The extension is still applied to the file **on disk** via `safeUploadExtension()`; it is only absent from the URL.
+
+- **Setting: Attachments &rarr; "Show image attachment previews".** The inline thumbnail preview added in 2.161.0 was hard-wired on with no way to switch it off. It now has a toggle, defaulting to **on** so existing installs see no change. It gates the attachment *list* only &mdash; an image pasted into a description or reply is part of the message body and still renders where its author put it, which the settings page says on the page rather than leaving it to be discovered.
+
+## 2.161.3 &mdash; 2026-07-31
+
+### Fixed
+- **Production was swallowing every fatal error without a trace.** `src/bootstrap.php` set `error_reporting(0)` whenever `APP_DEBUG` was off, and a level of `0` suppresses the *log* as well as the screen — `log_errors` has nothing left to write. The result: a 500 on production produced a bare "HTTP ERROR 500" in the browser and **no entry anywhere** — not in `/var/log/apache2/error.log`, not in `storage/logs/`. Diagnosing a production fault meant reproducing it somewhere else and hoping the environments matched. Production now keeps `display_errors` off (unchanged — users still never see a stack trace) but reports `E_ALL` to a log, and errors are directed to `storage/logs/php-error.log` when that directory exists. No behaviour change for `APP_DEBUG=true`.
+
+## 2.161.2 &mdash; 2026-07-31
+
+### Documentation
+- **README's AI feature list was missing AI Similar Past Tickets.** The feature shipped in 2.148.0 (migration `067_ai_similar_tickets`) and 2.149.2's entry claims it "added a matching bullet to the readme's AI Features list" — but that edit was left sitting uncommitted in the working tree and never actually landed, so for the last two and a half weeks the one document a prospective reader judges the project by understated what the AI triage does. Committing it now, unchanged. No code change.
+
+## 2.161.1 &mdash; 2026-07-31
+
+### Fixed
+- **Every sortable list returned a 500 for `?sort[]=x`.** PHP parses that into an array, and using an array as an array offset is a fatal `TypeError` in PHP 8 — including inside `isset()` and on the left of `??`, neither of which suppresses it. Both idioms in the codebase crashed, including the one that looked like the hardened version:
+  ```php
+  $sortableColumns[$_GET['sort'] ?? 'created_at'] ?? 'default';   // TypeError
+  isset($sortableColumns[$_GET['sort'] ?? ''])                    // also TypeError
+  ```
+  `?dir[]=x` failed the same way through `strtolower()`. Fifteen callsites across the public, admin, agent, portal and API routes were affected. This was never an injection risk — the column whitelists are real and the direction is coerced to literal `ASC`/`DESC` — the requests simply died before reaching the whitelist. Reads now go through a new `requestScalar()` helper that returns the default for anything non-scalar.
+- **The agent ticket list and its CSV export disagreed about unrecognised status slugs**, in the worse direction: the list showed nothing while the export returned every ticket the agent could see. Exporting a bookmark or saved filter that named a since-deleted status produced a file far wider than the screen it came from, with nothing to indicate the filter had been dropped. The export normalises unknown slugs away via `buildTicketFilterQuery()` — deliberately, so `status[]=open&status[]=deleted_slug` still returns open tickets instead of silently returning zero — but the agent list built its `status IN (...)` by hand and applied the slugs verbatim. The list now uses the same normalisation. Consistency only: the visibility predicate was applied on both sides throughout, so the export never contained tickets the agent could not see.
+- **Two create-ticket tests rotated their fixtures instead of removing them.** Both cleaned up with `SELECT id … LIMIT 1` and no `ORDER BY`, so each run deleted an older leftover and left its own new row behind. The count stayed flat — which is why it looked healthy — while the pool never drained and the orphan ids changed on every run.
+
+### Known issues (found this sprint, not fixed)
+- **PHP and MySQL disagree about the current date by ~6 hours.** Nothing calls `date_default_timezone_set()`, so PHP uses the `php.ini` timezone while MySQL uses system local time. `reportDateRange()` builds report windows with PHP `date()` and compares them against MySQL timestamps, and two report CSV filenames are stamped with PHP `date('Y-m-d')` — so for a few hours each day a "today" report and its filename can name different days. Left alone deliberately: aligning them is a configuration decision that also touches SLA timers, business hours and holidays, and picking the wrong authority would silently shift those.
+- **`POST /survey/{token}` performs no CSRF check.** Its only guard is the unguessable 64-hex token in the path, which limits the practical risk — an attacker who knows the token can act directly anyway — but it is the one remaining unguarded cookie-session POST.
+- The `DATE(col) = CURDATE()` non-sargable pattern fixed in the agent list (2.161.0) still exists behind the dashboard and wallboard counters in `src/Dashboard.php`, `src/routes.php` and `src/routes/api.php`.
+
+## 2.161.0 &mdash; 2026-07-31
+
+### Security
+- **`verifyCsrf()` accepted an empty token on any session that had never been issued one.** The check ended in `hash_equals($_SESSION['csrf_token'] ?? '', $token)`, and `hash_equals('', '')` is `true` — so a request supplying `_token=` (or an empty `X-CSRF-Token`) passed on a session with nothing stored. This never mattered for the authenticated forms, because rendering one issues a token first, but it meant the guard was **completely ineffective on guest endpoints**, where a fresh visitor's session is empty by definition. `verifyCsrf()` now fails closed when either the supplied or the stored token is empty. This is a one-line change inside a function every POST in the app depends on, so it is the highest-regression-risk change in this release.
+- **The three "was this helpful?" KB feedback votes had no CSRF check at all.** Every other cookie-authenticated POST in the app verifies one; `POST /kb/articles/{slug}/feedback` (guest), `/agent/kb/…` and `/portal/kb/…` did not. All three now do, accepting the token by form field or `X-CSRF-Token` header. The guest route is included rather than exempted: the vote is already recorded against the visitor's session, so a token can be issued on render and checked, and guarding it stops a third-party page from silently spending a reader's one vote on an article they never opened.
+
+### Added
+- **CSV export on the six tabular admin reports** — *agent performance*, *SLA violations*, *unresolved*, *location*, *group coverage*, and the ad-hoc *custom* report. Fifteen report pages rendered charts and tables with no way to get the numbers out of the browser; the only existing affordance was the Schedule Report modal, which emails a rendered report. Managers building a board deck or a budget case were retyping figures or screenshotting tables. `?export=csv` short-circuits inside the same route, after the permission check and after the query, so every active `range`/`from`/`to` filter carries through and the export is gated exactly as the page it exports.
+  - Two deliberate divergences from the on-screen table: **unresolved** exports the full filtered set rather than the current page, since a CSV of 25 paginated rows would be useless; and **group coverage** keeps its flat one-row-per-member shape, including types with no group or no members, so nothing silently drops out of the file.
+- **CSV export on the agent ticket list.** Admins have had `/admin/tickets/export` for a while and agents had nothing, so a team lead without the admin role was back to copy-pasting the table for a standup or a handover. The new `/agent/tickets/export` honours every filter the list itself applies, including the wallboard drill-downs, `escalated_to_me`, `created_within` and the `mine` alias.
+  - **It additionally ANDs in `ticketStaffVisibilitySql()`, which the admin export deliberately omits.** For admins that predicate is `1=1`; here it is the only thing keeping confidential and out-of-group tickets out of an agent's download, because the shared filter builder only translates the user's own filters and would otherwise happily export the whole table. Admins reaching the same route still get the `[Confidential]` redaction the admin export applies.
+- **Image attachments preview inline instead of being blind download links.** Screenshots are the most common helpdesk attachment, and every one of them previously required a download-open-delete round trip in a separate application before you could read the error message in it. Images now render as a lazy-loaded, height-capped thumbnail that opens full size; non-images keep their existing icon and link. Thumbnails carry `alt` text from the original filename, which also closes an accessibility gap in the previously icon-only timeline links.
+  - **SVG is deliberately excluded** and keeps the plain-link treatment. An SVG can carry an inline `<script>`, the CSP allows `script-src 'self' 'unsafe-inline'`, and `UPLOAD_ALLOWED_TYPES` is operator-configurable — so even though the upload path will not store one as `.svg`, rendering `image/*` unconditionally would have been an avoidable XSS surface.
+  - No `inline` disposition override was needed: `Content-Disposition: attachment` applies to navigation, not to `<img>` subresources, so the images load from the unmodified download route. Adding that escape hatch would have re-opened the same XSS surface for no benefit.
+
+### Fixed
+- **Pressing `/` on a settings page focused the wrong box and left a stray dropdown open.** Two independent handlers were live at once — the navbar's global search shortcut and the settings-page filter — and the navbar registers first, so `/` focused the search field and opened its dropdown before focus was stolen by the settings filter. The settings handler now runs in the capture phase and stops propagation, which makes the fix independent of registration order rather than dependent on which script happens to load first.
+  - It also **gained the WCAG 2.1.4 modifier guard the navbar has had since v2.87.0** and this handler never received: it fired on a bare `/` with no check for Alt/Ctrl/Cmd, so `Alt+/` and `Cmd+/` hijacked focus, and it tested `e.target` rather than the stronger `document.activeElement`.
+- **The *created today* and *resolved today* ticket filters could not use an index.** Both wrapped the column in a function — `DATE(t.created_at) = CURDATE()` — which makes the predicate non-sargable, so MySQL evaluated every row in the table instead of seeking. Rewritten as half-open ranges (`>= CURDATE() AND < CURDATE() + INTERVAL 1 DAY`), which select exactly the same rows and let the indexes added in 2.160.3 actually be used. `t.due_date = CURDATE()` was left alone — `due_date` is a `DATE` column and was already sargable.
+  - The same `DATE(col) = CURDATE()` pattern still exists in `src/Dashboard.php`, `src/routes.php` and `src/routes/api.php` behind the dashboard and wallboard counters, and has not been changed yet.
+
+## 2.160.3 &mdash; 2026-07-31
+
+### Fixed
+- **Three ticket-list filters had no index and were scanning the whole table on every page load.** Migration 046 covered the default view and the status filter; *due today*, the SLA-state filter and *resolved today* were left behind. Migration `074_tickets_filter_indexes.php` adds them, following the same reasoning 046 used:
+  - **`due_date`** — indexed alone. It backs both the *due today* equality filter and a sortable column in the agent list, the admin list and the admin export, with no one dominant secondary sort worth pairing it with.
+  - **`(sla_state, created_at)`** — composite on purpose. `sla_state` holds only `on_track`/`warning`/`breached`/NULL, so an index on it alone is too low-cardinality for the optimiser to choose over a scan; adding `created_at` lets the single index both narrow the filter and supply the list's default `ORDER BY created_at DESC`.
+  - **`(status, updated_at)`** — the *resolved today* filter is an equality on `status` plus a same-day bound on `updated_at`, so `status` leads and `updated_at` takes the range.
+  - No standalone `updated_at` index: it is not offered as a sort column anywhere, so it would carry write cost for no read.
+
+## 2.160.2 &mdash; 2026-07-31
+
+### Fixed
+- **A fresh install was missing six tables, five columns and two indexes.** `database/schema.sql` is what a brand-new install imports, and it had drifted badly from what the migration chain actually produces. The file's own header states the rule — new table or column means writing *both* the guarded migration and the schema.sql entry — but nothing checked, and the drift is invisible to anyone whose database came from migrations. It only breaks for someone installing from scratch, as a 500 on whatever page touches the missing object.
+  - **Six absent tables:** `ticket_statuses`, `ticket_drafts`, `agent_oof_status`, `kanban_boards`, `kanban_buckets`, `kanban_card_placements`. A fresh install had no configurable statuses, no draft autosave, no out-of-office coverage, and no Kanban at all.
+  - **Two columns still under their pre-rename names:** `escalation_rules.cooldown_hours` and `ticket_types.stale_threshold_hours`, both since renamed to `*_minutes`. This is the worst kind of drift — the table exists and the install succeeds, then escalation cooldowns and stale-ticket thresholds fail at runtime against a column name the code stopped using.
+  - **Three missing columns:** `users.is_external`, `users.totp_last_step` (two-factor replay protection), and `tickets.oof_autoreply_at`.
+  - **Two missing indexes:** `tickets.idx_tickets_status_created` / `idx_tickets_created_at` (see 2.160.1) and `ticket_presence.idx_ticket_presence_last_seen`.
+
+### Added
+- **`tests/Feature/SchemaParityTest.php` makes this class of bug self-detecting.** It builds a scratch database from `schema.sql` alone, then diffs its shape against the live migration-built one — tables, then columns by declared `COLUMN_TYPE`, then indexes by ordered column list. Comparing `COLUMN_TYPE` rather than just column names is what catches an ENUM that should be a `VARCHAR(64)`; comparing ordered index columns is what catches a composite index whose columns are the wrong way round. Structure only — it never reads or writes application rows, and it drops the scratch database afterwards. Where the MySQL user cannot `CREATE DATABASE` it skips instead of failing, so a restricted CI environment doesn't report a false problem.
+  - Five of the six drift items above were found *by this test*, after a manual table-level comparison had already reported the schema clean.
+
+## 2.160.1 &mdash; 2026-07-31
+
+### Fixed
+- **Custom ticket statuses could silently fail to save, and the ticket list had no index to stand on.** On databases built by importing `database/schema.sql` instead of by running the migration chain, `tickets.status` was still the original 7-value ENUM that configurable statuses replaced back in v2.60.0, and none of the ticket-list indexes from v2.65.0 existed. Both migrations were recorded as applied, so the runner would never revisit them — the drift was permanent and silent. The visible symptoms were a custom status saving as an empty string on a non-strict MySQL server, and every ticket-list query doing a full table scan plus a filesort, on the single busiest query path in the app.
+  - Migration `073_repair_status_schema_drift.php` re-asserts the intended end state rather than trying to rewind history: it widens `status` to `VARCHAR(64)` only if it is still an ENUM, restores `idx_tickets_status_created (status, created_at)` and `idx_tickets_created_at (created_at)`, and drops the superseded single-column `idx_tickets_status`. Every step is guarded by `information_schema`, so it is a no-op on a correctly-migrated database and a repair on a drifted one. The widening cannot lose data — every stored value is one of the seven ENUM labels, all already seeded into `ticket_statuses`.
+  - This also fixes five test failures that had been attributed to stale expectations. Two of them (`TicketStatusesTest` reassign-and-delete) were the truncation bug reporting itself honestly: the suite wrote a status and read back `''`.
+
+### Added
+- **`phpunit.risky.xml`**, so the suite can be pointed at a non-default instance without editing the committed config. `phpunit.xml` pins `TEST_BASE_URL` to `:8000`; the feature tests log in as fixture users and create real tickets, so running them while that port belongs to a different instance writes into the wrong database. The value is set `force="true"` here so it cannot be silently inherited from the environment.
+
+## 2.160.0 &mdash; 2026-07-30
+
+### Fixed
+- **The Labels page was advertising 121 labels that do nothing.** Mapping every key in `labels.default.json` against every `label()` callsite showed that only 35 of 156 were actually read by the app. The rest existed in the file and appeared on the page, but no template or route ever looked them up — so renaming them had no effect anywhere, silently. The page's own instructions demonstrated the problem: it offered *'rename "Ticket" to "Issue", "Agent" to "Staff"'* as the example, and both of those keys were inert. An admin's first attempt at the feature was guaranteed to appear broken.
+- **Six labels that do work were unreachable.** `portal.solution.available`, `.badge`, `.posted_by`, `.staff`, `.on` and `.go` — the wording on the green answer banner a requester sees once staff post a solution — were called in code but missing from `labels.default.json`, so they never appeared on the page, and both the upload validator and the inline editor rejected them as unknown keys. They're in the template file now.
+
+### Added
+- **Current Label Values is grouped by where the labels appear**, with a plain-English note on every wired-up key saying exactly where it surfaces — "Admin icon rail — second item", "the priority question on the portal request form", "status badge and filter dropdown on the portal request list, dashboard and request page". Six sections: Organisation, Staff navigation, Portal navigation, Portal status wording, Portal requests & actions, Portal request page. The header carries a **41 wired up** badge.
+- **The inert keys are quarantined in a collapsed "Not wired up yet" section**, sub-grouped by key family (`action.*`, `field.*`, `ticket.*`, …) and labelled for what they are: present in the file, read by nothing, renaming them changes nothing. They stay editable — a stored value will take effect if the key is ever hooked up — but nobody will spend ten minutes renaming one expecting a result. Searching reveals matching inert rows even while the section is collapsed, so a search can't report "no matches" for a key that's sitting right there.
+  - Section headings hide themselves when a filter empties them, and their counts switch to *matched / total* while filtering so a heading can't claim more rows than are on screen.
+- **A test that stops this from happening again.** `tests/Feature/Admin/LabelMetaTest.php` scans the codebase for `label()` calls and fails if the metadata and the callsites disagree in either direction — a key that's read but undocumented (which would be shown to admins as inert), or a documented key nothing calls anymore. It also fails on any dynamic `label($var)` call, since that would escape the analysis and get mislabelled. The wired/inert split is derived from the presence of a `where` note, so the note and the truth can't drift apart quietly.
+
+### Changed
+- **`status.*` retired from the label file (7 keys).** Staff-side status names have come from the `ticket_statuses` table since configurable statuses shipped in v2.61.4; `portal.status.*` overrides them for end users. The keys were dead weight pointing at the wrong place. Uploading an older `labels.json` that still contains them now succeeds with an informational notice naming where that wording lives instead (**Admin → Settings → Ticket Statuses**) — retired keys are skipped rather than failing validation, so a file downloaded before the upgrade keeps working.
+
+## 2.159.0 &mdash; 2026-07-30
+
+### Added
+- **A search box at the top of Current Label Values on the Labels page.** The list is 156 rows long, so finding the one word you want to rename meant scrolling or using the browser's own find. Type in the box and the table filters as you go — no button to press, no page reload.
+  - **Matches keys *and* values**, so you can search either `portal.status` or the wording your users actually see ("Submitted"). Handy when you know the phrase that's wrong but not which key produces it.
+  - **Space-separated terms all have to match**, in any order and either field — `portal open` finds `portal.status.open` without you having to type the dots. 
+  - A count under the box reads *Showing 3 of 156 labels* so a narrow filter can't be mistaken for a short list, and a **No labels match your search** row replaces an empty table.
+  - **Clear** with the ✕ button or by pressing Escape in the box. Focus returns to the search field so you can immediately type something else.
+  - Filtering and inline editing work together: search down to the row you want, click its value, edit it. The value is read live rather than cached, so a row you just renamed is still findable by its new wording.
+
+## 2.158.0 &mdash; 2026-07-30
+
+### Added
+- **Labels are editable in place — no more download-edit-upload round trip for one word.** In **Admin → Settings → Labels**, click any value in the **Current Label Values** list and it turns into a text field. Click away and it saves on its own; the row's **custom** badge and the *N customised* count in the card header update from the response, so you can see the change took without reloading. The download/upload flow is untouched and still the right tool for renaming a lot of things at once.
+  - **Clearing the box restores the built-in wording.** So does typing the default value back in — either way the key is dropped from `custom_labels` rather than stored as a redundant copy, which is what keeps the *customised* count honest.
+  - **Enter** saves (via the same blur path, so there's one code path, not two) and **Escape** reverts without sending a request. The value is also reachable by keyboard: it's focusable, and Enter or Space opens the editor.
+  - **A failed save leaves the field open** with the reason beside it, so the value you typed isn't lost to a validation error or a dropped connection. Values are capped at 255 characters and unknown keys are rejected server-side.
+  - **Every inline edit is written to the audit log** as `labels.updated`, with the key and the before→after values in the detail column — e.g. `ticket.singular: Ticket→Issue`. Reverting to the default logs the reverse. The endpoint requires `settings.manage` and a valid CSRF token, same as the upload route.
+
+### Fixed
+- **The portal's "My Location" toggle now follows the Location label.** Rename *Location* to *Branch* under **Admin → Settings → Labels** and the button on **My Requests** reads **My Branch**. It had been hard-coded, which was odd next to the *My Requests* button beside it — that one already went through the label system — and directly contradicted the setup tour, which advertises renaming Location to "Branch, Site, Campus". The same hard-coded wording is fixed in the two other places it appeared: the portal tour step that points at the toggle, and the **Help → Tracking Your Requests** page that describes it.
+
+## 2.157.0 &mdash; 2026-07-30
+
+### Changed
+- **Token chips on the Email Templates page now insert at your cursor instead of copying to the clipboard.** Click into whichever field you're writing, put the cursor where the value belongs, then click the token — it drops in at that spot, the caret lands just after it, and focus stays in the field so you can keep typing. Previously a click only copied the token and you had to paste it yourself.
+  - Works in all three kinds of field on the page: the plain inputs (Subject, Button Label), the plain textarea (Message Body), and the rich-text Intro editor. Insertion into the rich-text field goes through CKEditor's model rather than the hidden source textarea, so it lands at the real caret rather than at the end.
+  - **Text you have selected is replaced.** Highlight a placeholder word and click a token to swap it out.
+  - If no field has been touched yet, the token goes to the Intro editor — the field most tokens end up in — rather than a click that seems to do nothing.
+  - The chips are no longer `user-select:all`, since selecting-to-copy is no longer the point; you can still select the text manually if you want it on the clipboard.
+
+## 2.156.0 &mdash; 2026-07-30
+
+### Added
+- **The stale-ticket emails are editable in the UI at last.** Three new tabs under **Admin → Settings → Email Templates** — **Stale &mdash; Requester**, **Stale &mdash; Agent** and **Stale &mdash; Manager**. Each gets the usual Subject / Intro / Button fields, a token legend, a live subject preview and a Reset to Defaults button. Previously the only way to reword any of them was to edit PHP: `getEmailTpl()` already honoured `email_subject_*` / `email_intro_*` / `email_button_*` settings rows for these keys, but nothing in the interface ever wrote them.
+- **"Message Body" — a new editable field for the main paragraph.** The "you haven't been forgotten" sentence in the requester email was hard-coded in the template, so a tab alone still wouldn't have let you change the words people actually complain about. `getEmailTpl()` now resolves a fourth part, `body`, from `email_body_<template>` with the same token substitution and escaping as the intro; blank lines you type are preserved as line breaks. Leave the field empty to keep the default, or put a single space in it to drop the paragraph from the email entirely.
+  - Only templates whose layout renders a body paragraph show the field — currently just the requester email. The list lives in one place, `EMAIL_TPL_BODY_TABS` in `src/helpers.php`, so the editor and the save route can't disagree about which templates have one.
+  - `body` is returned as `''` for every other template, so passing it into a layout that ignores it is harmless.
+
+## 2.155.1 &mdash; 2026-07-30
+
+### Changed
+- **Explained the stale-ticket manager toggle properly.** The help text under *Notify the group manager(s) for the ticket's type* said it "uses the ticket's group — or, if the ticket has none, the default group set on its ticket type", which describes the code rather than the behaviour and left the obvious question unanswered: where is that default group set? It now says the field's actual name and location (**Ticket Types → edit a type → Default Group**), explains that a ticket's group and its type's Default Group are normally the same thing because the app keeps them in step in both directions, and notes that the fallback exists only for a ticket carrying no group at all. Same correction applied to the Email Notifications page and the Automations admin doc, where the doc entry now spells out the group/type relationship in full. No behaviour change.
+
+## 2.155.0 &mdash; 2026-07-30
+
+### Added
+- **Stale tickets can now notify the group's manager.** A third toggle joins the assigned-agent and requester switches under **Admin → Settings → Stale Tickets → Email notifications**: *Notify the group manager(s) for the ticket's type*. When a ticket goes stale it emails everyone flagged **Manager** on the responsible group, so a supervisor learns that something in their department has been sitting untouched without having to go looking for it.
+  - **Who counts as the manager** — the existing per-member **Manager** checkbox in **Admin → Groups → edit**. Nothing new to configure and a group can have several; all of them get the email. There is deliberately no separate "manager" field on a ticket type — the group is already the department, and one source of truth beats two that can disagree.
+  - **Which group** — the ticket's own group. Only if a ticket somehow has none does it fall back to the default group configured on the ticket's type. A ticket moved to another team therefore surfaces to *that* team's manager, not the one the type was originally pointed at.
+  - **Nobody is mailed twice.** An unassigned stale ticket already emails every member of its group, and a manager is one of those members — so a manager who received the agent alert is skipped for the manager alert.
+  - **The settings page names the gaps.** Ticket types that would reach no manager — no default group, or a group with nobody flagged Manager — are listed inline under the toggle, so a silent "0 manager alerts" in the cron log doesn't have to be diagnosed after the fact.
+  - Uses its own email template with the group, current owner (or a highlighted **Unassigned**), type, priority and submitter. The per-ticket timeline entry and the run log both report how many managers were alerted.
+- **Off by default.** Every other `email_notify:*` key is treated as ON when its row is missing, which is right for existing mail but wrong for a new class of recipient — it would start mailing managers the moment this deploys. Migration **072** writes an explicit `0`, and `emailNotifyDefault()` now holds the per-key default so this stays true on a fresh install.
+
+## 2.154.1 &mdash; 2026-07-29
+
+### Fixed
+- **The single-instance lock now actually holds between a scheduled run and a manual one.** Scheduled runs come from whichever account owns the crontab — on this server, root — while the Run now buttons run as the web server user. The lock directory was created by whoever got there first and left unreadable to the other, so the second account fell through to "running without an instance lock" and the protection quietly evaporated. The directory is now created sticky world-writable (as `/tmp` is) and the lock files `0666`, so both accounts can contend for the same file. Found on the production box, where root's cron had already created the directory before the web user ever saw it.
+  - `/tmp` would be the conventional place for these, but Apache on Ubuntu runs under systemd `PrivateTmp=true` — the web process and root's cron get separate `/tmp` namespaces and would never see each other's lock at all.
+  - **After upgrading, delete `storage/locks/` once** so it is recreated with the right permissions. It is runtime state; anything in it is safe to remove.
+
+## 2.154.0 &mdash; 2026-07-29
+
+### Added
+- **Run any cron job on demand from Admin → Settings → Cron Jobs.** Each job card gains a **Dry run** button and, one level down in its dropdown, **Run for real**. Output comes back in a modal, so you no longer need shell access to find out whether a job works.
+- **Dry run shows you what a job would do without doing any of it.** The job executes its real code path start to finish — same queries, same decisions, same log lines — but its database writes happen inside a transaction that is never committed, and every email is listed as `WOULD EMAIL …` instead of being sent. It leaves no trace: nothing is saved, no mail goes out, and the job's log file isn't touched (so a preview can't make an unscheduled job look scheduled). Dry-run the Stale Ticket Notifier before its first live run and you'll see exactly how many people it's about to email.
+  - Side effects that a rollback can't reverse are skipped and reported: a dry run of Inbound Email Replies reads the mailbox but does not mark messages as read, so the next real run still sees every reply.
+- **Run for real always confirms first**, naming the job, and for the six jobs that send email it additionally requires ticking an acknowledgement — and tells you whether outbound mail is currently enabled on this server. Live runs are written to the job's own log with a `MANUAL RUN by <you>` marker.
+- **Every manual run is recorded** in `storage/logs/cron-manual-runs.log` — who ran what, dry or live, exit code and duration.
+
+### Changed
+- **A cron script now refuses to run twice at once.** Each one takes a lock on its own name and exits immediately (code 75) if another copy is already going. This stops a manual run from colliding with the scheduled run mid-flight and double-sending — both passes would otherwise check the dedup table before either wrote to it — and also fixes the pre-existing case of a slow job overlapping its own next tick.
+- The job list, its crontab/schtasks commands and the status check moved out of the settings template into `src/CronJobs.php`, so the page and the run endpoint read one list instead of two copies.
+
+### Configuration
+- New optional `PHP_CLI_BINARY` in `.env`: the full path to the PHP **command-line** binary used to launch a job on demand. Leave it blank to auto-detect. Set it if the buttons report that no CLI binary was found — under Apache/mod_php or php-fpm, `PHP_BINARY` is the web server's own executable and can't run a script. The buttons render disabled with the reason shown when the binary is missing or `proc_open()` is blocked by `disable_functions`, rather than failing mysteriously.
+
+### Notes
+- A dry run holds row locks on everything it touches until it finishes, so dry-running a slow job on a busy server can briefly block writers on those same rows. The jobs here are short; it's worth knowing before you reach for it during a rush.
+
+## 2.153.0 &mdash; 2026-07-29
+
+### Added
+- **A scheduled report now belongs to the person who created it.** Your Scheduled Reports list shows the schedules you made and nothing else; admins still see every schedule, with a **Created By** column naming the owner. Editing, enabling/disabling and deleting are restricted to a schedule's owner (and admins) — reaching someone else's by URL returns Not Found, which also means a non-admin can't discover which schedules exist by probing ids.
+- **Recipients are entered as chips instead of a raw textarea.** Type an address and press Enter, comma, semicolon or space to commit it; paste a whole list from a spreadsheet or an Outlook `To:` line and it splits into individual addresses; Backspace removes the last one; an **Add me** button fills in your own address. Malformed addresses turn red and block saving instead of being silently dropped at send time. Used by both the Scheduled Reports form and the quick "Schedule" modal on every report page.
+- **Report emails now say which schedule they came from and who set it up**, so a recipient who didn't create the schedule knows who to ask to be taken off it.
+
+### Changed
+- **The Cron Setup panel on Scheduled Reports is admin-only.** It documents server-side crontab wiring, including filesystem paths, that a non-admin can't act on.
+- **Cadence reads as one plain-English column.** The separate Frequency / Send Day / Date Range columns are now a single "Every Monday — covers previous 30 days", which also unclutters a table that had grown to nine columns.
+
+### Migration
+- `071_scheduled_reports_created_by.php` adds `scheduled_reports.created_by` (FK to `users`, `ON DELETE SET NULL` so a departing owner's schedule keeps running as ownerless/admin-only rather than vanishing). **Pre-existing schedules are deleted** — their recipient lists were written when the list was shared and editable by anyone with access, so they can't be attributed to one owner. Recreate any schedules you still want.
+
+## 2.152.0 &mdash; 2026-07-29
+
+### Added
+- **Anyone who can read a report can now schedule it.** Scheduling was gated behind "Manage automations & escalations", so power users — who can open every report — could not put one on a timer. Report viewers now get full access to Scheduled Reports (create, edit, enable/disable, delete), and the settings nav shows them the page. Automation managers keep access as before.
+
+### Changed
+- **Being denied a page now tells you so and takes you to your own dashboard.** Opening a page your role can't access showed a dead-end "403 Forbidden" screen whose only link went to the site root. Instead you land on your dashboard with a "You do not have permission to access that page." banner. Scripted callers (fetch/XHR, `/api`) still receive a real 403 with a JSON body so their error handling keeps working.
+
+### Fixed
+- **Buttons for actions you can't perform are no longer shown.** The "Schedule" button on all ten report pages, and the "Scheduled Reports" link on the reports index, rendered for every role that could see the page — clicking through produced a 403. They now appear only for roles that may actually schedule.
+- **Settings search no longer returns pages you can't open.** The search box in Settings indexed every setting regardless of role, so a non-admin could find and click straight into a page they had no permission for. Results are now filtered by the same permission map that hides the nav items.
+
+## 2.151.7 &mdash; 2026-07-29
+
+### Fixed
+- **The new-request form no longer stacks up every ticket type's Text Blocks before a type is chosen.** With no type selected the form shows its fields as an optional preview, which also dumped every type's Text Block and image content onto the page at once — a customer opening the form saw eight "Priority Examples" panels belonging to eight different types. Content-only fields now stay hidden until a ticket type is picked, so only that type's blocks appear. Input fields still preview as before.
+
+## 2.151.6 &mdash; 2026-07-28
+
+### Fixed
+- **The "Add field" button in the Form Builder is readable again.** The rule that gives the add-field buttons a solid white fill also hit the primary button, which keeps white text — so its icon, label and caret were white on white and the button looked like an empty box. The white fill now applies only to the outline button beside it.
+
+## 2.151.5 &mdash; 2026-07-28
+
+### Fixed
+- **Text Block fields on a ticket form no longer show a white strip behind their text.** Text authored in — or, far more often, pasted into — a Text Block's editor carries an inline white `background-color`, which painted a white band behind the words on the block's light grey panel. Inner backgrounds inside a text block are now flattened so the text always sits on the panel's own surface. Note: this also flattens a background colour applied on purpose with the editor's highlight button.
+
+## 2.151.4 &mdash; 2026-07-28
+
+### Changed
+- **A ticket type's SLA tab now lists only the priorities that type offers.** A type restricted to (say) Medium and High no longer shows Low and Critical rows there — a priority the type doesn't offer can never be set on one of its tickets, so it had no policy worth configuring. Unrestricted types and the Default tab still list every priority. The tab links to the type's Available Priorities setting so the restriction is easy to find.
+- The save handler ignores a submitted policy for a priority its type doesn't offer, so a hand-built POST can't store an unreachable rule.
+
+## 2.151.3 &mdash; 2026-07-28
+
+### Fixed
+- **SLA policies: changing only "SLA counts on" for a ticket type now saves.** On a type tab (Facilities, Customer Experience, any type), deselecting days while leaving both duration boxes blank was discarded by the save handler — it only wrote a row when a duration was filled in, so the page reported "SLA policies saved." while the day change vanished on reload. A days-only override is now stored on its own.
+- **A blank duration box on a type tab inherits the default policy's value instead of freezing a copy of it.** Type-specific policies now inherit field by field, which is what the page has always promised: an empty box stores 0, and `Sla::findPolicy()` resolves 0 to the default policy's current value at runtime. Editing a default target therefore moves every type that inherits it, rather than leaving stale snapshots behind (the 2.151.2 fix backfilled the blank field at save time, which froze it).
+
+### Changed
+- **A priority can now carry just one SLA target.** With only a resolution time set, `first_response_due_at` is left empty instead of being filled with a stand-in 60-minute deadline, and the ticket timeline note and `{{sla}}` email token describe only the target that exists. A priority with no targets anywhere gets no SLA at all rather than a deadline of "right now".
+- Ticket types with no policy row of their own now show the default policy's counted days on their tab, matching the days their SLA timer actually counts.
+
+## 2.151.2 &mdash; 2026-07-16
+
+### Fixed
+- **SLA policies: setting only the resolution time (or only the first-response time) for a priority no longer silently discards it.** The save handler wrote a policy row only when <em>both</em> the first-response and resolution boxes were filled, so entering a resolution while leaving first response blank (or vice versa) dropped the whole row — the change appeared not to save. A row now saves whenever <em>either</em> field is set; the blank field is backfilled from the default (type-agnostic) policy for that priority, falling back to the built-in defaults (60m response / 480m resolution) when the default row leaves it blank too. A row with both fields blank is still treated as "no override" and skipped so the type inherits the default policy.
+
+## 2.151.1 &mdash; 2026-07-15
+
+### Changed
+- **The per-type priority restriction (2.151.0) is now enforced everywhere a priority can be set, not just the New Ticket forms and ticket detail.** Staff can no longer pick a priority a ticket type doesn't offer through any surface:
+  - **Inline quick-priority menus** (agent ticket list, admin ticket list, agent dashboard) now list only the priorities the row's type allows, and refresh that set when the type is quick-changed in the same row. The <code>/api/tickets/{id}/set-priority</code> endpoint rejects a disallowed priority with a 422 and the menu surfaces the message.
+  - **Bulk "set priority"** (agent + admin) applies the priority only to selected tickets whose type permits it and reports how many were skipped, instead of forcing it onto every ticket (selections can span types with different allowed sets).
+  - **Ticket split** (agent + admin), **recurring-ticket schedules** (create + edit), and **ticket templates** (create + edit) now filter their priority picker to the chosen type and validate server-side on save.
+  - New shared partial <code>templates/partials/type-priority-filter.php</code> drives the client-side filtering on the standalone forms; new helper <code>filterTicketIdsForPriority()</code> backs the bulk skip. Existing records keep a now-disallowed stored priority (shown, never silently dropped); it only resets when the type is actively changed.
+
+## 2.151.0 &mdash; 2026-07-15
+
+### Added
+- **Ticket types can now restrict which priorities they offer.** Some types map to departments that don't use the full priority scale (e.g. a team that only ever triages Low / Medium / High and never Critical). Each type gains an <strong>Available Priorities</strong> section (<strong>Admin &rarr; Ticket Types &rarr; edit a type</strong>) where you check the priorities that type should offer. Leaving <strong>all</strong> checked keeps the type unrestricted — every priority, including any added later, is offered (the pre-upgrade behaviour, so existing installs are unaffected). The restriction is enforced on the priority picker of all three New Ticket forms (portal, agent, admin) and the ticket-detail priority picker, which now filter to the selected type's allowed set and reset an out-of-range selection when the type changes, plus server-side validation on ticket create and update so a stale or hand-crafted request can't set a disallowed priority. Existing tickets keep their current priority even if it's later removed from the type — it's shown but never silently dropped. New join table <code>ticket_type_priorities</code> (migration 069); no rows for a type means "unrestricted".
+- **Per-ticket-type business hours for SLA timers.** Some ticket types map to departments that don't keep the branch's hours — e.g. a back-office team working 9AM–5PM Mon–Fri while the floor is open evenings and weekends. Each type's tab on <strong>Admin &rarr; Settings &rarr; SLA Policies</strong> now has a <strong>"Use custom business hours for this type"</strong> override with its own weekly open/close schedule; when set, SLA response/resolution timers for that type count only those hours. Timezone always follows the global <strong>Business Hours</strong> setting — the override changes open/close hours only. Leaving the toggle off inherits the global schedule (unchanged behaviour). New column <code>ticket_types.business_hours_schedule</code> (migration 070, NULL = inherit); <code>Sla::getBusinessSchedule()</code> takes an optional type id and is threaded through SLA initialization, priority/type-change recalculation, and pause/resume.
+
+## 2.150.1 &mdash; 2026-07-13
+
+### Fixed
+- **Confidential ticket contents no longer leak into group notification emails.** Creating a confidential ticket previously emailed its full subject and description to every member of every group with "notify on new ticket" enabled — including people outside the confidential group who cannot otherwise see the ticket — and assigning a confidential ticket to a group emailed its body to that group's members. Both <code>notifyGroupMembers()</code> (creation) and <code>notifyAssignedGroup()</code> (assignment) now restrict recipients to members of the confidential type's group and redact the subject to <code>[Confidential ticket]</code> with a bare "open the ticket to view it" link instead of the body, mirroring the redaction already applied in the in-app notification feed. The in-app "new ticket" alert on these paths is likewise limited to confidential-group members.
+
+## 2.150.0 &mdash; 2026-07-13
+
+### Changed
+- **Clicking an actor's name in the audit log now filters the log to that person.** Previously the name linked out to the user's open tickets, which isn't useful when auditing. It now links to <code>/admin/audit-log?user_id=&lt;id&gt;</code>, showing every action that user has taken across both the audit log and ticket-timeline sources.
+
+## 2.149.2 &mdash; 2026-07-13
+
+### Documentation
+- **Documented the "similar past tickets" feature.** Added a full <strong>Similar Past Tickets</strong> section to the in-app AI docs (<strong>Admin → Docs → AI Classification</strong>, anchor <code>#similar-tickets</code>) covering the two-stage FULLTEXT-then-LLM pipeline, per-ticket caching, and the global-master-plus-per-type controls (including that the master switch overrides per-type and that confidential types are always excluded). Added a matching bullet to the readme's AI Features list and a per-type field row to the ticket-type table in <code>DOCS.md</code>.
+
+## 2.149.1 &mdash; 2026-07-13
+
+### Changed
+- **The similar-tickets master switch now explains its relationship to the per-type toggles and shows the current scope.** On <strong>Admin &rarr; Settings &rarr; AI Classification</strong>, the global "Show similar past tickets" switch now carries a panel that spells out that it <em>overrides</em> the per-type settings (off = hidden on every ticket regardless of type; on = shows only on types whose own toggle is on), and lists exactly which ticket types have their per-type toggle <strong>on</strong>, which have it <strong>off</strong>, and which are always excluded because they're confidential. A live banner updates as the admin flips the switch — before saving — so it's clear the master switch wins, with an "unsaved" hint until they click Save.
+
+## 2.149.0 &mdash; 2026-07-13
+
+### Added
+- **Per-ticket-type control for the "similar past tickets" panel.** The agent/admin similar-tickets assist (2.148.0) could only be switched on or off globally. Each ticket type now has its own <strong>"Show similar past tickets to agents"</strong> toggle (<strong>Admin &rarr; Ticket Types &rarr; edit a type</strong>), so a helpdesk can keep the feature on but suppress it for types where past-ticket suggestions aren't useful. The global switch at <strong>Settings &rarr; AI Classification</strong> remains the master on/off; the per-type toggle only narrows it. New column <code>ticket_types.ai_similar_check_enabled</code> (migration 068) defaults to <strong>on</strong>, so an install that already enabled the feature keeps showing it on every non-confidential type until an admin turns specific types off. Confidential types are always excluded (their bodies are never sent to the provider), and the toggle auto-disables when a type is marked confidential — mirroring duplicate detection and "No Wrong Door" routing. The Ticket Types settings matrix gains an "AI similar tickets" column.
+
+## 2.148.5 &mdash; 2026-07-13
+
+### Fixed
+- **Tour no longer shows the next instruction mid-scroll.** After the slow-scroll change (2.148.4), advancing to a step lower on the page (e.g. <em>My Location</em> &rarr; <em>Your Requests</em> on the portal <em>My Requests</em> page) showed the next popover <em>immediately</em>, then visibly slid it up as the page glided down &mdash; which looked like a step had been skipped. The popover is now held hidden for the duration of the scroll and revealed only once the page has settled, so the sequence reads cleanly: the page scrolls to the section, <em>then</em> the instruction appears. Applies to both the portal and agent walkthroughs.
+
+## 2.148.4 &mdash; 2026-07-13
+
+### Changed
+- **Tour now scrolls the page slowly so you can see it move.** Replaces the directional pill added in 2.148.3, which read as clutter. Driver.js jumps between steps with the browser&rsquo;s native smooth scroll, which is usually so fast the user never registers that the page moved and loses their place. While the tour is running (portal and agent), that scroll is now an eased ~0.5&ndash;1s animation (duration scales with distance, capped so it never drags), so the page visibly glides to the next step and the spotlight and popover track along with it. Implemented by wrapping <code>scrollIntoView</code> only for the duration of the tour and restoring it when the tour ends. No change to the tour flow.
+
+## 2.148.3 &mdash; 2026-07-13
+
+### Changed
+- **Tour now signals when it scrolls the page.** Driver.js jumps the page to each step, but its smooth scroll is often fast enough that the user&rsquo;s eye stays on the popover and never registers that the page <em>moved</em> &mdash; making it easy to lose your place. When a step is far enough off-screen to need a real jump, both the portal and agent tours now flash a brief directional pill (<strong>&ldquo;↓ Scrolling down the page…&rdquo;</strong> / <strong>&ldquo;↑ Scrolling up the page…&rdquo;</strong>) at the edge being scrolled toward. It auto-dismisses after about a second, never fires on small nudges or centered (element-less) steps, and doesn&rsquo;t block clicks. Copy/UX only &mdash; no change to the tour flow.
+
+## 2.148.2 &mdash; 2026-07-13
+
+### Fixed
+- **Credits roll now plays its music again on the dev server.** The credits page (<code>/credits</code>, the local-only tester thank-you roll) served its music bed from a route ending in <code>.mp3</code> (<code>/credits/audio.mp3</code>). PHP's built-in dev server (<code>php -S</code>) intercepts URLs ending in a known media extension and answers them itself &mdash; returning its own 404 without ever invoking <code>index.php</code> &mdash; so the audio route could never reach the router and the names rolled in silence. The route is now extensionless (<code>/credits/audio</code>); the browser still plays it because the handler sends an explicit <code>Content-Type: audio/mpeg</code> header. Works under both <code>php -S</code> and Apache. Names-only, no functional change to the roll itself.
+
+## 2.148.1 &mdash; 2026-07-13
+
+### Changed
+- **Portal tour now makes page changes obvious.** When the end-user walkthrough moved between sections (Dashboard &rarr; My Requests &rarr; New Request form &rarr; practice ticket &rarr; Profile) it navigated to a new page without clearly signalling the move, so users could lose track of where they were. Each hand-off step now spells out the destination before navigating (&ldquo;➡️ Click Next and we&rsquo;ll take you to your <strong>My Requests</strong> page&hellip;&rdquo;), and each arriving section opens with a <strong>📍 New page: &lt;name&gt;</strong> marker that confirms the page changed and names where the page lives in the navigation. Copy only &mdash; no behavioural change to the tour flow.
+
+## 2.148.0 &mdash; 2026-07-10
+
+### Added
+- **Similar past tickets, surfaced to the agent working a ticket.** A new opt-in AI feature (<strong>Settings &rarr; AI Classification &rarr; "Show similar past tickets to agents"</strong>, setting <code>ai_similar_enabled</code>, default off, gated behind the existing <code>ai_enabled</code> master switch) adds a <strong>Similar past tickets</strong> panel to the agent <em>and</em> admin ticket views. When an agent opens a ticket, it searches the <em>whole</em> ticket archive &mdash; including resolved and closed tickets &mdash; for tickets describing the same or a closely related problem, and lists the best matches with an AI note on how each relates and a relevance score. Two-stage RAG-style pipeline: (1) a MySQL <code>FULLTEXT</code> index on <code>tickets(subject, description)</code> (migration 067) narrows the archive to the ~20 most lexically-similar candidates with no API call, then (2) the configured provider (Anthropic or OpenAI, via the existing <code>AIClassifier</code> abstraction and the new <code>findSimilarTickets()</code> method) reranks them by usefulness. The panel loads asynchronously so the LLM call never blocks page render, and each result is cached per ticket in the new <code>ai_similarity_classifications</code> audit table (one LLM call per ticket, not per page view; a refresh button forces a recompute). Results are scoped to what the viewing agent may see, and <strong>confidential ticket types are never sent to the provider</strong> &mdash; mirroring the existing duplicate-detection safeguards.
+
+## 2.147.0 &mdash; 2026-07-09
+
+### Added
+- **Ticket types can prompt for a resolution note before the owner closes.** A new per-type checkbox &mdash; <strong>Prompt for a resolution note before the owner closes</strong> (<code>ticket_types.require_resolution_on_close</code>, migration 066, default off) &mdash; nudges agents to record what actually fixed a ticket instead of silently closing it. When it's on and the ticket's <strong>assigned owner</strong> moves it to a closed-bucket status (<em>Resolved</em>/<em>Closed</em>) from the ticket page without having added any comment, a modal appears with a note box pre-filled with a framework scaffold (<em>Action Taken &rarr; Verification &rarr; Next Steps</em>). <strong>Add resolution &amp; close</strong> saves the note as an internal note (staff-only, requester not emailed) and closes; <strong>Close without a note</strong> requires picking a reason (Duplicate / Spam / No response needed / Resolved elsewhere / Other) which is logged to the timeline. Deliberately narrow so it doesn't slow triage: it only fires for the assignee, only from the ticket page's Update panel, and only when no staff comment exists yet &mdash; so replying-then-closing, list quick-edits, bulk status changes, non-owner closes, and automated closes all skip it. Implemented on both the agent and admin ticket views (parallel templates); note/reason capture lives in the two <code>/update</code> handlers via the new <code>recordCloseResolution()</code> helper.
+
+## 2.146.0 &mdash; 2026-07-09
+
+### Added
+- **End-user Help section filled out to match the walkthrough.** The portal Help page previously had a single article (Floor Mode). It now has six more, one per topic the portal tour covers, written for the least technical patrons: <strong>Getting Started</strong> (dashboard, navigation, status banners, search, the account menu), <strong>Submitting a Request</strong> (templates, subject-with-instant-answers, description, request types incl. the &ldquo;No Wrong Door&rdquo; AI-routing type, priority/location/tags/attachments, the submit-time duplicate check, and drafts), <strong>Tracking Your Requests</strong> (the My Requests list, search/filter, plain-word statuses, whole-branch visibility, and the ticket detail view), <strong>Replying, Editing &amp; Closing</strong> (comments, reply-by-email, CC, edit, self-close, and what escalation/SLAs mean), <strong>Finding Answers Yourself</strong> (browsing/searching the Knowledge Base and rating articles), and <strong>Your Profile &amp; Emails</strong> (name/password/dark mode/timeline order and per-event email notification toggles). Each follows the existing docs template convention (overview card in <code>docs/index.php</code>, entry in the <code>portal-help-nav</code> sidebar, whitelist + title in the <code>/portal/help/{page}</code> route). No schema or behavior changes &mdash; content only.
+
+### Added
+- **Saving an AI-dependent ticket type now live-tests AI first.** Enabling <em>"Let AI route this to the best group"</em> (<code>ai_route_group</code>) or <em>"Check for duplicates on submit"</em> (<code>ai_dup_check_enabled</code>) on a ticket type used to save silently even when AI was switched off or misconfigured, leaving the feature dormant with no feedback. The create/edit handlers now call <code>AIClassifierFactory::fromSettings()</code> and run a real <code>testConnection()</code> before saving. If AI is off or the connection fails, the form re-renders with a warning modal that states the reason, links to <strong>Settings → AI Classification</strong> and the relevant help docs (opened in a new window), and warns that the type would just route every ticket to its Default Group. The admin can <strong>Save anyway</strong> (via an <code>ai_check_bypass</code> flag) or <strong>Close and edit</strong> to change the type. Confidential types force the AI flags off, so they skip the test entirely.
+
+## 2.144.0 &mdash; 2026-07-09
+
+### Added
+- **Portal tour now explains "No Wrong Door" ticket types.** When the helpdesk has one or more ticket types with <em>"Let AI route this to the best group"</em> enabled (<code>ai_route_group</code>) <strong>and</strong> AI classification is actually turned on, the walkthrough's ticket-type step now adds a short explanation naming those type(s): if the user isn't sure who handles their issue, they can pick that type and AI reads their description and routes the request to the best team, with a human stepping in if AI isn't confident. The explanation only appears when the feature is both configured and live — if no such type exists, or AI is disabled (so routing would be dormant), the tour stays silent about it. Placed exactly where the tour already explains that each type has its own form.
+
+## 2.143.2 &mdash; 2026-07-08
+
+### Fixed
+- **Navigation rail no longer disappears on the My Profile page.** The left sidebar renders whatever `sidebarItems` the current route passes, and the `/profile` route passed none — so it fell back to an empty list and every navigation icon vanished. The route now builds the correct rail (admin, staff, or portal) for the signed-in user's role, matching how the shared Notifications page already works.
+
+## 2.143.1 &mdash; 2026-07-08
+
+### Fixed
+- **Portal tour "Your Active Requests" step now reads correctly for new users.** The dashboard step's card renders an empty state ("You have no active requests…") when the user hasn't submitted anything yet — which is the normal case for someone taking the onboarding tour — but the tour popover still told them their requests "appear here" and to "click any row." The popover copy now adapts: when the list is empty it explains that requests <em>will</em> show up there once submitted, instead of pointing at rows that don't exist.
+- **Portal tour now shows how to reach the Profile page.** The walkthrough jumps straight to <code>/profile</code> for its last section, which left users unclear how they got there. A new opening step points at the account menu (top-right) and explains that you reach your profile by clicking <strong>your name → My Profile</strong> (the same menu that holds Restart Tour and Sign Out), with a centred fallback on mobile where that menu is collapsed. The preceding "close your request" step also now foreshadows the hand-off.
+
+## 2.143.0 &mdash; 2026-07-08
+
+### Added
+- **The portal walkthrough is now interactive and survives being followed.** Building on the 2.142.0 rewrite, the onboarding tour now demonstrates features live instead of only describing them:
+  - **A sample status banner** is injected at the top of the dashboard during the tour, so the "Status Banners" step always has a real-looking incident notice to point at (it's client-side only and vanishes when the tour moves on).
+  - **Knowledge Base suggestions are shown for real.** On the create-form step the tour types <em>"hotspot"</em> into the subject for you and expands the spotlight to include the matching KB articles that pop up, so you can see the "your answer may already be written" feature actually working.
+  - **The duplicate-ticket check is demonstrated.** A canned but realistic duplicate warning (with a similarity score and a peek at the "existing" ticket) is revealed on the Submit step, so users see exactly what happens when they file something that already exists.
+- **Following the tour no longer breaks it.** If the user does what a step suggests and it reloads the page — e.g. clicking the <strong>My Location</strong> toggle to see their branch's requests — the tour now <strong>resumes</strong> on the reloaded page at the next step instead of ending. Tour state (hand-off / in-progress / resume point) moved to <code>sessionStorage</code> so it's scoped to the session and never leaks into a later visit.
+- **A friendly "you've left the tour" toast.** If the tour is closed early (✕ / Esc / clicking the dimmed backdrop) or the user navigates somewhere the tour doesn't cover (e.g. opening a search result), a toast now tells them the tour ended and that they can restart it anytime from their name menu → <strong>Restart Tour</strong>.
+
+### Changed
+- The create-ticket form gained a `?tour=1` **preview mode** (`tourMode`): the walkthrough drives the real form in this mode, but it can never submit, autosave a draft, or create a ticket, and it shows a "Tour preview" banner. Normal (non-tour) use of the form is unchanged.
+
+## 2.142.0 &mdash; 2026-07-08
+
+### Added
+- **Portal walkthrough rewritten to cover every end-user feature.** The onboarding tour for portal users (Driver.js) now spans five pages instead of four and teaches everything a contact will actually see: status banners at the top of every page, the sidebar / global search (<kbd>/</kbd> shortcut) / Help menu / account menu, the My Requests list with search, filters, sorting, and the <strong>My Location</strong> branch-visibility toggle (shown only to users who have it), the new-request form — including per-type forms that rearrange and require fields as the <strong>Ticket Type</strong> changes, Knowledge Base article suggestions while typing a subject, priority ("let our team decide"), location, tags, attachments, the <strong>AI duplicate-ticket check</strong> that runs on submit (with an honest note on how AI is used and that confidential types are never sent to it), and draft autosave — then a full ticket anatomy lesson, and finally the profile page with per-event email notification toggles. Conditional steps skip UI the user doesn't have (permission- or config-gated), and the tour ends with a recap of where Help and Restart Tour live.
+- **New practice-ticket page for the tour: <code>/portal/tour/demo-ticket</code>.** Some ticket elements (the Escalate button, the green "Answer available" banner, attachments, CC list) only appear under specific conditions, so the tour now walks through a <em>synthetic</em> ticket rendered by the real portal ticket-view template with a <code>demoMode</code> flag. On it the tour explains status badges in plain words, the "What happens next?" box, the marked-answer banner, the timeline (sorting, collapsing older updates), commenting — including that <strong>replying to any notification email adds the reply to the ticket as a comment</strong> — CC'd colleagues, the Details panel, self-serve <strong>Edit</strong> and <strong>Close</strong> (with the satisfaction-survey mention), and <strong>what SLAs are and when the Escalate button appears</strong>. The page is deliberately <em>not</em> a database row: nothing is written, no notification/AI/SLA/auto-assign hooks can fire, any number of users can run the tour at once without seeing each other's activity, and an abandoned tour (closed browser) leaves nothing behind — the flow simply re-offers itself on the next portal visit. All action buttons on the practice page are disabled and a banner labels it a practice request.
+- **Migration 065** resets the per-user <code>show_portal_tour</code> flag so every user is offered the updated walkthrough once.
+
+### Changed
+- Portal templates gained stable tour anchor ids (ticket view, create form, list scope toggle, navbar Help/account menus); the stale "Your Summary" tour step that pointed at a removed dashboard element is gone.
+
+## 2.141.1 &mdash; 2026-07-06
+
+### Fixed
+- **Agent SLA help page no longer links to admin-only pages.** The new <strong>Agent &rarr; Help &rarr; SLAs &amp; Response Times</strong> page previously linked to <strong>Admin &rarr; Docs &rarr; SLA Policies</strong> and the <strong>SLA Compliance report</strong>, both of which require admin access — so a regular agent following those links hit a "no access" wall. Those links are now plain-text references, keeping the whole page usable by any agent.
+
+## 2.141.0 &mdash; 2026-07-06
+
+### Added
+- **New agent help page: "SLAs & Response Times."** Added <strong>Agent &rarr; Help &rarr; SLAs &amp; Response Times</strong>, a plain-English guide for agents explaining what an SLA is and why it exists, how the clock is measured against business hours / counted days / holidays (not calendar time), how to read the <em>On track / Warning / Breached</em> badge, what stops each clock, how policies attach on creation and recalculate on priority/type change, the in-app warning and breach notifications, pausing while waiting on the requester, where SLAs surface, and practical tips to stay on track. Wired into the agent help nav, the overview card grid, and the help search index. Complements the existing configuration-focused <strong>Admin &rarr; Docs &rarr; SLA Policies</strong> guide.
+
+## 2.140.1 &mdash; 2026-07-06
+
+### Changed
+- **Email help docs now document the outbound-mail `.env` switches.** Added an "Outbound Mail Switches" section to <strong>Admin &rarr; Docs &rarr; Email &amp; SMTP</strong> explaining `MAIL_ENABLED` (the master kill switch) and the new `MAIL_TRANSACTIONAL_ENABLED` bypass — what each defaults to, what they do, and why they live in the server `.env` rather than the admin UI. A matching troubleshooting bullet points anyone debugging "no mail at all" at the kill switch and the `SKIPPED` entries in `storage/logs/smtp.log`.
+
+## 2.140.0 &mdash; 2026-07-06
+
+### Added
+- **New `MAIL_TRANSACTIONAL_ENABLED` flag lets password-reset mail send while the general mail kill switch stays off.** When `MAIL_ENABLED=false`, `sendMail()` suppresses *all* outbound mail — so on an instance that deliberately keeps bulk ticket-notification mail off, users who request a password reset never receive the link (the reset flow itself works; the email is silently dropped). `sendMail()` now takes a `$transactional` flag, and the forgot-password handler passes it. When `MAIL_TRANSACTIONAL_ENABLED=true`, transactional mail (user-initiated, single-recipient — it can't be used for a blast) is allowed through even while `MAIL_ENABLED=false`; bulk notifications stay suppressed. Defaults to `false`, so behaviour is unchanged unless the flag is set. Requires SMTP configured in Admin &rarr; Settings.
+
+## 2.139.0 &mdash; 2026-07-06
+
+### Added
+- **New "AI Token Usage" report tracks AI token consumption over time.** Admins (anyone with `reports.view`) get a new card under Reports &amp; Analytics that aggregates the token counts already logged by the three AI features — skill classification, group routing, and duplicate detection — into one view. A **Bucket** selector rolls usage up by **hour, day, week, or month**, and a **Compare to** control overlays a second window on the same chart so any period can be measured against another: by default it auto-fills the equal-length window immediately preceding the selected range (true period-over-period), or you can type any custom comparison window. Summary cards show total, input, and output tokens plus API-call count, each with the percent change versus the comparison period (a rise reads red since more tokens means more cost, a drop reads green). Below the comparison chart, two tables break the current window down by feature and by provider/model. All figures come from the existing `ai_classifications`, `ai_group_classifications`, and `ai_duplicate_classifications` tables, so no new logging or migration was needed.
+
+## 2.138.0 &mdash; 2026-07-03
+
+### Added
+- **Ticket-list pagination now always offers a jump back to page 1 (and ahead to the last page).** Deep in a long ticket list the pager only showed the current page ±2, so getting back to the start meant clicking through every page. All three ticket lists (agent, admin, portal) now use the standard boundary pattern — `‹ 1 … 5 6 7 … 42 ›` — with first and last page links always visible and ellipses marking the gaps. The links go through the existing AJAX list refresh, so jumping to page 1 keeps filters, sort, and per-page intact without a full reload.
+
+### Fixed
+- **Admin ticket list "Showing X–Y of Z" now reports the correct row range.** The admin route paginates at 25 per page but the template computed the displayed range with a hard-coded 30, so from page 2 onward the label drifted (page 5 claimed rows 121–150 while actually showing 101–125). The label now uses the real per-page value passed by the route.
+
+## 2.137.3 &mdash; 2026-07-03
+
+### Changed
+- **THIRD-PARTY-NOTICES.md now reflects the self-hosted front-end stack.** The file still described all front-end libraries as CDN-loaded and claimed "distributing this project does not convey any GPL-licensed code" — untrue since 2.132.6 bundled everything under `public/assets/vendor/`, including a GPL-2.0-or-later CKEditor 5 build. The front-end section is retitled "bundled, self-hosted", the CKEditor note now states plainly that the GPL build ships with the repo (and how to avoid it), versions were verified against each bundled file's banner (Chart.js 4.5.1, Mermaid 10.9.6, CKEditor 43.3.1), and a new exception note records that the one-time web installer page still loads Bootstrap 5.3.2 + Icons from jsDelivr. Also pinned theseer/tokenizer at 1.3.1 (was "—"); all Composer entries re-verified against `composer.lock` and unchanged.
+
+## 2.137.2 &mdash; 2026-07-03
+
+### Changed
+- **README rewritten to match the app as it exists at v2.137.** The feature list — last refreshed around v2.42 — now covers everything shipped since: Kanban board and the four ticket-list views, the live Wallboard, Microsoft Teams integration, granular RBAC permission levels, configurable ticket statuses, ticket forwarding to external contacts, out-of-office coverage, server-side drafts, undo send, recurring tickets, stale-ticket follow-ups, manual escalation paths, confidential tickets, status banners, PWA/floor mode, presence and live updates, per-type form builder, the full 14-report catalogue, and the expanded REST API. Also corrected drifted facts: inbound email is Microsoft Graph only (IMAP support was removed), all front-end libraries are self-hosted since 2.132.6 (the CKEditor licensing note now reflects that it *is* bundled), the cron list gains `process-oof-coverage.php`, the env-var table gains `MAIL_ENABLED` and `UPLOAD_ALLOWED_TYPES`, the role table reflects RBAC instead of fixed roles, and the project-structure tree includes the kanban/floor/drafts/pwa/manager route files and new `src/` classes.
+
+## 2.137.1 &mdash; 2026-07-03
+
+### Fixed
+- **A reply sent through the undo-send countdown no longer reappears as an "unsent draft".** The draft autosaver pauses itself for 8 seconds after a form submit, but the undo countdown (default 10s, up to 120s) outlives that pause — so when the held send finally navigated the page, the autosaver's leaving-the-page flush re-saved the reply text *after* the server had already deleted the draft, resurrecting the just-sent message as a draft (restore banner on the ticket, ✎ Draft badge in lists). The undo-send helper now announces the real send with an `undosend:send` event on the form (the expiry send uses native `form.submit()`, which fires no `submit` event), and the autosaver treats it exactly like a submit — going quiet so the flush can't fire. Reproduced with a 12-second window, then verified fixed: expiry send leaves no draft behind, while clicking Undo still deliberately re-saves the draft. Affected every undo window longer than 8 seconds — including the default.
+
+## 2.137.0 &mdash; 2026-07-03
+
+### Added
+- **Undo send: new tickets and replies can now be taken back before they go out.** A new Admin → Settings → Undo Send page has an enable toggle with an **Undo window** (seconds, 3–120, default 10) field beside it. When on, submitting a new ticket or a reply holds the send client-side and shows a Gmail-style countdown toast — "Sending reply in 10s… **Undo**" — at the bottom of the screen; the message only reaches the server (and notification emails only go out) once the countdown finishes. Undo (or pressing Escape) cancels the send and returns you to the still-filled form; for staff replies the autosaved draft is re-saved, so the undone message is also safe from a closed tab. Covers all five send surfaces: the staff new-ticket form, agent and admin reply boxes (including internal notes and forwards, labeled accordingly), the portal new-request form, and the portal comment box. The hold engages only after the existing validation, duplicate-check, and reply-collision guards have all passed, and the expiry send bypasses them so they can't re-fire; submit buttons are frozen during the countdown so a second click can't race it. Off by default; the settings are audit-logged and findable in settings search.
+
+## 2.136.0 &mdash; 2026-07-03
+
+### Added
+- **Stale-ticket notifications can now be scoped to new tickets only.** A new **Coverage** choice on Admin → Settings → Stale Tickets picks between **Retroactive** (the previous and still-default behavior: every open ticket is eligible, including ones created before the feature was turned on — with an explicit warning that the first run can email the whole backlog at once) and **New tickets only** (a cutoff timestamp is stamped the moment you save, and only tickets created after it are ever notified — the historical backlog stays quiet). The cutoff is stable across re-saves so tweaking unrelated settings never silently moves it; switching to Retroactive clears it and switching back stamps a fresh one. The cutoff is stamped in database time (not PHP time) since it's compared against `tickets.created_at`, the processor logs which coverage mode each run used, and if the cutoff is ever missing in new-only mode the run safely skips everything instead of mass-mailing. Coverage changes are recorded in the audit log and the option is findable in settings search.
+
+## 2.135.0 &mdash; 2026-07-03
+
+### Added
+- **Ticket lists now flag tickets where you have an unsent draft.** An amber "✎ Draft" badge appears next to the subject — in the staff table, inbox, and card views (agent and admin) for unsent reply drafts, and in the portal "My Requests" list for unsent comment drafts. The badge is per-user (it marks *your* drafts, keyed to your account, one cheap indexed lookup per page) and disappears as soon as the draft is sent or discarded. This closes the discoverability gap where a draft saved "for later" was only visible once you happened to reopen the right form.
+
+## 2.134.1 &mdash; 2026-07-03
+
+### Fixed
+- **The "Restored your unsent draft" banner no longer appears when there is no draft.** The banner divs carry Bootstrap's `d-flex` class, whose `display:flex !important` overrides an inline `style="display:none"` — so the banner rendered whenever its container was visible (e.g. as soon as the reply panel was opened), draft or not. All five banners (staff/portal new-ticket forms and the agent/admin/portal reply boxes) are now hidden with the `d-none` utility class (which is declared after `d-flex` and wins), the autosave module toggles that class instead of the style attribute, and it force-hides the banner on init as a belt-and-braces guard. Verified against computed styles this time, not the inline style property. (Latent since the localStorage draft banner shipped; surfaced by 2.134.0.)
+
+## 2.134.0 &mdash; 2026-07-03
+
+### Added
+- **Ticket and reply drafts now autosave to the server and restore on your next visit.** Half-written work on the staff new-ticket form, the portal new-request form, and every reply box (agent, admin, and portal ticket views) is saved automatically a moment after you stop typing — so an accidentally closed tab, a crash, or "I'll finish this later" no longer loses the draft. Reopening the form shows a "Restored your unsent draft" banner with a one-click **Discard**; a quiet "Draft saved" timestamp appears under the editor as you type. Drafts live in a new `ticket_drafts` table keyed to your account (one per form, per ticket for replies), follow you across machines, and are deleted the moment the ticket or reply is actually submitted (server-side, so it works even if the page dies mid-submit). Unused drafts expire after 90 days. The new-ticket draft captures the whole form — subject, rich-text description, type (with its per-type field layout re-applied), status, due date, location, priority, group, assignee, custom fields including cascading dropdowns, tags, CC, and on-behalf-of.
+- Draft endpoints (`GET/POST /drafts`, `POST /drafts/discard`) require a valid session and the `X-CSRF-Token` header; rows are keyed to the logged-in user, so drafts can never be read, overwritten, or discarded across accounts. Portal draft saves enforce the same ticket-access rule as portal comments (own/merged/location-visible), answering an identical 404 for "not yours" and "doesn't exist" so the API can't be used to probe ticket IDs. Payloads are capped at 1&nbsp;MB with a clean "too large to autosave" response instead of an error page.
+
+### Changed
+- **The agent/admin reply box's old localStorage draft was replaced by the server-side draft.** The previous key wasn't scoped to the signed-in user, so on a shared machine the next person to log in could see the prior agent's unsent reply restored into the editor; any leftover localStorage draft is now proactively removed on page load. Reply drafts also survive switching machines and the reply-collision "Review" flow exactly as before.
+
+## 2.133.0 &mdash; 2026-07-02
+
+### Changed
+- **Stale-ticket notifications now follow the same days the SLA policy timer counts.** When a ticket's type + priority matches an SLA policy, its idle time is measured only on days that policy's timer advances: weekdays unticked on the policy, holidays excluded from SLA, and days with no business-schedule hours no longer count toward staleness. Full 24-hour days are still counted on counting days, so existing thresholds keep their meaning (`3d` = three counted days, not three business-hours days). Tickets with no matching SLA policy — or installs with SLA / business hours unconfigured — keep the previous wall-clock behavior. The stale processor's log and the `stale_notification_sent` timeline entry note when the counted-days rule was applied, and runs report how many tickets were past the wall-clock threshold but not yet stale on counted days.
+
+## 2.132.7 &mdash; 2026-07-02
+
+### Changed
+- **Wallboard moved from the left sidebar to the profile menu.** The "Wallboard" entry no longer appears on the admin or staff sidebar rail; it now lives in the account dropdown (top-right), visible to all staff and admins, between "Manage My Team" and "My Profile". The `/agent/wallboard` route and its access rules are unchanged.
+
+## 2.132.6 &mdash; 2026-07-02
+
+### Security
+- **All front-end libraries are now self-hosted; the app no longer loads anything from third-party CDNs.** Bootstrap, Bootstrap-Icons (+ its web fonts), SortableJS, Chart.js, driver.js, CKEditor 5, and Mermaid are vendored under `public/assets/vendor/` and referenced with same-origin `/assets/vendor/...` paths across every layout, report, ticket form, and docs page (the SRI attributes added in 2.132.5 were removed as unnecessary for same-origin assets). This removes the CDN-compromise and cross-domain-inclusion risk entirely, and eliminates a hard third-party dependency.
+- **Content-Security-Policy tightened accordingly.** `script-src`, `style-src`, `font-src`, and `connect-src` no longer allow `https://cdn.jsdelivr.net` or `https://cdn.ckeditor.com` — the policy is now `default-src 'self'` with only the (separately-tracked) `'unsafe-inline'` allowance remaining. Applied to both the site-wide header (`bootstrap.php`) and the embed-mode header (`portal.php`). (The standalone `/install/` wizard, which runs without the app CSP and is recommended for removal after setup, still references the CDN and is left unchanged.)
+
+## 2.132.5 &mdash; 2026-07-02
+
+### Security
+- **Added Subresource Integrity (SRI) to the site-wide CDN assets.** The Bootstrap CSS/JS, Bootstrap-Icons CSS, driver.js (tour) CSS/JS, and SortableJS are now loaded with `integrity="sha384-…" crossorigin="anonymous"` in all four layouts (`app`, `base`, `auth`, `public`) and the sortable partials, so a compromised CDN can't substitute malicious script/style — the browser rejects any file whose hash doesn't match. (Resolves the ZAP "Sub Resource Integrity Attribute Missing" / "Cross-Domain JavaScript Source File Inclusion" findings for the assets that load on every page. Not applied to Chart.js, which is pinned only to the `@4` range — SRI needs an exact version — or to CKEditor 5, whose ES-module import map dynamically loads sub-chunks that a single integrity hash can't cover; both are tracked separately.)
+
+### Notes (server configuration — applied on the production host, not in this repo)
+- **Forced HTTPS.** The port-80 Apache vhost now 301-redirects every request to the same host over TLS, so no application content or session cookie is ever served over plain HTTP (previously the app answered on HTTP and issued a session cookie without the `Secure` flag).
+- **Suppressed the Server version banner** (`ServerTokens Prod`, `ServerSignature Off`).
+
+## 2.132.4 &mdash; 2026-07-02
+
+### Security
+- **Attachment downloads now send `X-Content-Type-Options: nosniff`.** The agent, portal, and admin attachment routes served files with a stored MIME type but no anti-sniffing header (only the REST API route had it). All four now match — defence-in-depth so a browser can't second-guess the declared type on a downloaded file.
+- **The REST `GET /api/v1/meta` no longer exposes internal groups to portal tokens.** Group names/descriptions (and the agent list) are internal routing data and are now returned only to staff tokens; end-user tokens still receive the priorities, types, locations, and statuses they need.
+- **Hardened absolute-link generation against Host-header poisoning.** When `APP_URL` is not set, `appUrl()` now falls back to the server-pinned `SERVER_NAME` rather than the client-supplied `Host` header, so a spoofed `Host` can't rewrite links baked into emails (e.g. password-reset URLs). Setting `APP_URL` remains the recommended, deterministic configuration.
+
+## 2.132.3 &mdash; 2026-07-02
+
+### Security
+- **Teams webhook is now restricted to Microsoft endpoints (SSRF fix).** The outgoing Teams webhook URL was validated only as "an https URL," so an admin-set URL pointed at an internal host (the database subnet, a cloud metadata endpoint, `127.0.0.1`, …) would make the app issue blind requests from inside the network perimeter. Posts are now allowed only to `*.webhook.office.com` / `*.logic.azure.com` / `*.office.com` hosts, and IP-literal hosts are rejected.
+- **Sessions now pick up role changes and account deletion immediately.** The user's role was cached in the session at login and never re-checked, so demoting or deleting a rogue admin/agent left their existing session fully privileged until they logged out. Each authenticated request now re-reads the role from the database (and destroys the session if the account is gone).
+- **TOTP codes can no longer be replayed.** A correct 6-digit code could be submitted more than once within its ~90-second window (including across the separate web and API login paths), authenticating extra sessions from a single captured code. The web and API login now record the code's time-step per user and reject any already-used or older step. (Adds `users.totp_last_step` via migration 063.)
+- **Confidential ticket subjects no longer leak through the notifications feed.** Being @-mentioned on a confidential ticket surfaced its subject (and, in the API, a comment excerpt) in the recipient's notifications even without access to the ticket. The web feed and `GET /api/v1/notifications` now redact the subject/excerpt to "[Confidential ticket]" unless the recipient is the creator or a member of the confidential type's group.
+- **The CSAT "reopen ticket" link no longer reopens on a bare GET.** A state-changing `GET /survey/{token}/reopen` could be triggered silently by email-security scanners and link-preview/prefetch bots. The link now lands on a confirmation page and the reopen happens only on an explicit POST.
+
+## 2.132.2 &mdash; 2026-07-02
+
+### Security
+- **Fixed a cross-group ticket disclosure in the duplicate-detection preview (IDOR).** The agent-side duplicate-preview endpoint (`/agent/tickets/dup-preview`) and the duplicate-check candidate list returned a ticket's subject, requester, and body for *any* non-confidential ticket id, ignoring the agent's group/assignment visibility — so any agent could read tickets in groups they don't belong to by iterating ids. Both the preview and the candidate query now apply the same role-based visibility rules used everywhere else (`ticketStaffVisibilitySql`). The portal-side preview is likewise restricted to the requester's own tickets, plus same-branch tickets only when the user holds the *view location tickets* flag.
+- **Blocked spoofed inbound email from running privileged ticket commands.** The inbound-reply processor honoured `#close`/`#open`/`#priority` commands and attributed them to a staff member based solely on the (forgeable) `From` address, with no sender-authentication check. It now reads the `Authentication-Results` header that Exchange Online stamps at the trust boundary and ignores inline commands from any message with a failing DMARC/compauth verdict (a spoof), logging the rejection. Legitimate internal and DMARC-passing external mail is unaffected.
+- **Closed two stored-XSS vectors.** (1) Text Block custom-field content is now run through the rich-HTML sanitizer when rendered on ticket forms, instead of being echoed raw to every requester. (2) SVG is no longer an accepted branding-logo format (it can carry inline script and was served inline from the web root); `image/svg+xml` was also removed from the attachment extension map and SVG/HTML/XML added to the upload extension blocklist as defence-in-depth.
+
+## 2.132.1 &mdash; 2026-07-02
+
+### Fixed
+- **Out-of-office auto-replies no longer show raw HTML tags on the ticket page.** The auto-reply body was assembled as HTML but opened with the plain-text greeting ("Hello …"), so the timeline — which decides HTML-vs-plaintext by the first character — misread the whole reply as plain text and escaped every tag, leaving visible `<br />`, `<hr>`, `<blockquote>` and even the agent's `<html><body>` document wrappers on screen. The body is now wrapped so it begins with a tag, and the agent's Outlook message (which Microsoft Graph returns as a full HTML document) is run through the same rich-text sanitizer the rest of the app uses — which unwraps the `<html>/<head>/<body>` wrappers and drops any `<style>`/`<script>` — before it is stored and emailed. Applies to newly generated auto-replies.
+
+## 2.132.0 &mdash; 2026-07-02
+
+### Changed
+- **The Text Block field on the ticket-forms builder now uses the CKEditor 5 rich-text editor** instead of a plain `<textarea>`. Admins can format instructional text with headings, bold/italic/underline, colours, lists, alignment, links, block quotes, and horizontal rules — matching the editor used elsewhere (email templates, KB articles, banners). Existing plain-text blocks keep rendering exactly as before: content is only treated as HTML when it starts with a tag, otherwise it is escaped and its line breaks preserved. On the form the block renders its saved HTML read-only. (The editor is initialised inside the field modal with Bootstrap's focus trap disabled so CKEditor's link/dropdown dialogs remain usable.)
+
+## 2.131.1 &mdash; 2026-06-30
+
+### Documentation
+- **Documented Out-of-Office Coverage** in the in-app help (Docs → Automations & Escalations → Out-of-Office Coverage) and the GETTING_STARTED guide (§13.4): what it does, prerequisites, the three action modes, scope, the two auto-reply messages (with/without a return date), the read-only `oof.view` permission, and cron setup.
+- **Azure app-registration setup now lists `MailboxSettings.Read`.** The inbound-email Graph setup guide (Admin → Settings → Email reply guide) and GETTING_STARTED now include the read-only `MailboxSettings.Read` application permission needed for out-of-office coverage, noted as optional and reusing the same app registration. Docs search indexes the new content.
+
+## 2.131.0 &mdash; 2026-06-30
+
+### Added
+- **New permission: "View out-of-office status" (`oof.view`).** A grantable, read-only permission that lets non-managers (e.g. Power Users) open Admin → Settings → Out of Office and see which agents are currently away — without being able to change any coverage settings. Assign it in Admin → Permission Levels. For view-only holders the page shows only the current-status table (the configuration form is hidden); all changes remain gated behind "Manage automations & escalations" (`automations.manage`), including the save handler itself. The settings-nav link now appears for either permission.
+
+## 2.130.3 &mdash; 2026-06-30
+
+### Fixed
+- **OOF auto-reply no longer invents a return date.** When an agent turns on Outlook automatic replies *without* a time range (`status: alwaysEnabled`), Graph still returns a placeholder `scheduledEndDateTime` (~tomorrow). The refresh stored it, so the auto-reply wrongly told requesters the agent was "out of office until tomorrow." The end date is now only trusted for genuinely `scheduled` out-of-office; an `alwaysEnabled` agent has no return date.
+
+### Added
+- **Separate auto-reply message for no-return-date absences.** Admin → Settings → Out of Office now has two message boxes: one used when the agent has a scheduled end date (with `{return_date}`), and one used when they have no return date (no date promised). Each has its own default and is independently editable.
+
+## 2.130.2 &mdash; 2026-06-30
+
+### Fixed
+- **OOF coverage no longer auto-assigns the whole unassigned queue.** In reassign modes, the coverage job treated *every* unassigned, unanswered ticket that had an available group member as something to auto-assign — which would hijack normal triage and ignore each group's configured assign-strategy the moment OOF coverage was switched on. It now only acts on an unassigned ticket when **every** member of its group is out of office (the genuine single-person-group / everyone-away gap); when any member is available, the ticket is left for normal triage. Tickets actively *assigned* to an away agent are still reassigned to an available colleague as before.
+
+## 2.130.1 &mdash; 2026-06-30
+
+### Fixed
+- **OOF coverage: stop logging "no mailbox" agents as errors.** When an agent's helpdesk email has no readable Exchange Online mailbox (unlicensed, on-prem-only, an alias, or a non-mailbox/test account), Microsoft Graph returns `404 ErrorInvalidUser`. The coverage job already handled this safely (the agent is simply skipped), but it logged two alarming lines per agent per run (`ERROR` + `WARN`). A 404 is now a single quiet `INFO` ("no mailbox — skipping"), while genuine failures such as a missing-consent `403` or a `5xx` are still logged loudly so real problems stay visible. `curlGet()` gained an optional status-code out-param and an error-logging toggle to support this.
+
+## 2.130.0 &mdash; 2026-06-30
+
+### Added
+- **Out-of-office coverage** (Admin &rsaquo; Settings &rsaquo; Out of Office). Solves the "single-person group" problem: when the only agent in a group goes on vacation, their unanswered tickets no longer sit untouched until they return. A new cron job (`scripts/process-oof-coverage.php`, every 15 min) reads each group member's Outlook automatic-replies (out-of-office) state via Microsoft Graph and caches it. For each active ticket whose responsible agent is out of office, it **reassigns** the ticket to an available group member — and when there's **nobody to reassign to** (single-person groups, or everyone away) it **auto-replies the requester once** with the agent's out-of-office message, leaving the ticket open. Configurable action (reassign-then-reply / reassign-only / reply-only), scope (unanswered-only / all active), and a customisable auto-reply template with `{requester_name}`, `{ticket_id}`, `{agent_name}`, `{return_date}` tokens. Reuses the existing Azure app registration — only the read-only `MailboxSettings.Read` application permission needs to be granted. Admin page shows each agent's current OOF state from the last run.
+
+### Changed
+- **Shared Microsoft Graph helpers** extracted into `src/graph.php` (cURL transport, OAuth2 client-credentials token, and the new `getAutomaticReplies()` reader), so both the inbound-email processor and the out-of-office processor share one implementation.
+
+## 2.129.0 &mdash; 2026-06-29
+
+### Added
+- **New report: SLA Violations** (Reports &rsaquo; SLA Violations). A focused log of every ticket that breached its SLA in the selected period — each row shows the breach type (first-response and/or resolution), how far overdue it ran, the assigned agent, status, and priority. Unlike the SLA Compliance report (which lists only tickets already flagged `sla_state = breached`), this report also catches tickets that are *overdue but not yet recalculated* — those still awaiting a first reply past their due time, or still open past their resolution deadline. Available as a scheduled report too.
+
+## 2.128.1 &mdash; 2026-06-26
+
+### Fixed
+- **Help button in the top bar now works for logged-in patrons.** For non-staff users it pointed at `/portal` (the dashboard they were usually already on), so clicking *Help* appeared to do nothing. It now links to the patron help section at `/portal/help`.
+
+## 2.128.0 &mdash; 2026-06-26
+
+### Added
+- **Wallboard: every widget is now clickable and drills into its tickets.** Click a number card to open the ticket list filtered to exactly those tickets (open, unassigned, SLA breached/at-risk, due today, created/resolved today, …). Click a single chart slice or bar to drill into just that status / priority / type / group / location — or click elsewhere on the chart for the whole set. In the *Agent workload* list, a row opens that agent's open tickets (the other lists' rows already open the ticket). Whatever filters are set on the board (location, group, type, priority) are carried into the drill-down. Help doc updated with a new "Click any widget to drill in" section.
+
+### Changed
+- **Agent ticket list gained four URL filters** that back the wallboard drill-downs: `created_today=1`, `due_today=1`, `sla=breached|warning`, and `created_within=<days>`. They behave like the existing filters (validated, carried across sort/pagination); unknown values are ignored.
+
+## 2.127.1 &mdash; 2026-06-26
+
+### Fixed
+- **Wallboard help doc summary wording was stale.** The intro and the "saved to your account" summary still described the old "which widgets and in what order" model and didn't mention the independent columns, per-widget heights, or column count. Reworded so the help (Agent Help → Live Wallboard) accurately lists everything that's saved. (The feature-by-feature instructions were already current.)
+
+## 2.127.0 &mdash; 2026-06-26
+
+### Added
+- **Wallboard: independent columns.** The board is now a set of vertical columns (choose 2, 3 or 4 from the new selector in customise mode) that each flow on their own. A tall widget in one column no longer pushes the widgets beside it down — so you can stack three short number cards in the left column next to a single tall chart in the right, or any mix you like, and the heights never fight across columns. Drag widgets within a column or across to another; drop into an empty column to start filling it. Columns collapse into a single stack on narrow screens. Layout (which column, what order) is saved per user.
+
+### Changed
+- **Wallboard widgets are now one-per-column width** rather than the old variable Bootstrap spans. Every widget fills the width of the column it's in; use more columns for a denser board, fewer for wider widgets. (Combined with per-widget heights from 2.126.0, you now control both dimensions.)
+
+## 2.126.0 &mdash; 2026-06-26
+
+### Added
+- **Wallboard: resize widgets to any height.** In customise mode each widget now has a grip on its bottom edge — drag it up or down to set that widget's height, and it's remembered per widget on your account. Charts redraw to fill the new size.
+
+### Changed
+- **Wallboard widgets are no longer force-stretched to a uniform row height.** Previously every widget in a row stretched to match the tallest one, so a single number card sitting beside a chart ballooned to ~300px of mostly empty space. Each widget now starts at a sensible default height for its type (compact for number cards, taller for charts and lists) and keeps whatever height you give it. (This also removes the last source of drag jitter, since a reorder can no longer resize anything.)
+
+## 2.125.2 &mdash; 2026-06-26
+
+### Fixed
+- **Wallboard drag still twitched when dragging a short widget next to a tall one.** The grid's cards stretch to match the tallest card in their row (equal-height rows). So dragging a short widget (e.g. a number card) beside a tall one (e.g. a chart) ballooned the short card to the tall height — which reflowed the whole board under the cursor, slid a different card under the pointer, and bounced the card straight back out: an endless glitch loop. While customising, cards now sit at their own natural height (top-aligned) instead of stretching, so a reorder only ever *moves* cards, never resizes them. The equal-height look returns the moment you click **Done**.
+
+## 2.125.1 &mdash; 2026-06-26
+
+### Fixed
+- **Wallboard drag was twitchy — cards glitched back and forth.** Two causes. (1) The insertion point was recalculated from each card's *live* position every pointer move, but right after a reorder the other cards are mid-slide (carrying a CSS transform), so they reported animated, in-between positions and the order kept flip-flopping. The decision now runs against a cached snapshot of the *settled* layout (document coordinates), rebuilt only when a move actually commits. (2) The old "which side of the card's centre line" test flipped on sub-pixel hand jitter; it's replaced by a containment model — the dragged card only hops when the pointer is fully *inside* another card, after which the pointer sits over the dragged card's own footprint, creating a dead zone so a held, shaking hand can't oscillate.
+
+## 2.125.0 &mdash; 2026-06-26
+
+### Changed
+- **Wallboard: rearrange widgets like phone home-screen icons.** Clicking **Customize** now puts the board into a customise mode (the widgets gently wobble) instead of opening a panel. In that mode you grab any widget *anywhere* — not a small handle — and drag it; the other widgets smoothly slide out of the way and the one you're holding drops into the new slot, with a FLIP animation so nothing jumps. Each widget shows a red **×** badge to remove it, and an **Add widget** button opens the full widget list to switch more on. Click **Done** to finish — every change still saves to your account automatically. Drag now uses Pointer Events, so it works by **touch** as well as mouse (the old grip-handle drag only worked with a mouse). The board auto-scrolls when you drag near the top or bottom edge. The help doc (**Agent Help → Live Wallboard**) was updated to match.
+
+## 2.124.1 &mdash; 2026-06-26
+
+### Fixed
+- **Teams setup docs pointed at a template Microsoft has renamed.** The Teams settings page and the Teams help doc told admins to pick the workflow template *"Post to a channel when a webhook request is received"* — Microsoft has since renamed it to **"Send webhook alerts to a channel"**, so searching the old name in the Workflows dialog returns no matches. Both spots now reference the current name (and note searching `webhook`, and which lookalike variants to avoid).
+- **Teams help doc now warns that routing a ticket type does not enable Teams on its own.** Added a callout: the master **Enable Teams notifications** switch must be on and saved for any card to post, and the per-row Test button works regardless of that switch — so a passing test with no tickets posting means the master switch is off.
+
+## 2.124.0 &mdash; 2026-06-26
+
+### Added
+- **Wallboard: drag-and-drop widgets directly on the board.** Each widget now has a grip handle (top-right, on hover) — grab it and drag the widget anywhere on the page; the other widgets shift out of the way and snap into their new positions as you move. Drop it and the new arrangement is saved to your account automatically, so every agent keeps their own personal layout with the widgets that matter most up top. (You can still toggle widgets on/off and reorder from the **Customize** panel — both stay in sync.) Reordering preserves live charts without a reload. The help doc (**Agent Help → Live Wallboard**) was updated to cover it.
+
+### Changed
+- **Wallboard help doc** now describes drag-to-rearrange on the board itself, alongside the Customize panel.
+
+---
+
+## 2.123.0 &mdash; 2026-06-26
+
+### Added
+- **Teams: route different ticket types to different channels.** The Microsoft Teams integration can now send each ticket type to its own channel — e.g. IT tickets to the IT channel and Lifelong Learning tickets to theirs. On **Settings → Integrations → Microsoft Teams** there's now a *Route by ticket type* table: paste a per-type channel webhook (each with its own Test button) for any type you want to split out, and leave the rest to fall back to the **Default channel webhook**. Resolution per ticket: the type's own webhook if set → otherwise the default → otherwise nothing is posted (no error). The default may be left blank to notify only the types you explicitly route. Event toggles (created / assigned / status / SLA) apply across all channels; routing only changes *where* a notification lands.
+
+### Documentation
+- **Help docs for the two new features.** Added **Agent Help → Live Wallboard** (real-time refresh & controls, filters, customising widgets, the widget catalogue, what data you see, and wall-screen use) and **Admin Docs → Microsoft Teams** (what gets posted, creating a Workflows channel webhook, connecting it, choosing events, per-type channel routing, testing, and troubleshooting). Both are wired into their help navigation, landing-page cards, and the help search index.
+
+---
+
+## 2.122.0 &mdash; 2026-06-26
+
+### Added
+- **Microsoft Teams integration — post ticket activity to a Teams channel.** A new admin page (**Settings → Integrations → Microsoft Teams**) connects the helpdesk to a Teams channel via an **Incoming Webhook** URL (created with the modern *Workflows* / Power Automate "Post to a channel when a webhook request is received" template — the supported successor to the retired Office 365 connectors). Highlights:
+  - **Per-event toggles** — independently enable/disable a card for **new ticket created**, **ticket assigned**, **status changed** (shows the old → new status), and **SLA breached**. Events fire from a single central choke point per type, so every channel is covered — agent, admin, portal, email-to-ticket, and floor mode — and SLA breaches are caught wherever recalculation runs (web or cron).
+  - **Rich cards** — each notification is an Adaptive Card with the ticket number/subject, key facts (status, priority, type, group, location, requester, assignee) and an **Open ticket** button linking straight back to the ticket.
+  - **Send test message** — verify the webhook from the settings page (against the URL you've typed, before saving) with a clear success/error result.
+  - **Fail-soft** — a missing, misconfigured, or unreachable webhook can never break ticket creation or updates: every send is wrapped and time-limited, and failures are logged, not surfaced to the user. The webhook URL is admin-only and kept out of the audit-log detail.
+
+---
+
+## 2.121.0 &mdash; 2026-06-26
+
+### Added
+- **Live Wallboard — a real-time, per-user-customisable operations dashboard.** A new **Wallboard** page (`/agent/wallboard`, on the agent and admin sidebars) that auto-refreshes on a poll and is built for a wall-mounted screen as much as a desk. Highlights:
+  - **Real-time** — widgets refresh on a selectable interval (10s / 15s / 30s / 1m / 2m) with a live "updated" indicator; polling pauses automatically when the tab is hidden and catches up on focus, and there's a manual **Pause** / **Refresh now** / **Fullscreen** set.
+  - **Permission-aware** — login required (any staff role), and every metric is scoped through the same ticket-visibility rules used everywhere else (`ticketStaffVisibilitySql`), so a user only ever sees counts for tickets they're allowed to open — confidential and out-of-group tickets never leak, even in an aggregate. Admins see everything.
+  - **Customisable per user** — a **Customize** panel to toggle any of 19 widgets on/off and drag to reorder; choices, filters and refresh interval persist per user. New users get a sensible default set (open / unassigned / SLA breached / created today / resolved today, open-by-status, open-by-priority, created-vs-resolved trend, agent workload, and the unassigned queue).
+  - **Filters** — narrow the whole board by location, group, type, priority, and time range (the range drives the trend / CSAT / first-response widgets). Filters apply *on top of* each user's visibility, so they can only ever narrow, never widen, what's shown.
+  - **Widget catalogue** — KPI cards (open, unassigned, SLA breached / at-risk, due today, created/resolved today, average first response, CSAT, SLA compliance %), breakdown charts (open by status / priority / type / group / location), a created-vs-resolved trend line, and live lists (agent workload, unassigned queue, recently updated). SLA-specific widgets are hidden automatically when SLA tracking is off site-wide.
+
+---
+
+## 2.120.0 &mdash; 2026-06-26
+
+### Documentation
+- **Brought the in-app help in line with the last several weeks of features.** Added a new **Kanban Board** page to the Agent Help section (`/agent/help/kanban`) — built-in status/priority/assignee boards, custom personal-organiser boards, scoped assignee columns, board filters, and the 500-card cap — and wired it into the help nav, the help landing cards, and the help search index. Expanded and corrected the existing help pages to cover features shipped since they were last revised:
+  - **Agent → Working on Tickets** — ticket forwarding (the internal-vs-external permission split, reply capture, the *External* timeline badge, and the confidential-ticket block), live ticket updates (auto-refreshing timeline, the viewing/replying presence pill, the reply-collision warning, and reply-draft autosave), the sortable timeline + per-user default order, and the on-ticket Satisfaction Survey panel.
+  - **Agent → Ticket List & Filters** — the Kanban button in the view switcher and the live "Opened by X / Being replied to by X" hints.
+  - **Admin → SLA Policies** — per-policy *"SLA counts on"* weekday selection, and the new day/hour/minute (`d`/`h`/`m`) duration syntax that now applies to every editable duration field.
+  - **Admin → Email & SMTP** — per-group overrides for the requester-facing email templates.
+  - **Admin → Automations & Escalations** — the *Escalate Button Visibility* setting (always-show vs only-after-SLA-breach) and the now-inline-editable per-type stale thresholds.
+  - **Admin → Users & Agents** — the audit-log *Export to Excel* (CSV) action, a correction to the prune description (ticket-history Timeline rows are retained, not pruned), and a note on auto-provisioned external contacts.
+- **Backfilled a missing changelog entry for 2.88.7** (the open-redirect / AI-classify IDOR / token-revocation / `storage/` guard security release), whose notes had been folded under the 2.88.8 (tests-only) heading.
+
+---
+
+## 2.119.2 &mdash; 2026-06-25
+
+### Fixed
+- **Form Builder: the edit (pencil) and remove (X) buttons really do work now.** The actual cause (v2.119.1 fixed a related-but-different latent issue): the page's JavaScript created its Bootstrap modal objects the moment the script ran, but the Bootstrap library is loaded by the page layout *after* the page content — so `bootstrap` didn't exist yet, the modal setup threw, and every field-row button handler bound after it was silently skipped. The modals are now created lazily, the first time a button is actually clicked, by which point Bootstrap has loaded. Verified in-browser: both the edit and remove dialogs open with a clean console.
+
+## 2.119.1 &mdash; 2026-06-25
+
+### Fixed
+- **Form Builder: hardened the drag-to-reorder setup.** The field-row action handlers are wired up inside a single block of JavaScript that began by initialising the drag-to-reorder library (Sortable, loaded from a CDN). If that library failed to load — a restricted network, a CDN hiccup, or being offline — the initialisation threw and aborted the rest of the script. The Sortable setup is now guarded: if it can't load, drag-to-reorder is disabled but every other Form Builder action keeps working. (Note: this was not the cause of the dead edit/remove buttons — see 2.119.2.)
+
+## 2.119.0 &mdash; 2026-06-25
+
+### Added
+- **Export the audit log to CSV (opens directly in Excel).** A new **Export to Excel** button on the Audit Log page downloads every matching entry as a UTF-8 CSV. The export honours whatever filters are active — actor, action, source, and date range — so the file matches what's on screen, and it's unpaged (all rows, not just the current page of 50). Columns: When, Source, Actor, Action, Target Type, Target ID, Detail, IP Address. The export action itself is recorded in the audit trail.
+
+## 2.118.0 &mdash; 2026-06-25
+
+### Added
+- **Type durations in days, hours or minutes anywhere a time is configured.** Every editable duration field — SLA first-response and resolution targets, the global and per-type stale thresholds, the stale re-notify gap, and the escalation re-fire cooldown — now accepts a unit suffix: type `72h`, `3d` or `4320m` and they all mean the same thing. You can combine units too (`1d 2h 30m`). A bare number keeps each field's previous unit (minutes for SLA, hours for stale/escalation), so existing habits still work. Saved values are displayed rolled up into the largest units that fit — `60m` shows as `1h`, `80m` as `1h 20m`, `24h` as `1d`.
+
+### Changed
+- All editable duration fields now store **minutes** internally (the stale and escalation fields previously stored whole hours), so sub-hour values are no longer lost. The roll-up is calendar-based everywhere (`1d = 24h`); the SLA preview no longer treats a day as 8 business hours. Existing values are migrated automatically.
+
+## 2.117.0 &mdash; 2026-06-25
+
+### Added
+- **Edit per-type stale thresholds directly from the Stale Tickets settings page.** The Per-Type Overrides table is now editable inline: each ticket type has a threshold field you can set and save without leaving for the Ticket Types editor. Leave a field blank to fall back to the global threshold, or set it to `0` to disable stale detection for that type. Saving records each change in the audit log.
+
+## 2.116.1 &mdash; 2026-06-25
+
+### Changed
+- Renamed the **Priorities** settings nav item to **Ticket Priorities** for clarity.
+
+## 2.116.0 &mdash; 2026-06-25
+
+### Added
+- **Admins can now choose when the Escalate button appears on tickets.** A new **Escalate Button Visibility** setting (Settings → Escalation Paths) offers two modes: **Always show** (the existing behaviour — the button appears on every ticket that has an escalation path) or **Only after SLA breach** (the button stays hidden until the ticket's SLA timer has breached). This lets teams reserve manual escalation for tickets that have actually fallen behind, instead of offering it on every ticket. The mode applies to both the agent and the requester (portal) Escalate buttons. The "breached only" mode falls back to always-showing the button when SLA tracking is turned off site-wide, so the action is never hidden permanently. Defaults to "Always show", so existing installs are unchanged.
+
+---
+
+## 2.115.0 &mdash; 2026-06-25
+
+### Added
+- **SLA policies can now choose which weekdays their timer counts.** Each policy row (per ticket type and priority) gained an **"SLA counts on"** control with a Mon–Sun toggle. Deselect a day — e.g. Sunday — and that policy's first-response/resolution timer freezes on that day even if the organization is open then, so SLA deadlines roll to the next counted day. Previously the only lever was the global Business Hours open/closed schedule, which is shared by every policy and conflates "are we open" with "should the SLA tick." The selection is stored per policy (`sla_policies.counted_days`); leaving all seven days selected preserves the prior behaviour, so existing policies are unchanged. The chosen days are also honoured when pausing/resuming an SLA, so a never-counted day isn't credited back as paused time.
+
+---
+
+## 2.114.0 &mdash; 2026-06-24
+
+### Added
+- **Staff can now control the notification emails for tickets *they* submit.** Agents and admins open tickets too, but their profile only exposed agent-facing toggles — so requester-side preferences (`notify_ticket_created`, `notify_ticket_updated`, `notify_ticket_merged`, `notify_ticket_solved`, `notify_ticket_closed`, `notify_csat`) had **no UI for staff**, even though those columns gate real emails (e.g. the "your ticket was closed" email keys off `notify_ticket_closed`). The profile now shows a **"Tickets You Submit"** group for staff mirroring the portal-user options, so an agent who files a ticket can choose whether to hear about replies, resolution, closure, merges, and surveys on it.
+
+### Fixed
+- **The no-JS profile-save fallback no longer silently zeroes hidden notification preferences.** The bulk `POST /profile` handler wrote all 14 notification columns as `isset($_POST[col]) ? 1 : 0`. Because each role's form only renders a subset of toggles, submitting that form (e.g. without JS) flipped every *unrendered* column to 0 — which is how two staff accounts ended up with `notify_ticket_closed = 0` and stopped getting closure emails for their own tickets. The form now emits a `_notify_fields` marker listing the columns it actually rendered, and the handler only updates those — an unchecked-but-rendered toggle still resolves to 0. (The primary save path remains the per-field `/profile/setting` AJAX endpoint, which was always correct.) Affected staff accounts had the wrongly-zeroed flags reset to the intended default.
+
+---
+
+## 2.113.1 &mdash; 2026-06-24
+
+### Fixed
+- **CC'ing a user via an automation rule now emails them too.** The `add_cc` automation action (in `executeAutomation()`) inserted the `ticket_cc` row but, unlike the manual CC button, never notified the person. It now calls the same `notifyCcAdded()` helper. Since there's no human actor on an automation, the notification is attributed to `Automation "<rule name>"` and the in-app record carries no "added by" (the `mentioned_by` foreign key is left null rather than a bogus user id).
+
+---
+
+## 2.113.0 &mdash; 2026-06-24
+
+### Fixed
+- **Two missing email notifications around CCs and staff replies now fire.** (1) Adding someone as a CC on a ticket (`POST /api/tickets/{id}/cc`) inserted the row but never told them — they only heard about the ticket on the *next* reply. A new `notifyCcAdded()` now sends a one-time "you were added as a CC" email (new `ticket-cc-added` template, since the generic ticket-updated template assumes a comment body) plus an in-app notification, respecting the recipient's `notify_ticket_cc` opt-out. (2) When a staff member posted a **public** reply to a ticket assigned to *another* agent, only the requester, CCs, and watchers were emailed — the assignee got nothing (the assignee was only notified for *internal notes*, via `notifyAgentNoteAdded()`). A new `notifyAssignedAgentReply()` now notifies the assignee on public staff replies across all four reply paths (agent, admin, floor, and the v1 API), skipping the reply author and reusing the `notify_requester_replied` opt-out. To avoid double-emailing, `notifyWatchers()` now skips the assigned agent, who is notified separately.
+
+---
+
+## 2.112.0 &mdash; 2026-06-24
+
+### Added
+- **Reports now have a date-range preset dropdown alongside the from/to pickers.** Every report's date filter (`reportDateRange()`) gained a `range` parameter that resolves common windows server-side — Today, Yesterday, Last 7 / 30 / 90 days, This week, Last week, This month, Last month, This quarter, Last quarter, Year to date, Last 12 months, and Last year — plus Custom range for the manual from/to inputs. Picking a preset auto-applies; editing a date flips the dropdown to "Custom"; and if a manual range happens to match a preset, the dropdown stays in sync. The default landing window is now "Last 30 days". The picker is a shared partial (`report-date-range.php` + `report-range-script.php`) wired into all date-scoped reports (overview, agent performance, response times, SLA, ticket volume, lifecycle, location, CSAT, trends, FCR, and the custom builder).
+
+---
+
+## 2.111.3 &mdash; 2026-06-23
+
+### Fixed
+- **The audit-log prune card no longer overstates what it removes.** The viewer at `/admin/audit-log` merges system audit events (`audit_log`) with allowlisted ticket-history events (`ticket_timeline`), but prune only deletes from `audit_log` — so old ticket-history rows stayed on screen after a prune, making it look like nothing happened. The prune still works exactly as before (and intentionally leaves ticket history alone, since those rows belong to each ticket's own timeline); the card copy now states this plainly and adds a note that ticket-history events are retained and may keep appearing in the list after pruning.
+
+---
+
+## 2.111.2 &mdash; 2026-06-23
+
+### Changed
+- **The ticket view switcher now sits in one consistent spot across every view.** The Table / Compact / Card buttons and the Kanban button are now a single segmented control pinned to the far-right of the toolbar on the list pages *and* the board — instead of the switcher floating mid-toolbar on the lists (and sliding sideways when the table-only Columns dropdown appeared/disappeared) while jumping to the screen edge on the board. Because the control is now the last element in the toolbar, changing layout no longer shifts its position. The standalone Kanban icon button was folded into the same group: `ticket-view-switcher.php` gained an optional `$tvBoardUrl` that appends the Kanban link to the control, highlighted when you're on the board.
+
+---
+
+## 2.111.1 &mdash; 2026-06-23
+
+### Fixed
+- **The ticket-list view switcher is back on the Kanban board.** The board page only carried a single "List view" button, so once you were on the board there was no way to jump to the Table / Compact / Card list layouts — you had to navigate away by hand. The board toolbar now shows the same Table / Compact / Card segmented control as the list pages, alongside a highlighted Kanban button marking the current view. Picking a list layout saves the choice (via `/profile/setting`) and navigates to the list, preserving the active search. The shared `templates/partials/ticket-view-switcher.php` gained two optional knobs — `$tvActiveKey` (which button to highlight) and `$tvNavBase` (navigate here after saving instead of reloading) — so the board can reuse it without duplicating markup; the list pages are unaffected.
+
+---
+
+## 2.111.0 &mdash; 2026-06-22
+
+### Security
+- **No generic passwords anywhere — the Manual Setup seeder now makes you choose account passwords.** `php database/seed.php` previously created `admin@localdesk.user`, `agent@localdesk.user` and `user@localdesk.user` with hard-coded passwords (`Password123!`). It now **prompts for a password for each of the three accounts** (minimum 8 characters, with confirmation), or reads them non-interactively from `SEED_ADMIN_PASSWORD` / `SEED_AGENT_PASSWORD` / `SEED_USER_PASSWORD` for scripted installs. The README's "Default Accounts" table no longer ships any passwords.
+- **Every other hard-coded password literal removed from the codebase.** The demo/screenshot seeder (`database/seed_test_data.php`) now sources one chosen password for all demo accounts from a prompt or the `SEED_PASSWORD` env var (so the automated screenshot workflow can still run unattended), and the PHPUnit fixtures (`tests/Support/DatabaseSeeder.php` and friends) generate a fresh random password per test run instead of using a literal. Added a shared `promptForPassword()` helper (`src/helpers.php`) that suppresses terminal echo on POSIX shells.
+
+---
+
+## 2.110.1 &mdash; 2026-06-22
+
+### Fixed
+- **`database/seed.php` now seeds the RBAC tables, so the demo admin and agent can actually reach their interfaces.** A fresh Manual Setup (`php database/seed.php`) created the `roles`, `permissions` and `role_permissions` tables (from `schema.sql`) but left them empty — the seeding migrations are stamped-not-run. With no role rows, `roleIsAdmin()`/`roleIsStaff()` resolved every account to "no privileges", so the seeded `admin@localdesk.user` and `agent@localdesk.user` could log in but got **403** on `/admin` and `/agent` (only the end-user account worked). The seeder now inserts the four built-in roles, the 19-permission catalog, and the default grants — mirroring the web installer's consolidated seed (`public/install/index.php`). The web-installer path was never affected.
+
+---
+
+## 2.110.0 &mdash; 2026-06-22
+
+### Changed
+- **Kanban Assignee board now scopes its columns instead of listing every agent.** Previously the Assignee board rendered a column for every staff user in the system. Now, for a non-admin agent it shows only **Unassigned + themselves + agents already holding a ticket they can see**; an admin still sees all staff. (No tickets were ever leaked — the board has always applied the same fail-closed `ticketStaffVisibilitySql` predicate as the list, so a card can't appear for a ticket the viewer isn't permitted to see; this change is about not exposing the whole agent roster as empty columns.)
+
+### Added
+- **Board filters.** A Filters control on every Kanban board with:
+  - **My team's tickets only** — restricts the board to tickets assigned to a teammate (a staff member who shares a group with the viewer) or left unassigned. On the Assignee board this also narrows the columns to just those teammates.
+  - **Group filter** — a checklist of groups; a non-admin can filter within their own groups only, an admin within any group.
+  Active filters show a count badge, persist across board switches and search, and have an explicit Clear action.
+
+---
+
+## 2.109.0 &mdash; 2026-06-22
+
+### Added
+- **Kanban board ticket view (agents & admins).** A fourth ticket view alongside Table / Compact / Card, reached from the new board button in the ticket-list toolbar (`/agent/tickets/board`, `/admin/tickets/board`). Agent and admin share one controller and one template (`templates/pages/shared/kanban-board.php`) so the board is never duplicated across the parallel ticket templates.
+  - **Built-in boards** group tickets by **Status**, **Priority**, or **Assignee**. Columns are derived live from `ticket_statuses` / `ticket_priorities` / staff users, and dragging a card calls the existing `/api/tickets/{id}/set-status|set-priority|assign` endpoints — so the timeline entry, SLA pause/resume, automations and notifications all fire exactly as they do from the list's quick-edit pickers.
+  - **Custom boards** are a personal organizer: an agent defines their own buckets (columns) and drags tickets into them. Placement is stored (`kanban_card_placements`) and **no ticket field changes** — a moved card keeps its real status/priority/assignee. Boards are private to their owner unless shared with the team. Buckets can be added, renamed, recolored and deleted by the board owner.
+  - Drag-and-drop is native HTML5 (no new JS dependency), optimistic with rollback on error. The board respects the same fail-closed ticket visibility predicate as the list, redacts confidential tickets, and caps at the 500 most-recent matching tickets with an on-screen notice.
+  - New tables `kanban_boards`, `kanban_buckets`, `kanban_card_placements` (migration `058`); board page routes + `/api/kanban/*` management/placement API in `src/routes/kanban.php`.
+
+---
+
+## 2.108.1 &mdash; 2026-06-19
+
+### Added
+- **Mobile API: per-user request rate limiting.** Every authenticated `/api/v1` endpoint is now capped at `API_RATE_LIMIT_PER_MIN` requests per rolling 60-second window (default 120; `0` disables). Enforced at the single `_apiAuth()` choke point via a fixed-window counter table (`api_rate_limits`, migration `057`), keyed on the user so extra tokens don't widen the allowance. Responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining`; over the cap returns `429` with `Retry-After`. The limiter **fails open** — a counter DB error logs and allows the request rather than taking the API down — and opportunistically prunes stale windows so the table stays tiny. Hardening step ahead of exposing the API to the public internet.
+
+### Documentation
+- Documented rate limiting (headers, `429`/`Retry-After`, the `API_RATE_LIMIT_PER_MIN` knob) in `docs/API.md` and `openapi.json`.
+
+---
+
+## 2.108.0 &mdash; 2026-06-19
+
+### Added
+- **Mobile API: ticket attachment upload & download.** `POST /api/v1/tickets/{id}/attachments` accepts `multipart/form-data` (one `attachments` file or repeated `attachments[]`), with an optional `timeline_id` to hang files off a reply. It reuses the web uploader's allow-list, size cap, storage path and MIME→extension mapping, but validates strictly and returns a clean `422` on a bad type/size/timeline (rather than the web flow's silent skip). `GET /api/v1/attachments/{id}` streams the raw bytes to any caller who can access the parent ticket, releasing the session lock before streaming.
+- **Mobile API: push-notification device registration.** New `push_device_tokens` table (migration `056`) plus `POST /api/v1/push/register` and `POST /api/v1/push/unregister`. Every in-app notification now also fans out through a `deliverPushNotification()` hook in `createNotification()`. **Delivery is intentionally stubbed** — the APNs/FCM send is a no-op until `PUSH_ENABLED=true` and provider credentials are configured; registration, storage and the dispatch hook are complete and tested.
+- Added `/storage/attachments/*` to `.gitignore` so runtime uploads can't be committed.
+
+### Documentation
+- Documented all four new endpoints in `docs/API.md` and `openapi.json`, and refreshed the "Known gaps" section (attachment up/download now done; push delivery and per-endpoint rate-limiting remain).
+
+---
+
+## 2.107.4 &mdash; 2026-06-19
+
+### Documentation
+- **Added a human-readable Mobile API reference at `docs/API.md`,** generated from the actual `/api/v1` route definitions in `src/routes/api.php`. Covers every endpoint, auth/2FA/throttle behaviour, roles & visibility, response schemas, and a "known gaps" section (no attachment up/download, no push-token registration, no device-revocation list).
+- **Brought `openapi.json` back in sync with the code.** Three things the spec was missing: the `POST /auth/rotate` endpoint (was implemented but undocumented); the `/auth/login` two-factor flow (`totp_code` request field and the `401 { totp_required: true }` response); and the `/auth/login` `429` throttle response.
+
+---
+
+## 2.107.3 &mdash; 2026-06-19
+
+### Fixed
+- **The portal dashboard's recent-tickets list no longer wraps the ticket number.** Applied the same `#`/Subject column treatment as the "My Requests" list (2.107.2): the `#` column is fixed-width with `white-space:nowrap` so the number always stays on one line, and the Subject column clips overflowing text with an ellipsis (full subject on hover) instead of wrapping.
+
+---
+
+## 2.107.2 &mdash; 2026-06-19
+
+### Fixed
+- **The portal "My Requests" ticket list no longer wraps the ticket number.** On the requester-facing list, the `#` and Subject columns had no width/wrap rules, so on narrow widths the ticket number could wrap onto a second line and the subject pushed the table around. The `#` column now matches the agent/admin tables — fixed width with `white-space:nowrap` so the number always stays on one line — and the Subject column clips overflowing text with an ellipsis (full subject available on hover) instead of wrapping.
+
+---
+
+## 2.107.1 &mdash; 2026-06-19
+
+### Fixed
+- **Rich-text email intros no longer render with broken/dropped styling.** Every transactional email wraps the customisable intro in a styled paragraph, but the CKEditor that edits those intros emits its own `<p>…</p>`, producing an invalid `<p><p>…</p></p>` — which mail clients parse by dropping the intended 14px/grey styling (and adding a stray blank line). The intro wrapper is now a `<div>` instead of a `<p>` in the nine editor-managed templates (Ticket Created, Updated, Merged, CSAT, Reminder, Group Alerts/New Ticket, Agent Assigned, Group Assigned, Escalation Alert), so a saved rich-text intro inherits the correct styling and multi-paragraph/bulleted intros render as valid HTML. Plain-text intros are unchanged. This was a latent issue that only surfaced once an intro was saved through the rich-text editor (e.g. the new per-group overrides).
+
+---
+
+## 2.107.0 &mdash; 2026-06-19
+
+### Added
+- **Per-group email templates.** The requester-facing automated emails — *Ticket Created*, *Ticket Updated*, *Customer Reminder*, and *CSAT Survey* — can now be worded differently per group. On **Settings → Email Templates**, an *"Editing for:"* picker lets you choose a group and give that team its own subject, intro, and button; leaving any field blank inherits the global default. So, for example, the IT group's *Ticket Created* email can quote the SLA response/resolution targets (`{{sla_response}}` / `{{sla_resolution}}`) while Facilities keeps the simpler default. Resolution order for each field is **group override → global custom value → built-in default**, and the footer stays shared across all emails. No schema change: overrides are stored as suffixed `settings` keys (`email_intro_ticket_created__group_<id>`) created only when a group is actually customised, so groups without overrides are unaffected. The handling group is read from the ticket at send time, so a reassigned ticket's later emails follow whichever group owns it then.
+
+---
+
+## 2.106.14 &mdash; 2026-06-19
+
+### Added
+- **The live "Opened by X" hint now shows in the Compact (inbox) and Card list views too.** It previously only appeared in the table view; the same amber subject + *"Opened by / Being replied to by X"* hint (and its ~10-second live appear/clear polling) now works in all three layouts. No new code path — the card and inbox subject cells were given the same `ld-subject-cell` markup the existing list poller already drives, so they update without a refresh exactly like the table view.
+
+---
+
+## 2.106.13 &mdash; 2026-06-19
+
+### Security
+- **Tightened the Content-Security-Policy with `object-src 'none'`** (blocks `<object>`/`<embed>`/plugin-based content). Note: `script-src` still allows `'unsafe-inline'` because the templates depend on inline `<script>` blocks and `onclick=`-style handlers; removing that allowance requires migrating all inline JS to per-request nonces or external files, which is tracked as a separate templating refactor rather than a header change. All other directives remain locked down (`default-src 'self'`, `frame-ancestors 'none'`, `base-uri`/`form-action 'self'`).
+
+---
+
+## 2.106.12 &mdash; 2026-06-19
+
+### Changed
+- **Auto-migration on web requests is now race-safe.** Pending migrations are applied on every request (see `src/bootstrap.php`); two simultaneous requests could both see a migration as pending and run the same DDL at once, throwing on the second (e.g. "column already exists") and 500-ing that request. The runner now takes a MySQL advisory lock (`GET_LOCK`) before applying, and re-checks the applied set after acquiring it, so only one process applies at a time. A fast path returns immediately when nothing is pending, so the common request pays no extra round-trip.
+
+---
+
+## 2.106.11 &mdash; 2026-06-19
+
+### Security
+- **Database connections now use real server-side prepared statements** (`PDO::ATTR_EMULATE_PREPARES => false`). Emulated prepares do the escaping client-side; with the `utf8mb4` DSN the app was already safe against the classic charset SQLi and every query uses placeholders, but disabling emulation has the driver enforce the value/SQL separation. Verified with the full test suite (410 tests). No `LIMIT ?` / `OFFSET ?` placeholders exist in the codebase (the one pattern that commonly breaks under this setting), so the change is transparent.
+
+---
+
+## 2.106.10 &mdash; 2026-06-19
+
+### Security
+- **The installer no longer echoes raw database / setup error messages.** The setup wizard printed the verbatim `PDOException` message on a failed DB connection and the raw exception message on a failed install step. Both are reachable only before installation completes (the runtime lock blocks re-runs), but during that window a visitor could harvest host/credential/path hints. The DB step now logs the driver message server-side and shows a friendly, non-sensitive hint mapped from the error code; the setup step logs detail and shows a generic message pointing to the server error log.
+
+---
+
+## 2.106.9 &mdash; 2026-06-19
+
+### Security
+- **Uploaded attachments are stored with an extension derived from their validated MIME type, not the client filename.** `handleAttachmentUploads()` previously took the stored-file extension straight from the user-supplied filename, so a file could be stored on disk as `.php` (its random `att_*` name made it non-executable on the current Apache config, but a misconfigured nginx+FPM host that served `storage/` would execute it). The new `safeUploadExtension()` helper maps the validated MIME to a fixed extension for known types and, for anything else, sanitises the client extension and denies executable ones (`php`, `phtml`, `phar`, `exe`, …), falling back to `.bin`. The original filename is still preserved for display and download.
+
+---
+
+## 2.106.8 &mdash; 2026-06-19
+
+### Security
+- **Login no longer leaks account existence through response timing, and the SLA cron token compare is constant-time.** Both the web login (`Auth::attempt`) and the API login skipped `password_verify()` entirely when no user matched the email, so a missing account returned measurably faster than a real account with a wrong password (timing-based user enumeration, only partially masked by the throttle). Both now always run one `password_verify()` — against a shared dummy bcrypt hash (`Auth::DUMMY_PASSWORD_HASH`) when the user is absent — equalising the timing. Separately, `public/sla-cron.php` now compares its token with `hash_equals()` instead of `!==` (it already fails closed when the token is unset).
+
+---
+
+## 2.106.7 &mdash; 2026-06-19
+
+### Security
+- **Service-worker generation now injects dynamic values as JSON literals.** `/sw.js` built its JavaScript by raw string-interpolating the cache version and the branding app name into the worker source (and the app name into a comment). The cache version is currently `APP_VERSION` + a hex hash (not user-controllable), but the branding app name is admin-set, and raw interpolation is fragile: a crafted name could break out of its JS context and execute at the service worker's root scope on every client. Both values are now emitted via `json_encode()` as proper JS string literals. Added `Public/PwaServiceWorkerTest`, which confirms a hostile app name is escaped (verified separately with `node --check`).
+
+---
+
+## 2.106.6 &mdash; 2026-06-19
+
+### Security
+- **CSV exports now neutralise spreadsheet formula (CSV/DDE) injection.** The ticket export, KB-article export, and the failed-import "skipped rows" download wrote user-controlled cell values (subject, tags, names, KB title/body, imported data) verbatim. A value beginning with `=`, `+`, `-`, `@`, tab or CR is executed as a formula when the file is opened in Excel/LibreOffice — e.g. a ticket subject of `=HYPERLINK(...)` or a DDE payload runs in the admin's spreadsheet. Added a shared `csvCell()` sanitizer (prefixes such values with a single quote) and an `fputcsvSafe()` wrapper, applied to all export data rows. New test `TicketsTest::test_export_csv_neutralises_formula_injection`.
+
+---
+
+## 2.106.5 &mdash; 2026-06-19
+
+### Security
+- **The admin attachment download now enforces the confidential re-auth gate.** `GET /admin/attachments/{id}/download` fetched the attachment by id and streamed it after only `Auth::requireAdmin()`, applying neither the per-ticket confidential re-authentication that the ticket-view page enforces nor any redaction. An admin who is not a member of a confidential ticket's group could pull its attachments by enumerating ids. The route now mirrors the ticket view: if the attachment's ticket requires confidential re-auth (`requiresConfidentialReAuth`) and the 5-minute re-auth window has not been granted, it redirects to the ticket (which prompts for re-authentication) instead of serving the file.
+
+---
+
+## 2.106.4 &mdash; 2026-06-19
+
+### Security
+- **Ticket updates now validate the assignee and group instead of trusting any id.** The ticket-update handlers (`POST /api/v1/tickets/{id}/update` and `POST /agent/tickets/{id}/update`) accepted an arbitrary `assigned_to` user id — including a portal/customer account — and an arbitrary `group_id` that need not exist. A staffer could "assign" a ticket to a customer (who would then receive assignment-notification mail containing ticket content) or move it into a bogus group. Both handlers now reject an `assigned_to` that is not a staff user (`staffRoleSqlIn`) and a `group_id` that does not exist (422 on the API, flash-and-redirect on the web form).
+
+---
+
+## 2.106.3 &mdash; 2026-06-19
+
+### Security
+- **CSRF protection added to the form-builder JSON endpoints and fixed on the branding form.** The ten `POST /admin/forms/*` endpoints (layout save/visibility/label/add-existing/remove, field create/update/delete/upload-image, system-label) read their body from `php://input` and had **no CSRF check at all**, so an attacker could forge cross-site requests against a logged-in user with `workflows.manage` to corrupt or delete custom fields and form layouts. Separately, `POST /admin/settings/branding` *called* `verifyCsrf()` but discarded its boolean return, making the guard a no-op. Added a shared `requireJsonCsrf()` helper (validates the `X-CSRF-Token` header the front-end already sends) and applied it to all ten endpoints; the branding handler now honours the check. New tests in `Admin/FormBuilderCsrfTest`.
+
+---
+
+## 2.106.2 &mdash; 2026-06-19
+
+### Security
+- **Knowledge-base article editing now requires the `kb.articles.manage` permission.** The edit form (`GET`/`POST /admin/kb/articles/{id}/edit`) was gated only on `Auth::requireStaff()`, while the sibling create/delete/history routes require `kb.articles.manage` — so any staff member, regardless of KB permission, could overwrite any article (defacement / planting trusted-looking but malicious instructions or links). Both edit handlers now require `kb.articles.manage`, matching create and delete. Admins are unaffected (admin roles bypass every permission check).
+
+---
+
+## 2.106.1 &mdash; 2026-06-19
+
+### Security
+- **Bulk ticket actions now enforce per-ticket visibility for non-admin staff.** The confidential/visibility filter in `POST /agent/tickets/bulk` and `POST /admin/tickets/bulk` was gated on `if (Auth::isAdmin())` — exactly backwards. Admins (who reach confidential tickets through the audited re-auth flow) got the filtering, while ordinary agents — who hold the bulk permissions by default — got **none**, letting any staffer close / reassign / re-status / re-prioritise / re-group / merge / delete *any* ticket id (including confidential tickets outside their groups) just by POSTing the ids. Non-admin staff bulk sets are now intersected with the shared `ticketStaffVisibilitySql()` predicate (the same rule the ticket list/count queries use); the admin path keeps its existing confidential-group exclusion. Added a regression test (`AccessControlTest::test_agent_cannot_bulk_act_on_invisible_tickets`).
+
+---
+
+## 2.106.0 &mdash; 2026-06-19
+
+### Changed
+- **Background polls no longer hold a user's session lock.** The presence heartbeats, the ticket-detail and ticket-list "who's viewing" polls, and the notification count/feed polls now release the PHP session lock immediately after the auth check, before doing their (read-only) work. PHP serializes concurrent requests that share a session behind a single lock, so a user running several poll timers at once could have those polls — and their real navigation — queue behind each other; releasing early removes that self-contention. Access control is unchanged (the lock is dropped only after authentication/authorization).
+
+### Performance
+- **Added a composite `ticket_timeline (ticket_id, action)` index** (migration 055). The admin resolution-time / SLA / aging reports run a correlated `WHERE ticket_id = ? AND action = 'status_changed' AND details LIKE …` subquery per ticket in range; the table previously indexed only `ticket_id` (the foreign key), so each subquery gathered a ticket's whole timeline and filtered `action` row by row. The composite narrows on both columns up front. No effect at small data volumes (where each ticket has few timeline rows); it pays off as timeline history accumulates.
+
+---
+
+## 2.105.0 &mdash; 2026-06-19
+
+### Changed
+- **File downloads no longer freeze the rest of the app for the same user.** Every file-streaming route (agent/admin/portal attachment downloads, the admin backup ZIP, the import "skipped rows" CSV, the ticket CSV export, and PWA icons) now releases the PHP session lock *before* streaming the file. Previously PHP held an exclusive lock on the session for the whole transfer, so while one tab downloaded a large attachment or backup, every other request from that same user — navigation, API polls, the live ticket updates — blocked until the download finished, looking like a hung tab. The lock is released only after the permission check, so access control is unchanged.
+- **Ticket CSV export got faster on large exports.** The per-row correlated subquery that fetched each ticket's tags (one extra table scan for every exported row) was replaced with a single pre-aggregated join, so tags are gathered in one grouped pass regardless of export size. Output is unchanged.
+
+---
+
+## 2.104.2 &mdash; 2026-06-18
+
+### Fixed
+- **The ticket-list column fix (2.104.1) now actually takes effect for everyone.** The resizable-columns feature saves per-page column widths in the browser's `localStorage` and restores them on every load *in preference to* the freshly-computed layout — so anyone who had ever dragged a ticket-list column kept getting their old widths back, with a too-wide Type column squeezing Subject to a sliver and forcing a horizontal scrollbar (the 2.104.1 sizing pass was being overridden before it could apply). The column-width storage key has been bumped to `v2`, which abandons those stale pre-fix widths one time so the new Type→Group→Location priority-fit becomes the default. Column widths you set from now on still persist as before. (This one-time reset clears saved widths on every resizable table site-wide, not just the ticket list.)
+
+---
+
+## 2.104.1 &mdash; 2026-06-18
+
+### Fixed
+- **Ticket-list columns no longer crush the Subject or overflow off-screen.** The table still fills its container without a horizontal scrollbar, but when the columns don't all fit, width is now shed from **Type** first, then **Group**, then **Location** (each truncating with an ellipsis down to a readable floor) before the Subject gets squeezed — instead of the old behaviour where wide Type/Group/Location values pinched Subject down to a sliver. Subject keeps a comfortable share, and the inline-edit chevrons on the Type/Group cells stay clickable even when the value is truncated. Applies to both the agent and admin ticket lists, and re-fits after ajax filter/sort/page changes and inline quick-edits.
+
+---
+
+## 2.104.0 &mdash; 2026-06-18
+
+### Changed
+- **The ticket page header now stays put while you scroll.** On both the agent and admin ticket views, the band with the ticket title, status/priority/SLA badges, the concurrent-viewer indicator, and the Watch / Escalate / Split / Merge / Back actions is now pinned just below the navbar (matching the static-header behaviour of the dashboards and ticket lists). Everything below it — description, attachments, tags, timeline, and the reply box — scrolls underneath. A practical upside: the *"someone else is in this ticket"* presence indicator can no longer scroll off-screen, so a collision warning stays visible the whole time you're working the ticket.
+
+---
+
+## 2.103.0 &mdash; 2026-06-18
+
+### Added
+- **The ticket list's "Opened by X" hint is now live.** It used to be a snapshot from page load, so it kept showing an agent on a ticket they'd already left (and missed anyone who opened one after the page loaded). The agent and admin ticket lists now poll every ~10 seconds and update each row on their own: the amber subject + *"Opened by / Being replied to by X"* hint appears when someone enters a ticket and clears when they leave — no refresh. It keeps working after an ajax filter/sort/page change, since the visible rows are re-scanned each tick.
+- New batch endpoint `GET /api/tickets/presence?ids=…` backs it: it returns presence only for the requested tickets the caller is allowed to see (filtered by the same visibility predicate the list uses) and that another staff member currently has open. Ids out of the caller's scope are silently dropped.
+
+---
+
+## 2.102.0 &mdash; 2026-06-18
+
+### Added
+- **Live ticket updates — no refresh needed.** While you're on a ticket, the page now keeps itself current on an ~8-second poll:
+  - **The concurrent-viewer pill appears/updates on its own** — when another agent opens the ticket, or starts drafting a reply, the *"… is viewing / is replying"* badge shows up (and clears when they leave) without a refresh.
+  - **New timeline activity is injected automatically.** Replies, internal notes, status/priority/assignment changes, and inbound emails from anyone else slot into the timeline the moment they happen, with a brief highlight on each new entry. The "show older/newer updates" collapser and your chosen sort order are preserved. Your in-progress reply draft is never touched.
+  
+  Implementation note: the presence endpoint now also returns the ticket's newest timeline id; when it advances past what you loaded, the page re-fetches and swaps in the server-rendered timeline (which keeps internal-note visibility, AI/system-note toggles, and ordering exactly right). Viewing a ticket has no side effects, so the background fetch is safe. The old "this ticket was updated — refresh" banner now only appears as a fallback.
+
+---
+
+## 2.101.0 &mdash; 2026-06-18
+
+### Added
+- **Reply drafts are now autosaved.** Your in-progress reply is saved to the browser as you type, so it survives a refresh, an accidental navigation, or going off to read a colliding reply — when you come back the reply box reopens with *"Restored your unsent draft"* (with a **Discard** link). The draft is cleared the moment the reply is actually sent. This is what makes **Review their reply** in the collision warning safe: it opens the up-to-date ticket in a new tab and your draft is preserved either way.
+
+### Fixed
+- **Reply-collision excerpt no longer shows raw `&nbsp;`.** The preview of the other agent's reply now strips HTML, decodes entities, and collapses non-breaking spaces and whitespace runs into single spaces, so it reads as clean text. (Rendered as plain text on the client — it can't inject markup.)
+- **Reply-collision "… replied (N ago)" time is now correct.** It was computing the elapsed time in the browser against a server timestamp, which could be hours off (e.g. "1 hour ago" for a reply seconds old). The age is now computed on the server in seconds and formatted as-is, so there's no timezone skew.
+- **The "viewing / replying" header indicator is far more visible.** It was easy-to-miss muted grey text; it's now a coloured pill — blue while someone is only viewing, amber while they're replying.
+
+---
+
+## 2.100.0 &mdash; 2026-06-18
+
+### Changed
+- **Concurrent-viewer warning is no longer a pop-up.** Testers found the "Ticket Already Open" modal that fired on the ticket page intrusive, so it's gone. In its place:
+  - **In the ticket list**, a ticket that another staff member currently has open shows its subject in amber (an ADA-compliant `#b45309` on white, ~6.3:1 contrast) with a small italic hint underneath — *"Opened by Chris Jasztrab"*, or *"Being replied to by Chris Jasztrab"* if they have the reply box open. The hint is a point-in-time snapshot taken when the list page loads.
+  - **On the ticket page**, a quiet line in the header replaces the modal: *"Chris Jasztrab is viewing this ticket"*, upgrading to *"Chris Jasztrab is replying to this ticket"* (amber, pencil icon) while they have the reply panel open. It updates live on the existing 20-second presence poll and clears when they leave.
+- Each presence heartbeat now reports an `activity` (`viewing` / `replying`) so the indicators can tell the two states apart. (Migration 054.)
+
+### Added
+- **Reply-collision warning.** If another agent posts a public reply while you're drafting yours, clicking **Send Reply** now holds the submit and shows a warning naming who replied, when, and a short excerpt of what they said — with **Review their reply** (opens the up-to-date ticket in a new tab so your draft is untouched), **Cancel**, or **Post anyway**. The check runs at submit time against the live ticket, so it catches a reply that landed seconds earlier. Internal notes and forwards are unaffected; only public replies collide.
+
+---
+
+## 2.99.1 &mdash; 2026-06-18
+
+### Fixed
+- **Oldest-first timeline now truly shows the oldest entry at the top.** The first cut reversed the timeline purely with CSS, which left the "show older updates" collapser — and the hidden entries — pinned to the *top* of the list, so the genuinely oldest update stayed tucked behind a link. Ordering and collapsing are now done server-side: in either direction the entries you read first are shown at the top and the collapsed overflow (plus its toggle) sits at the bottom, labelled "Show N older updates" (newest-first) or "Show N newer updates" (oldest-first). Clicking the Timeline heading now persists the choice and reloads so the server renders the correct order.
+
+---
+
+## 2.99.0 &mdash; 2026-06-18
+
+### Added
+- **Sortable ticket timeline + a per-user default.** Click the **Timeline** heading on any ticket to flip the activity order between newest-first and oldest-first. It switches instantly — no page reload, so a half-written reply is never lost — and the choice is remembered as your default across tickets and sessions. A matching **Ticket Timeline** option on the profile page (Newest first / Oldest first) sets the same default; the heading toggle and the profile setting stay in sync. Works on the agent, admin, and portal ticket views, and leaves the "show older updates" collapser and "Go to solution" anchor intact in both directions.
+
+---
+
+## 2.98.0 &mdash; 2026-06-17
+
+### Added
+- **`{token}` placeholder for external survey URLs.** External CSAT URLs can now include `{token}` (the survey's unique 64-character token) alongside `{ticket_id}`. Echoing it back through the response webhook is the preferred, unguessable way to match a response to its ticket.
+- **In-depth CSAT admin documentation.** The **Docs → Satisfaction Surveys** page now fully documents the on-ticket Satisfaction panel and the external response webhook: endpoint and signing-secret setup, the request/signature contract, response codes, worked examples (curl, PHP, Python, Node), per-provider integration recipes (Google Forms, Typeform, Jotform, Alchemer, Microsoft Forms, HappyOrNot), a setup checklist, troubleshooting, and security notes.
+
+---
+
+## 2.97.0 &mdash; 2026-06-17
+
+### Added
+- **CSAT results now appear on the ticket itself.** The agent and admin ticket views gained a **Satisfaction Survey** panel showing the star rating, the requester's comment, the response time, and a "reopened by requester" badge — or an "awaiting response" state while it's outstanding. Each survey row now stores the exact link that was emailed (`survey_url`), surfaced as a one-click **Open survey** button: the public rating page for built-in surveys, or the third-party survey for external ones. When a rating lands it's also written to the timeline as an internal **Satisfaction Rating** entry. (Migration 053.)
+- **External CSAT response webhook.** External survey tools can now POST a response back so it lands on the ticket exactly like a built-in survey — and counts in the Satisfaction report, which previously always read a 0% response rate in External mode. The tool-agnostic endpoint is `POST /api/csat/webhook` with a JSON body `{ticket_id|token, rating, comment}` authenticated by an HMAC-SHA256 `X-CSAT-Signature` header over the raw body. A signing secret is minted automatically the first time External mode is saved and can be rotated from Settings → CSAT, which also shows the webhook URL.
+
+---
+
+## 2.96.0 &mdash; 2026-06-17
+
+### Changed
+- **Forwarding split into two permissions: internal vs external.** The single "Forward tickets" permission is replaced by **Forward tickets to internal contacts** and **Forward tickets to external contacts**. Internal = an address that already belongs to a real in-system user; external = a brand-new address or a previously auto-provisioned external contact. The forward route now checks each recipient's class and rejects the send (naming the disallowed addresses) if the user lacks the matching permission; the recipients field hint adapts to what the user is allowed to do. Roles that held the old umbrella permission are granted **both** new permissions on upgrade, preserving existing behaviour. The Forward button shows whenever a user has either permission. (Migration 052.)
+
+---
+
+## 2.95.0 &mdash; 2026-06-16
+
+### Added
+- **External replies are flagged on the timeline.** When a forwarded third-party contact replies to a ticket and their message lands on the timeline, the entry now carries an **External** badge in both the agent and admin ticket views, so staff can immediately tell the comment came from an outside contact rather than the requester or staff.
+
+---
+
+## 2.94.0 &mdash; 2026-06-16
+
+### Added
+- **Ticket forwarding is now a grantable permission.** A new **Forward tickets** permission (under Tickets in the role permission matrix) controls who can forward a ticket. To preserve 2.93.0's behaviour, it is granted to the built-in **Agent** and **Power User** roles on upgrade; admins keep it automatically. Roles without it no longer see the Forward button on the ticket view or in the inbox hover card, and the forward route rejects them. (Migration 051.)
+
+---
+
+## 2.93.0 &mdash; 2026-06-16
+
+### Added
+- **Forward a ticket to external third parties and contacts.** The Forward button on a ticket is now a real forward, not a relabelled reply. Agents and admins can enter one or more email addresses; each recipient is emailed the ticket's details, the full public conversation, and **all** of its attachments (plus any new files added in the forward box). An optional note can be added on top.
+  - **Reply capture.** Recipients are added to the ticket's CC list and their email replies thread straight back into the ticket. Unknown addresses are auto-provisioned as contacts so the inbound mail processor can attribute their replies.
+  - **External contacts.** Auto-provisioned recipients are flagged `is_external`; the admin user list shows an **External** badge on them and a new "External contacts only" filter to list them.
+  - **Hardened threading.** The inbound processor now also recovers a ticket ID from the `In-Reply-To` / `References` headers (via the ticket-stamped `Message-ID`), so a reply still threads even if the `[#id]` subject token is stripped.
+  - **Confidential tickets are blocked.** Forwarding is disabled for confidential ticket types; the agent is told to copy the specific details into a separate email by hand instead.
+
+---
+
+## 2.92.3 &mdash; 2026-06-16
+
+### Changed
+- **Login form tab order.** Moved the "Forgot password?" link out from between the Email and Password fields to below the Password field, so tabbing from Email goes straight to Password without an intervening stop.
+
+---
+
+## 2.92.2 &mdash; 2026-06-12
+
+### Fixed
+- **Saved filters list no longer distorts the filter panel.** The split-dropdown arrow next to each saved filter stretched to a different width depending on the filter's name length (Bootstrap's `btn-group` lets every button flex); the arrow button is now a fixed width so all rows match. The list itself is also capped at ~230px with its own scrollbar, so saving more filters no longer pushes the search box and filter checklists further down the panel — and the per-filter dropdown menus use Popper's `fixed` strategy so they overlay the scrollable list instead of being clipped by it. Applies to both the agent and admin ticket lists.
+
+---
+
+## 2.92.1 &mdash; 2026-06-12
+
+### Fixed
+- **"System Wide" in location filters now means "any location".** Ticking the "System Wide" meta-branch in the agent/admin ticket-list filters (and the admin users-list filter) used to match items literally tagged with that row — almost always zero results. It now acts as the shortcut you'd expect: the location constraint is skipped entirely, showing items from every location (including none), even when combined with other branch checkboxes. Applies to the admin CSV export and saved filters too, since they share the same query builder (`buildTicketFilterQuery()` / the agent list's inline copy). The checklist labels the row "System Wide *(any)*" so the behaviour is discoverable, and the banner picker's meta-branch detection now shares the same `isMetaLocationName()` helper.
+
+---
+
+## 2.92.0 &mdash; 2026-06-12
+
+### Changed
+- **Ticket list filters apply without a page reload.** On the agent and admin ticket lists, toggling a filter checkbox, removing an applied-filter pill, clicking a saved filter, Clear/Clear All, searching, sorting by a column header, paginating, or changing the per-page size now fetches the result in the background (via a new shared `ticket-list-ajax.php` partial) and swaps in just the updated regions — count badges, applied pills, the list itself, and the pager — instead of reloading the whole page. The URL still updates via `history.pushState` (links stay shareable, back/forward work in place), and the admin Export CSV link and the Save Filter modal always reflect the live filter set. Accessibility wins: keyboard focus stays on the checkbox or search box you just used (a reload used to throw it back to the top of the page), focus lands somewhere predictable when the element you clicked was swapped away, and each update is announced to screen readers through an `aria-live` region. Quick-edit dropdowns, bulk select, resizable columns, and the compact view's hover cards all re-bind after every swap; any fetch failure falls back to a normal full navigation. Also fixes a quirk where removing the last filter pill could resurrect the day's remembered filter on the next visit.
+
+---
+
+## 2.91.0 &mdash; 2026-06-12
+
+### Added
+- **SLA tokens for email templates.** Three new tokens — `{{sla}}`, `{{sla_response}}`, and `{{sla_resolution}}` — resolve from the SLA policy matching the ticket's type and priority (falling back to the default policy when the type has no override). `{{sla}}` renders a full sentence, e.g. "First response within 4 hours and resolution within 16 hours (business hours)"; the other two render just the duration ("4 hours") so admins can write their own phrasing. All three render as empty text when SLA tracking is disabled, business hours aren't configured, or no policy matches the ticket. Available on the Ticket Created, Group Alerts, Assigned to Agent, and Assigned to Group templates; the token legend on `/admin/settings/email-templates` and the email docs page list them.
+
+---
+
+## 2.90.0 &mdash; 2026-06-12
+
+### Added
+- **Status banners can target multiple branches.** Banner targeting moves from a single nullable `status_banners.location_id` to a `status_banner_locations` join table (migration 049 backfills existing banners, then drops the old column). The banner form's single-select becomes a checkbox dropdown — tick any combination of branches without Ctrl+click — whose button summarises the selection ("All branches (global)", the branch names, or "N branches selected"). No boxes ticked = global, same as before. Portal visibility, the banner footer, and the Status Banners list all show the full branch list. Deleting a branch now just removes it from any banner targeting it (a banner left with no branches becomes global, matching the old `ON DELETE SET NULL` end state).
+
+### Changed
+- **Redundant "System Wide" choice removed from the banner branch picker.** A meta-branch row named "System Wide" (used to tag tickets that affect every branch) was showing up in the banner form alongside the built-in "All branches (global)" option — two ways to say the same thing. The picker now hides rows named "System Wide"/"All Branches" (any spacing/hyphenation), while keeping them selectable everywhere a real branch assignment is needed (tickets, users). A banner already targeting such a row keeps it in the picker so editing never silently drops it.
+
+---
+
+## 2.89.1 &mdash; 2026-06-12
+
+### Changed
+- **Email template intro editor upgraded to the shared CKEditor 5 build.** The Intro Message field on `/admin/settings/email-templates` was loading the legacy CKEditor 5 v41.4.2 predefined "classic" UMD bundle while the rest of the app uses the v43.3.1 modular ESM build; it now uses the same v43.3.1 importmap setup, with the standard toolbar/editable styling and dark-mode support the other editors get. The intentionally minimal toolbar (bold, italic, link, lists) is unchanged, stored values are the same CKEditor HTML as before, and an emptied editor still saves a truly blank value so the "leave blank to use default" behaviour keeps working.
+
+---
+
+## 2.89.0 &mdash; 2026-06-12
+
+### Added
+- **Ticket template editor now uses CKEditor 5.** The template body field on `/admin/ticket-templates` create/edit was a plain textarea while the rest of the app uses CKEditor 5; it now gets the same rich-text editor (same plugin/toolbar set as the ticket description editors, so nothing a template author writes gets stripped when the template is applied). Existing plain-text template bodies are lazily converted to HTML (escaped, line breaks preserved) when first opened in the editor. The template pickers on the admin/agent and portal new-ticket forms already inject the body via `editor.setData()`, so rich bodies flow through unchanged — and templates saved from the new editor keep their line breaks when applied, which plain-text bodies previously lost.
+
+---
+
+## 2.88.12 &mdash; 2026-06-12
+
+### Changed
+- **Agent dashboard: quick-edit click target narrowed to badge + chevron.** Walks back part of 2.88.11 — opening the picker from anywhere in the cell was broader than intended. The click target is now the badge/name + chevron wrapper, matching the ticket list pages.
+
+---
+
+## 2.88.11 &mdash; 2026-06-12
+
+### Fixed
+- **Agent dashboard: whole cell opens quick-edit pickers.** The status/priority/type/assignee/group dropdowns on the Recent Tickets table only opened when clicking the small chevron itself. Clicking anywhere in the cell (badge, name, or empty space) now opens the picker, with a pointer cursor on the cell.
+
+---
+
+## 2.88.10 &mdash; 2026-06-12
+
+### Fixed
+- **Agent dashboard: status is now quick-editable.** Follow-up to 2.88.9 — the Recent Tickets status column was still a static badge. It now has the same quick-change chevron as the ticket list, including the optimistic-concurrency handling (if another agent changed the status first, the server's 409 response is shown instead of silently overwriting).
+
+---
+
+## 2.88.9 &mdash; 2026-06-11
+
+### Fixed
+- **Agent dashboard: priority is now quick-editable.** The Recent Tickets table on the agent dashboard showed priority as a static badge while type, assignee, and group all had quick-change chevron dropdowns. Priority now has the same chevron, mirroring the ticket-list behaviour (posts to the existing `set-priority` API and updates the badge in place).
+
+---
+
+## 2.88.8 &mdash; 2026-06-11
+
+### Tests
+- **Restored a trustworthy test suite.** The feature suite was non-deterministically failing dozens of tests (8→170 across runs). Root cause: the `DatabaseSeeder` was idempotent-by-skip, so a leftover `test_admin` fixture whose role had been mutated to `user` by an earlier run persisted and 403'd every admin-route test. The seeder now self-heals fixture users' role/password/name on each run. Also brought several outdated test expectations in line with intended behaviour: `/admin/settings` is an all-staff landing as of v2.66.0 (real gating is on its config sub-pages); migration 046 replaced `idx_tickets_status` with the composite `idx_tickets_status_created`; and the portal create button is a customizable label (assert the create link, not literal text). Full suite now passes (405 tests). No application code changed.
+
+---
+
+## 2.88.7 &mdash; 2026-06-11
+
+### Security
+- **Open redirect (Low):** the "save columns" routes redirected to a raw `$_POST['_redirect']` value. They now pass it through a new `safeRedirectPath()` helper that only allows same-site relative paths (blocking `//host` and `/\host` protocol-relative escapes).
+- **AI classification IDOR (Low):** the admin re-classify and classification-override routes were gated by `requireStaff()` only, so a non-admin staff member could act on a ticket outside their group/confidential scope. Both now call `_agentRequireTicketAccess()` (admins pass through; other staff are limited to tickets they can access).
+- **API tokens survived password changes (Low):** completing a password reset or changing the password in the profile now revokes all of that user's mobile/API bearer tokens, so a leaked 90-day token can't outlive a post-compromise reset.
+- **`storage/` web-access guard (Low):** added `storage/.htaccess` denying all direct HTTP access and execution as defence-in-depth against a misconfigured document root.
+
+---
+
+## 2.88.6 &mdash; 2026-06-11
+
+### Changed
+- **Open-source scrub:** removed an internal hostname (`helpdeskvm.wpl.ca`) from a historical changelog entry and genericized the placeholder deploy path shown in the admin Cron Jobs help (`/var/www/openhelpdesk`). Added a prominent operational warning to the README about the unauthenticated `scripts/admin/rescue.php` break-glass tool, and refreshed the README security section. (Note: `scripts/deploy.py` was removed from HEAD earlier but still exists in git history — purge it with `git filter-repo` or publish a fresh/squashed history before the public release.)
+
+---
+
+## 2.88.5 &mdash; 2026-06-11
+
+### Security
+- **Safer defaults in `.env.example` (Medium):** `APP_DEBUG` now ships as `false`. Previously the example defaulted to `true`, so anyone copying it straight to `.env` inherited debug mode, which surfaces PHP stack traces (file paths, DB details) to end users.
+- **Installer `.env` line-injection (Low):** the installer now strips CR/LF from values before writing `.env`, so a newline in an operator-supplied field (e.g. DB password or app name) can't inject additional environment lines.
+
+---
+
+## 2.88.4 &mdash; 2026-06-11
+
+### Security
+- **Installer re-run takeover (Medium):** the web installer at `/install/` was gated only by the `storage/installed.lock` file. If that file was lost (a backup restore or `storage/` wipe that dropped it), anyone reaching `/install/` could re-run the wizard — overwriting `.env`, repointing the database, and creating a new admin — an unauthenticated full takeover. The installer now has a second, independent gate: it refuses to run when the configured database already contains an admin user, regardless of the lock file. The check fails safe (any error → treat as not-yet-installed) so genuine first installs are never blocked.
+
+---
+
+## 2.88.3 &mdash; 2026-06-11
+
+### Security
+- **Harden Microsoft SSO account linking (Medium):** when no account matched the Azure object id, the callback linked the immutable Azure identity to an existing local account purely by email (a mutable, spoofable attribute) with no tenant check. If SSO were ever configured with a multi-tenant audience (`common`/`organizations`/`consumers`), a user from any Azure tenant could set their email to a victim's and take over the matching local account on first sign-in. The callback now refuses email-based linking and auto-provisioning under multi-tenant configs (only pre-established `azure_oid` matches are allowed), and, for a specific tenant GUID, additionally verifies the id_token's `tid` claim matches the configured tenant. Normal single-tenant setups are unaffected.
+
+---
+
+## 2.88.2 &mdash; 2026-06-11
+
+### Security
+- **Cap TOTP verification attempts (Medium):** the `/2fa` step allowed unlimited 6-digit code guesses against a persistent pending session — and with the ±1 step verification window, three codes are valid at any moment, making online brute-force feasible for an attacker who already has the password. After 5 incorrect codes the pending login is now discarded and the user is sent back to password login.
+
+---
+
+## 2.88.1 &mdash; 2026-06-11
+
+### Security
+- **Prevent committing local credential helpers:** added `/pw.txt` and `/check_prod.py` to `.gitignore`. These local-only files can hold production secrets (the deploy SSH/sudo password) and must never be committed — particularly important ahead of the public GitHub release. Neither file is currently tracked or present in git history.
+
+---
+
+## 2.88.0 &mdash; 2026-06-11
+
+### Security
+- **Brute-force throttle on the web login (High):** the interactive `/login` form recorded failures only to the audit log and had no lockout, so it was open to unlimited password guessing / credential stuffing. It now enforces the same sliding-window throttle as the mobile API login (max 5 failures per email and 10 per IP in 15 minutes) via the shared `login_attempts` table. A successful login clears the failed-attempt rows for that email+IP pair, so a user who mistypes their password then logs in cleanly is not locked out.
+- **API login bypassed 2FA (High):** `POST /api/v1/auth/login` issued a 90-day bearer token on a correct password alone, ignoring `totp_enabled` — so any account that had enabled 2FA could be fully accessed from the API with the password only. The API now requires a valid TOTP code (`totp_code`) for 2FA-enabled accounts, matching the web login's behaviour, and returns `401 { totp_required: true }` until a correct code is supplied.
+
+---
+
+## 2.87.9 &mdash; 2026-06-11
+
+### Security
+- **Authenticated RCE via avatar upload (High):** the avatar uploader validated the image MIME (sniffed from magic bytes) but took the stored file extension straight from the user-supplied filename, so an image/PHP polyglot named `x.php` passed the check and landed an executable `.php` file in the web-served `public/uploads/avatars/` directory. Any holder of the `users.manage` permission could gain code execution. The extension is now derived from the validated MIME (jpg/png/gif/webp only), matching the branding-logo handler, so no script extension can ever be written. Added `public/uploads/.htaccess` as defence-in-depth to disable PHP/CGI execution for all uploaded content (avatars, branding, field-images); nginx deployments should add the equivalent `location` rule.
+
+---
+
+## 2.87.8 &mdash; 2026-06-11
+
+### Security
+- **Stored XSS in rich text (Critical):** ticket descriptions, ticket timeline comments/replies, KB article bodies, the duplicate-ticket preview modal, and outbound email bodies all rendered raw CKEditor HTML, so a low-privilege requester could plant `<script>`/`onerror` markup that executed in an agent's or admin's browser (privilege escalation). All rich-HTML output now passes through a new `sanitizeRichHtml()` allowlist sanitizer (DOMDocument-based, same engine as the status-banner sanitizer) applied at render time, which also neutralises any malicious markup already stored in the database. Legitimate formatting — headings, lists, tables, images, links, and safe inline styles — is preserved; scripts, event handlers, `javascript:`/`data:` URLs, and `<iframe>`/`<svg>`-style tags are stripped.
+
+---
+
+## 2.87.7 &mdash; 2026-06-11
+
+### Fixed
+- **Tickets:** changing a ticket's type now moves the ticket into the new type's default group — the mirror image of the existing rule that clears a mismatched type when the group changes. Previously a re-typed ticket stayed in its old group, so (for example) a Marketing-typed ticket left in the IT group kept appearing in IT agents' unassigned queue and dashboard count even though no IT agent should be working it. Applies to the quick type dropdown on ticket lists and to the full Update Ticket form in both the agent and admin views; an explicit type+group pairing in the same save still wins, and types with no default group continue to coexist with any group. The move is recorded on the ticket timeline and notifies the new group.
+
+---
+
+## 2.87.6 &mdash; 2026-06-11
+
+### Fixed
+- **Tickets:** the agent ticket list's "Showing tickets assigned to your group(s)" banner no longer lists every group in the system (including confidential ones) when the **Allow agents to assign tickets to groups they're not part of** setting is on. The banner now always lists only the groups the agent actually belongs to; the wider group list is still used for the assignment dropdowns, which is what the setting controls.
+
+---
+
+## 2.87.5 &mdash; 2026-06-11
+
+### Changed
+- **Docs:** expanded the agent assign-to-any-group documentation on the admin **Tickets** help page into its own dedicated section. It now explains what the **Allow agents to assign tickets to groups they're not part of** setting does, its impact (agent-only, affects the ticket-list and dashboard group picker scope, audit-logged), when to turn it on vs. leave it off, a step-by-step on enabling it at Admin → Settings → Organization → Ticket Routing, and the related auto-clearing of a mismatched ticket type on group change.
+
+---
+
+## 2.87.4 &mdash; 2026-06-10
+
+### Changed
+- **Docs:** the admin **Tickets** help page now documents the **Allow agents to assign tickets to groups they're not part of** setting (Admin → Settings → Ticket Routing Defaults) in the *Assigning Tickets* section — explaining the default group-membership scoping and how turning the setting on lets agents route tickets into any group.
+
+---
+
+## 2.87.3 &mdash; 2026-06-10
+
+### Changed
+- **Tickets list:** the assignment filter is now labelled **Assigned To** to match the column header of the same name (it previously read **Agent**). The applied-filter pill now reads `Assigned To: …` to match. Updated in both the admin and agent ticket lists.
+
+---
+
+## 2.87.2 &mdash; 2026-06-10
+
+### Added
+- **Dev tooling:** `database/seed_training_tickets.php` &mdash; a one-off seed that creates 10 demo tickets spanning the real ticket types, each with a full history of public replies, internal notes, and agent `@mentions` (with real mention notifications), for recording training videos. Every seeded ticket is tagged `[[TRAINING-DEMO]]` in its description and the script prints the exact `DELETE` statements to remove just those tickets afterwards. Not wired into the app; run manually with `php database/seed_training_tickets.php`.
+
+---
+
+## 2.87.1 &mdash; 2026-06-10
+
+### Fixed
+- **Tickets list:** narrowing the **Status** column with the resize grip no longer lets a long status badge (e.g. "Waiting on Customer") overflow into the **Priority** column. The quick-edit badge cells (Status, Priority, Type, Group) now clip at their column boundary like the Subject column already did, so resizing crops the badge instead of overlapping its neighbour. Fixed in both the admin and agent ticket lists. The quick-change dropdowns are unaffected (they render on `document.body`).
+
+---
+
+## 2.87.0 &mdash; 2026-06-10
+
+### Changed
+- **Settings (Ticket Routing):** moved the **Ticket Routing Defaults** section (system-wide default group + "allow agents to assign to any group") off the **Email / SMTP** page, where it never belonged, onto its own **Ticket Routing** page under the **Organization** group in the settings left-nav (`/admin/settings/ticket-routing`). Saving now returns to that page, and settings search points there. No behavior change to the routing logic itself.
+
+---
+
+## 2.86.0 &mdash; 2026-06-10
+
+### Added
+- **Tickets (group assignment scope):** new setting **"Allow agents to assign tickets to groups they're not part of"** under **Admin → Settings → Ticket Routing Defaults**. When off (the default), the group picker on the agent ticket list only offers the groups an agent belongs to — unchanged from before. When on, agents can move tickets into **any** group. Admins always see every group.
+
+### Changed
+- **Tickets (type/group consistency):** because a ticket type maps 1:1 to a default group, changing a ticket's group to one that no longer matches its type's default group now automatically clears the type to **Not Set**, rather than leaving a mismatched type behind. Applies everywhere a group is changed by hand — the ticket-list group chevron, the agent and admin ticket detail forms, and bulk group reassignment — and is recorded in the ticket timeline. Types with no default group are never affected.
+
+---
+
+## 2.85.1 &mdash; 2026-06-09
+
+### Fixed
+- **Tickets (reply editor scroll):** clicking **Reply**, **Forward**, or **Add Note** on a ticket now scrolls the whole reply panel into view, through the **Send Reply** button. Previously the page scrolled only far enough to reveal the top of the panel, leaving most of the CKEditor and the send button hidden below the fold. The scroll now waits for the editor to reflow to full height and aligns the panel's bottom edge into view. Fixed on both the agent and admin ticket pages.
+
+## 2.85.0 &mdash; 2026-06-09
+
+### Changed
+- **Tickets (staff create form):** on both the agent and admin "New Ticket" forms, the **Assign To** dropdown now narrows to the members of the chosen ticket type's group instead of always listing every agent. Picking a type (or explicitly choosing a **Group**) filters the assignee list to that group's staff; an explicitly chosen group takes precedence over the type's group. Types with no group — or a group with no members — keep showing the full agent list so assignment can never be locked out, and a selection that no longer fits the filter falls back to **Unassigned**.
+
+## 2.84.0 &mdash; 2026-06-08
+
+### Added
+- **Permissions (bulk ticket actions):** every ticket-list bulk action is now its own grantable permission, so you can decide per role exactly which an agent may use. A new **Bulk Actions** section in **Settings &rarr; Permission Levels** offers seven toggles: bulk **assign**, **close**, **merge**, **change status**, **change priority**, **change group**, and **delete**. Agents now only see the bulk buttons their role is granted.
+- **Tickets (agent bulk delete):** agents can now be granted **bulk delete**, which previously did not exist for them at all. When granted, the **Delete** button appears in the agent ticket-list bulk bar (with the same confirm-first modal admins get) and permanently removes the selected tickets and their attachments, writing a `ticket.bulk_deleted` audit entry. It is off for every role by default and must be granted explicitly.
+
+### Changed
+- **Permissions (backwards-compatible upgrade):** the six non-destructive bulk permissions are auto-granted to every existing non-admin staff level on upgrade (migration 048), so nothing an agent can do today changes. Server-side handlers in both the agent and admin bulk routes now enforce the per-action permission, not just "is staff," closing the gap where any staff member could POST any bulk action.
+
+## 2.83.2 &mdash; 2026-06-08
+
+### Fixed
+- **Help docs (AI &rarr; Duplicate-Ticket Detection):** clarified that duplicate detection is **not** a customer-only feature — agents creating a ticket see the same warning popup. Added a note that the popup only appears when both the ticket type has **AI duplicate check** enabled *and* an AI provider/key is configured (and a near-duplicate is actually found); otherwise no popup shows for anyone, agent or portal.
+
+## 2.83.1 &mdash; 2026-06-08
+
+### Fixed
+- **Help docs (Ticket List Layouts):** corrected the instructions for choosing a list layout. Both the agent and admin help pages said the layout was picked at **My Profile &rarr; Ticket List View** — that setting doesn't exist. The layout is chosen with the **Table / Compact / Card** view switcher on the ticket-list toolbar (moved there in 2.80.0), and the choice persists per-user. Updated the wording in both help docs.
+
+## 2.83.0 &mdash; 2026-06-08
+
+### Added
+- **Tickets (bulk actions):** the ticket-list bulk action bar can now change **Status**, **Priority**, and **Group** on the selected tickets, alongside the existing Assign, Close, and Merge (and admin-only Delete). Each opens a small modal to pick the target value and applies it to every selected ticket in one request. Added to both the agent and admin ticket views. Server-side handlers validate the chosen value, respect the existing confidential-ticket access filtering, and write an audit-log entry (`ticket.bulk_status_changed` / `bulk_priority_changed` / `bulk_group_changed`).
+
+## 2.82.1 &mdash; 2026-06-05
+
+### Fixed
+- **Help docs (Ticket List & Filters):** corrected three inaccuracies against the actual UI. The bulk action bar appears at the **top** of the ticket list (not the bottom). The agent help page listed six bulk actions (Assign, Change Status, Change Priority, Change Group, Merge, Close) — but the agent bulk bar only offers **Assign, Close, Merge**; the status/priority/type/agent/group changes are per-row *inline* actions, not bulk ones, so that list was corrected and a pointer to Inline Actions added. The filter panel slides out from the **left**, not the right (fixed in both the agent and admin help docs).
+
+## 2.82.0 &mdash; 2026-06-05
+
+### Changed
+- **Tickets (concurrency):** added stale-write protection so two agents working the same ticket no longer silently clobber each other's status changes. The detail-page Update form and the ticket-list inline status dropdown now carry the status they were rendered with; if the ticket's status changed in the meantime, the update is rejected instead of applied — the form flashes a notice (and still saves the other field changes), and the inline dropdown shows the new value plus an alert. The check is optional/backwards-compatible (callers that don't send the expected value keep last-write-wins). Applied to both the agent and admin ticket views.
+- **Tickets (concurrency):** the ticket detail page now shows a one-time, dismissible "This ticket was updated since you opened it — Refresh" banner when the ticket changes underneath you (another agent, an automation, or an inbound email). It reuses the existing presence poll, so it adds no new requests, and it won't fire on your own edits (those reload the page).
+
+### Performance
+- **Tickets (presence):** the concurrent-viewer poll (`GET /api/tickets/{id}/presence`) no longer writes on every request. It previously ran a `DELETE` of stale rows on every poll from every viewer (an unindexed full scan of `ticket_presence`); stale rows are now excluded at read time and the cleanup runs on roughly 1 in 50 polls. Added `idx_ticket_presence_last_seen` (migration `047`) so both the read filter and the occasional cleanup use a range scan, matching what `user_presence` already had.
+
+## 2.81.0 &mdash; 2026-06-05
+
+### Performance
+- **Tickets (database):** added two indexes to the `tickets` table to keep the ticket list fast as ticket volume grows (migration `046`). `idx_tickets_created_at` covers the default, unfiltered list view (`ORDER BY created_at DESC LIMIT n`), which previously triggered a full table scan + filesort on every load for users with unrestricted visibility (e.g. admins). The composite `idx_tickets_status_created (status, created_at)` covers the status-filtered views and **supersedes** the single-column `idx_tickets_status` from migration `041`, which is dropped to avoid maintaining two overlapping indexes. Verified with `EXPLAIN`: the default view now reads only the rows it returns with no filesort.
+
+## 2.80.0 &mdash; 2026-06-05
+
+### Changed
+- **Tickets (agent & admin):** the ticket-list layout (Table / Compact / Card) can now be switched right from the tickets page via a segmented icon toggle in the toolbar — no more digging into profile settings. Picking a layout saves the preference (via the existing `/profile/setting` endpoint) and reloads in place, preserving the current filters and sort. The old radio-button block has been removed from the profile page, and the switcher lives in a single shared partial (`templates/partials/ticket-view-switcher.php`) used by both the agent and admin views.
+
+## 2.79.5 &mdash; 2026-06-05
+
+### Changed
+- **Tickets (agent & admin):** the **Columns** button is now hidden in the Card and Compact ticket views, where it had no effect (those layouts don't use the per-column toggles). It remains in the Table view. Chosen over greying it out, since a disabled control the user can't re-enable in place is more confusing than one that simply isn't shown.
+- **Agent tour:** tour steps whose spotlight target isn't on the page are now skipped, so the "Customise Columns" step no longer points at a missing button when an agent takes the tour in Card/Compact view.
+
+## 2.79.4 &mdash; 2026-06-05
+
+### Fixed
+- **Tickets (agent):** the Filters button no longer shows a "2" badge when no filters are applied. The `resolved_today` and `escalated_to_me` filter values were stored as PHP booleans, so the unset `false` value slipped past the template's `$v !== ''` count check. They now use the same `'1'`/`''` string convention as the `watched` filter.
+
+## 2.79.3 &mdash; 2026-06-05
+
+### Changed
+- **The "Inbox" ticket-list view is now called "Compact."** Renamed the layout option in **My Profile → Ticket List View** and everywhere it's referenced in the help docs ([templates/pages/profile/edit.php](templates/pages/profile/edit.php), [src/helpers.php](src/helpers.php), [templates/pages/agent/docs/ticket-list.php](templates/pages/agent/docs/ticket-list.php), [templates/pages/admin/docs/tickets.php](templates/pages/admin/docs/tickets.php)). The stored preference value is unchanged, so existing users keep their layout with no migration.
+
+---
+
+## 2.79.2 &mdash; 2026-06-04
+
+### Changed
+- **Inbox-view hover cards now trigger on the text itself, not the whole column cell.** The card only appears when you hover the actual subject text or the requester's name — hovering the empty space elsewhere in those columns no longer pops it up. The card anchors flush beneath the hovered text ([templates/partials/ticket-inbox.php](templates/partials/ticket-inbox.php)).
+
+---
+
+## 2.79.1 &mdash; 2026-06-04
+
+### Changed
+- **The inbox-view hover cards now wait ~half a second before appearing.** Previously the ticket/person card popped up the instant the cursor touched a Subject or From name, so just skimming down the list flashed a card under every row. Now the cursor has to linger ~500ms before a card shows; a quick pass over a row shows nothing. Moving the cursor into a card that's already open still keeps it open ([templates/partials/ticket-inbox.php](templates/partials/ticket-inbox.php)).
+
+---
+
+## 2.79.0 &mdash; 2026-06-04
+
+### Added
+- **A little hidden fun.** There's now a small, well-concealed easter egg tucked into the notification bell for the curious to stumble on. It's purely cosmetic &mdash; a brief, self-dismissing flourish that writes nothing to the database, touches no ticket data, and is fully suppressed for anyone with `prefers-reduced-motion` set. Intentional; please don't "fix" it ([templates/partials/navbar.php](templates/partials/navbar.php), [templates/layouts/app.php](templates/layouts/app.php)).
+
+---
+
+## 2.78.1 &mdash; 2026-06-04
+
+### Fixed
+- **The ticket "Back" button now returns you to the screen you came from.** Opening a ticket from the **notifications** panel (or the dashboard, or anywhere else) and clicking **Back** previously dumped you on the ticket list instead of the screen you were on, because the button always pointed at the last-visited (and often stale) ticket-list URL. The Back button now remembers the actual referring page per-ticket &mdash; so it survives reloads and in-page replies &mdash; and only falls back to the ticket list when no referrer is known. The breadcrumb **Tickets** link still goes to the filtered ticket list, as before ([templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php), [templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php)).
+
+---
+
+## 2.78.0 &mdash; 2026-06-04
+
+### Changed
+- **Profile settings now save instantly &mdash; no more "Save Changes" button.** On **My Profile**, every setting (name, appearance, ticket-list view, timeline-note visibility, and all email-notification toggles) now persists the moment you change it and confirms with a brief "Saved" toast in the corner. Switching between **Light** and **Dark** mode applies to the page immediately. The only setting that still has a button is **Change Password**, which intentionally requires an explicit submit. A new AJAX endpoint `POST /profile/setting` saves one field at a time with a strict allow-list (notification columns and known settings only), so a setting name can never be used to write an arbitrary database column ([templates/pages/profile/edit.php](templates/pages/profile/edit.php), [src/routes.php](src/routes.php)).
+
+---
+
+## 2.77.1 &mdash; 2026-06-04
+
+### Documentation
+- **Help docs now cover the three ticket-list layouts.** Added a *Choosing a List Layout* section to the agent help (Ticket List &amp; Filters) and a *Ticket List Layouts (Table / Inbox / Card)* section to the admin Tickets doc, documenting the **Table / Inbox / Card** views (set in **My Profile → Ticket List View**), the Inbox subject/sender hover cards with their Reply/Forward/Add Note deep-links, the per-user **Open tickets &amp; mentions** page, and the now-hidden-by-default Confidential column. Both help search indexes gained matching entries ([templates/pages/agent/docs/ticket-list.php](templates/pages/agent/docs/ticket-list.php), [templates/pages/agent/docs/index.php](templates/pages/agent/docs/index.php), [templates/pages/admin/docs/tickets.php](templates/pages/admin/docs/tickets.php), [templates/pages/admin/docs/index.php](templates/pages/admin/docs/index.php)).
+
+---
+
+## 2.77.0 &mdash; 2026-06-04
+
+### Added
+- **Third ticket-list layout: Card view.** Alongside Table and Inbox, staff can now pick a **Card** layout in **My Profile → Ticket List View**. Each ticket becomes a roomy horizontal card that stacks the data the table spreads across columns: a colour-keyed requester avatar, a "New" flag for tickets still awaiting a first reply, the type badge and subject up top; the location/group, ticket age and SLA (e.g. "First response due in 7 days", or "overdue" in red) underneath; and priority, assignee (group / agent) and status down the right edge. Confidential tickets stay redacted and the bulk-select checkboxes carry over. Applies to both the agent and admin ticket lists ([templates/partials/ticket-cards.php](templates/partials/ticket-cards.php), [templates/pages/profile/edit.php](templates/pages/profile/edit.php), [templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php), [templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php), [src/helpers.php](src/helpers.php)).
+
+---
+
+## 2.76.0 &mdash; 2026-06-04
+
+### Added
+- **Inbox view: separate hover cards for the subject and the sender, plus a per-user open-tickets page.** Hovering the **Subject** still shows the ticket card (snippet + Reply/Forward/Add Note). Hovering the **From** name now shows a *person* card instead — their name, email (click to mail them), and an **Open tickets &amp; mentions** button. That button opens a new staff page listing every open ticket that user submitted, *plus* any open ticket where they were **@mentioned** — the mentioned ones are badged so it's obvious they're not the requester. The page is scoped to what the viewing staff member is allowed to see ([templates/pages/staff/tickets-by-user.php](templates/pages/staff/tickets-by-user.php), [templates/partials/ticket-inbox.php](templates/partials/ticket-inbox.php), [src/helpers.php](src/helpers.php), [src/routes/agent.php](src/routes/agent.php), [src/routes/admin.php](src/routes/admin.php)).
+
+### Changed
+- The inbox ticket card now appears only when hovering the Subject (previously it showed for the whole row), making room for the sender card on the From column.
+
+---
+
+## 2.75.0 &mdash; 2026-06-04
+
+### Changed
+- **The inbox-view hover card is now interactive and actionable.** The detail card no longer follows the cursor — it anchors in place under the hovered row so you can move the mouse into it, and it only closes once the pointer leaves the card itself (a short hover bridge keeps it open while you cross the gap). The card gained **Reply**, **Forward** and **Add Note** buttons that deep-link straight into the matching composer on the ticket page. To support this, the agent and admin ticket detail pages now open the right panel from a `#reply` / `#forward` / `#note` URL fragment (handled on load and on `hashchange`) ([templates/partials/ticket-inbox.php](templates/partials/ticket-inbox.php), [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php), [templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php)).
+
+---
+
+## 2.74.0 &mdash; 2026-06-04
+
+### Added
+- **Inbox view for ticket lists — an email-style alternative to the table.** Staff can now switch their ticket lists from the classic resizable grid to a two-column "Inbox" layout that shows only who the ticket is **From** and the **Subject**, the way an email client does. Hovering any row pops up a detail card with the requester, when they submitted (relative + absolute time), a snippet of the message, and the ticket's status, priority, type and assignee. The choice is a per-user setting in **My Profile → Ticket List View** and applies to both the agent and admin ticket lists; bulk-select checkboxes and the bulk-action bar carry over to the inbox view, and the table view is unchanged ([templates/partials/ticket-inbox.php](templates/partials/ticket-inbox.php), [templates/pages/profile/edit.php](templates/pages/profile/edit.php), [templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php), [templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php), [src/helpers.php](src/helpers.php), [src/routes.php](src/routes.php)).
+
+---
+
+## 2.73.0 &mdash; 2026-06-04
+
+### Added
+- **Optional local-only "Credits" roll, hung off the profile menu.** When a local, gitignored credits route file is present, a fullscreen credits page scrolls a thank-you list of testers up the screen over a music bed, and a "Credits" item appears in the profile dropdown. The route file and its audio are intentionally kept out of the repository, so the route wiring and the menu link both no-op cleanly on a public checkout — they only activate where the local file exists ([src/routes.php](src/routes.php), [templates/partials/navbar.php](templates/partials/navbar.php), [.gitignore](.gitignore)).
+
+---
+
+## 2.72.1 &mdash; 2026-06-03
+
+### Changed
+- **The agent dashboard's Recent Tickets table now behaves like the ticket lists.** It picked up the same column treatment: the `#` column has a minimum width sized for the number, every header stays on one line (no wrap/clip), and Subject is the elastic column — the table fills its card without horizontal scroll and Subject truncates with an ellipsis, with the full subject shown in a hover tooltip. Columns are resizable with the same per-column floors ([templates/pages/agent/dashboard.php](templates/pages/agent/dashboard.php)).
+
+---
+
+## 2.72.0 &mdash; 2026-06-03
+
+### Changed
+- **The ticket list now fits its container instead of forcing horizontal scroll.** The Subject column is the elastic column: the table fills the available width at 100% and Subject absorbs the slack, truncating with an ellipsis when the text is too long rather than pushing the table wide. Widening another column steals room from Subject (no scroll); you can still drag Subject itself wider to see more, at which point the list scrolls. When there are too many columns to fit at all, Subject pins to a readable minimum and stays visible rather than collapsing ([templates/partials/table-resize.php](templates/partials/table-resize.php), [templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php), [templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php)).
+- **Hover a truncated subject to see the whole thing.** Each subject cell now carries a `title` tooltip with the full subject (confidential rows show only "Confidential"). The Subject header itself never wraps ([templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php), [templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php)).
+
+---
+
+## 2.71.0 &mdash; 2026-06-03
+
+### Changed
+- **Ticket-list columns can no longer be crushed until their header clips.** Resizable columns now have a per-column floor equal to the wider of the header's one-line width and any CSS `min-width`, so dragging can never shrink Status, Priority, or any header until its word wraps or its last letters get cut off. The floor is also applied on load, so a column that was previously dragged too narrow (and saved that way) repairs itself the next time the list is opened ([templates/partials/table-resize.php](templates/partials/table-resize.php)).
+- **The ticket # column now has a minimum width sized for the number.** Its `#` header is narrower than the ticket numbers below it, so the column carries a `min-width` that keeps multi-digit IDs on one line instead of clipping into the Subject column ([templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php), [templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php)).
+- **The Confidential column is now hidden by default for everyone.** It was already off by default for users who had never touched the Columns picker; migration 045 strips `confidential` out of every saved column preference so existing users who had it baked in no longer see it either. It remains opt-in via the Columns picker ([migration 045](database/migrations/045_hide_confidential_column_by_default.php)).
+
+---
+
+## 2.70.1 &mdash; 2026-06-03
+
+### Changed
+- **Resizable table columns now show a faint divider hint.** Every resizable column header draws a subtle vertical line at its right edge so users can see exactly where to grab to drag-resize; the line brightens to the primary colour on hover. Previously the grab handle was invisible until hovered ([templates/partials/table-resize.php](templates/partials/table-resize.php)).
+
+---
+
+## 2.70.0 &mdash; 2026-06-03
+
+### Changed
+- **Ticket visibility is now fail-closed.** Staff see only the tickets in their own group(s) unless they hold the new `tickets.view_all` permission; the previous behaviour where a groupless staff account implicitly saw every ticket has been removed. The new permission grants visibility across all groups **except** confidential ticket types. Admins continue to bypass all permission checks. To preserve current access for intentional power users, migration 044 grants `tickets.view_all` to the built-in `power_user` role on deploy ([migration 044](database/migrations/044_tickets_view_all_permission.php), [src/helpers.php](src/helpers.php)).
+- **One shared visibility rule across every staff surface.** The agent dashboard tiles + Recent Tickets, the ticket list, Floor mode, the detail-page access guard, and the token API (`/api/v1/dashboard`, `/api/v1/tickets`, individual-ticket endpoints) all now resolve access through a single `ticketStaffVisibilitySql()` / `_…RequireTicketAccess()` implementation, so a ticket hidden in one place can't be reached from another. Per-ticket guards re-fetch the authoritative group/type/creator rather than trusting the caller's query ([src/routes.php](src/routes.php), [src/routes/agent.php](src/routes/agent.php), [src/routes/api.php](src/routes/api.php), [src/routes/floor.php](src/routes/floor.php)).
+
+### Security
+- **Confidential tickets are locked down to the creator and the confidential group.** No one else — not the assignee, not a watcher, not a `tickets.view_all` holder — can see a confidential ticket; only the person who opened it and members of the type's confidential group. Admins still reach them solely through the audited re-auth prompt on the detail page.
+- **Watchers are no longer permitted on confidential tickets.** The watch button is hidden on confidential tickets, the watch route rejects them, the auto-watch on manual/automation escalation skips them, and migration 044 purges any pre-existing watcher rows on confidential-type tickets — closing an accidental-leak path.
+- **Confidential tickets can only be merged with a ticket of the same type.** The merge action, the single-ticket merge, and the merge typeahead all refuse to mix a confidential ticket with a differently-typed one, so confidential content can't flow into a ticket others can see ([src/routes/agent.php](src/routes/agent.php)).
+
+### Added
+- **`tickets.view_all` permission** appears in the role permission matrix (Admin → Roles) so it can be granted to or revoked from any role.
+- **Admin guardrails against accidental over-/under-sharing.** The Users list flags any account whose level can see all tickets with a "Sees all tickets" badge; the user form confirms before saving a level that sees every ticket, and warns when saving an elevated user who has no group and therefore can see nothing; and the role editor confirms before granting `tickets.view_all` ([templates/pages/admin/users/index.php](templates/pages/admin/users/index.php), [templates/pages/admin/users/form.php](templates/pages/admin/users/form.php), [templates/pages/admin/roles/form.php](templates/pages/admin/roles/form.php)).
+
+## 2.69.3 &mdash; 2026-06-03
+
+### Documentation
+- **Clarified the CKEditor 5 licensing note.** Reworded the README and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) to reflect that CKEditor 5 is loaded from the CDN at runtime and not bundled, so distributing this MIT-licensed project conveys no GPL code; the swap-or-commercial options are now framed as optional rather than required ([README.md](README.md), [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
+
+## 2.69.2 &mdash; 2026-06-03
+
+### Documentation
+- **Added a third-party software inventory for the open-source release.** New [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every open-source dependency (CDN front-end libraries, Composer runtime + dev packages) with versions and licenses, generated from `composer.lock` and the app's CDN references. The README's License section now links to it and flags that CKEditor 5 is served under GPL-2.0-or-later unless a commercial license is held ([THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), [README.md](README.md)).
+
+## 2.69.1 &mdash; 2026-06-02
+
+### Documentation
+- **Documented the applied-filter pills and instant-apply behaviour in the help docs.** The agent <em>Ticket List &amp; Filters</em> page gains an <em>Applied Filters</em> section, and the admin <em>Tickets</em> guide's filter panel section now explains that ticking a box or picking a date applies immediately and that active filters show as removable pills ([agent/docs/ticket-list.php](templates/pages/agent/docs/ticket-list.php), [admin/docs/tickets.php](templates/pages/admin/docs/tickets.php)).
+
+---
+
+## 2.69.0 &mdash; 2026-06-02
+
+### Added
+- **Applied filters now appear as removable pills at the top of the ticket filter panel, and filters apply instantly.** With a long list of filter groups it was hard to see at a glance which filters were actually in use — you had to scroll the whole panel. Now every active filter (status, priority, type, location, agent, group, requester, search term, date range, watched, etc.) shows as a labelled pill — e.g. <em>Status: Open</em>, <em>Requester: Andrea Gaspar</em>, <em>From: 2026-01-01</em> — at the top of the panel, each with an &times; button that removes just that one filter. Ticking a checkbox or picking a date now applies the filter immediately (no need to click Apply — that button now just submits a typed search), so the pill list updates as you click. A <strong>Clear All</strong> link clears them in one click. Applied to both the agent and admin ticket lists ([agent/tickets/index.php](templates/pages/agent/tickets/index.php), [admin/tickets/index.php](templates/pages/admin/tickets/index.php), [admin.php](src/routes/admin.php), [app.php](templates/layouts/app.php)).
+
+---
+
+## 2.68.0 &mdash; 2026-06-02
+
+### Added
+- **The Recent Tickets table on the agent dashboard is now sortable by column, matching the ticket list.** Click any of the <strong>#</strong>, <strong>Subject</strong>, <strong>Status</strong>, <strong>Priority</strong>, <strong>Type</strong>, <strong>Assigned To</strong>, <strong>Group</strong>, <strong>Created By</strong>, <strong>Location</strong>, <strong>Created</strong>, or <strong>Due</strong> headers to sort (click again to reverse direction); the active column shows an arrow. SLA and Confidential remain non-sortable, the same as the admin and agent ticket lists. The dashboard query now applies the chosen sort before its 10-row limit and defaults to newest-first as before ([dashboard.php](templates/pages/agent/dashboard.php), [routes.php](src/routes.php)).
+
+---
+
+## 2.67.1 &mdash; 2026-06-02
+
+### Changed
+- **The Notifications page now updates live — no refresh needed.** It polls a new session-authed <code>GET /notifications/feed</code> endpoint every 15 seconds and swaps in new notifications in place (only when the content actually changed, so an idle page doesn't flicker or lose scroll position). Polling pauses while the browser tab is hidden and catches up the moment it regains focus. <strong>Mark read</strong> and <strong>Mark All Read</strong> now fire as AJAX (the POST routes return JSON for <code>X-Requested-With</code> requests) and refresh the list without a page load; both still work as plain form posts when JavaScript is off. The list markup moved to a shared partial ([notifications-list.php](templates/partials/notifications-list.php)) rendered by both the page and the feed endpoint, so the two never diverge ([notifications.php](templates/pages/notifications.php), [routes.php](src/routes.php), [helpers.php](src/helpers.php)).
+
+---
+
+## 2.67.0 &mdash; 2026-06-02
+
+### Added
+- **The notifications feed now carries every agent-facing alert, not just @mentions.** Previously the <i class="bi bi-bell"></i> Notifications page only listed rows where someone typed <code>@First Last</code> in a note; everything else (assignments, replies, SLA risk) lived only in email. The feed now surfaces seven types, each with its own icon and phrasing:
+  - **Mentions** — @mentioned in a public or internal note (unchanged).
+  - **New Assignments** — a ticket assigned directly to you or to a group you belong to.
+  - **Ticket Updates** — status changes on tickets you're assigned to or watching, plus new public replies on tickets you watch or are CC'd on.
+  - **SLA Warnings** — first-response/resolution deadline approaching (fires from the SLA cron when a ticket crosses into the <code>warning</code> state).
+  - **SLA Breaches** — deadline passed, plus escalation-rule alerts.
+  - **New Tickets** — a ticket created into a group you're notified for.
+  - **Customer Replies** / **Notes** — the requester replied, or an internal note was added, on a ticket assigned to you.
+
+### Changed
+- **Generalized the <code>notifications</code> table (migration 043).** Added a <code>type</code> column and a denormalized <code>body</code> headline, and relaxed the previously-required <code>timeline_id</code> / <code>mentioned_by</code> columns to nullable so system-generated alerts (SLA, status changes) no longer need a fake "sender." Existing @mention rows are untouched (<code>type = 'mention'</code>, body falls back to the linked note). New <code>createNotification()</code> / <code>notificationMeta()</code> helpers centralize writes and per-type display ([helpers.php](src/helpers.php)).
+- In-app notifications are written from the existing recipient-fan-out helpers (<code>notifyAssignedAgent</code>, <code>notifyWatchers</code>, etc.), so they reuse the same recipient resolution as email and ignore per-user **email** opt-outs — muting an email no longer hides the on-page alert. They remain gated by the site-wide email-category toggles. Assignments, watcher updates, status changes, and SLA alerts fire regardless of those toggles.
+
+---
+
+## 2.66.11 &mdash; 2026-06-02
+
+### Security
+- **Fixed a stored XSS in status banners.** The old <code>sanitizeBannerHtml()</code> was a regex blocklist that only stripped quoted <code>on*=</code> handlers and well-formed <code>&lt;script&gt;</code> tags, so unquoted event handlers (<code>&lt;img src=x onerror=…&gt;</code>), <code>&lt;svg onload&gt;</code>, unclosed <code>&lt;script&gt;</code>, <code>&lt;iframe srcdoc&gt;</code>, and a <code>javascript:</code> reassembly trick all slipped through — letting any staff member (banners are gated only by <code>Auth::requireStaff</code>) inject script that ran in every viewer's browser, including admins and portal patrons. Replaced it with an allowlist-by-construction DOMDocument sanitizer: only a small set of formatting tags survive, every attribute outside a per-tag allowlist is dropped (killing all event handlers regardless of quoting), and links are restricted to <code>http</code>/<code>https</code>/<code>mailto</code>/relative URLs ([helpers.php](src/helpers.php)). Verified against a 14-payload bypass battery (all neutralized) with legitimate bold/link/list formatting preserved.
+
+---
+
+## 2.66.10 &mdash; 2026-06-01
+
+### Changed
+- **Status Banners moved from the sidebar rail to the Settings page.** The <i class="bi bi-megaphone"></i> <strong>Status Banners</strong> rail icon is gone; the feature now lives under a new <strong>Operations</strong> group in the Settings left-nav ([settings-nav.php](templates/partials/settings-nav.php), [helpers.php](src/helpers.php)). Because posting incident banners is open to <em>every</em> staff member (gated only by <code>Auth::requireStaff</code>), the Settings nav item is shown to all staff via a new <code>@staff</code> gate, and <code>canAccessSettingsArea()</code> now admits any staff role — so no one who could post banners before loses access, and admins (who never had the rail icon) gain a link. The banner pages now breadcrumb under <em>Settings</em> ([index](templates/pages/agent/banners/index.php), [form](templates/pages/agent/banners/form.php)).
+
+---
+
+## 2.66.9 &mdash; 2026-06-01
+
+### Changed
+- **Floor mode icon now only appears on touch devices.** The <strong>Floor mode</strong> rail icon (agent and portal sidebars) is hidden on devices whose primary pointer is a mouse — desktops and Windows touchscreen laptops — and shown only on tablets/kiosks/phones, where it's actually meant to be used. Detection is pure CSS via the <code>(hover: hover) and (pointer: fine)</code> media query against a new <code>touch-only</code> nav class; no JS and no flash of a visible-then-hidden icon ([helpers.php](src/helpers.php), [app.php](templates/layouts/app.php)).
+
+---
+
+## 2.66.8 &mdash; 2026-06-01
+
+### Changed
+- **Personal Canned Responses moved from the sidebar to the profile page.** The per-staff Canned Responses manager (your own reply snippets, plus the team's shared ones) was a dedicated sidebar icon; it's now a <strong>Manage Canned Responses</strong> card on <strong>My Profile</strong>, shown to every staff member ([profile/edit.php](templates/pages/profile/edit.php), [helpers.php](src/helpers.php)). This also gives admins — whose sidebar never carried the icon — a direct way to manage their personal responses. The manager pages now breadcrumb under <em>My Profile</em> ([index](templates/pages/agent/canned-responses/index.php), [form](templates/pages/agent/canned-responses/form.php)). Admin-managed <em>global</em> canned responses are unchanged (still at Settings &rarr; Customization &rarr; Canned Responses). Docs and the agent onboarding tour were updated to point at the profile page ([agent-tour.php](templates/partials/agent-tour.php), [canned-responses.php](templates/pages/agent/docs/canned-responses.php), [working-tickets.php](templates/pages/agent/docs/working-tickets.php), [agent help landing](templates/pages/agent/docs/index.php)).
+
+---
+
+## 2.66.7 &mdash; 2026-06-01
+
+### Documentation
+- **Swept every help-doc navigation breadcrumb for the Settings reorganization, and told agents where their tools went.** Following 2.66.6, the remaining docs that still pointed at old top-level locations were corrected to their <em>Settings → …</em> paths: Automations and the Who's Online list ([automations.php](templates/pages/admin/docs/automations.php)), the AI routing Groups step ([ai.php](templates/pages/admin/docs/ai.php)), the CSAT results report ([csat.php](templates/pages/admin/docs/csat.php)), SLA Policies &amp; Priorities ([sla.php](templates/pages/admin/docs/sla.php)), and Priorities, Ticket Templates &amp; the Form Builder ("Ticket Forms") ([tickets.php](templates/pages/admin/docs/tickets.php)). The **Agent Help** landing ([index.php](templates/pages/agent/docs/index.php)) gains a "Where to find your tools" callout explaining that management features their level grants (Ticket Templates, KB articles, Recurring Tickets, Reports, …) now live behind the <strong>Settings</strong> icon in the sidebar, which only ever shows the areas they can open.
+
+---
+
+## 2.66.6 &mdash; 2026-06-01
+
+### Documentation
+- **In-app help updated for the Settings reorganization and the new user-management guards.** The **Getting Started** doc ([getting-started.php](templates/pages/admin/docs/getting-started.php)) gains a "Finding Your Way Around" section explaining the trimmed sidebar and the Settings-page menu groups. The **Users &amp; Agents** doc ([users.php](templates/pages/admin/docs/users.php)) now documents that management areas live on the Settings page (non-admins get a single Settings link), updates the navigation breadcrumbs for Users, Permission Levels, Who's Online and the Audit Log to their new <em>Settings → …</em> locations, and adds a "What a Level Can Change About Other Users" section covering the privilege guards from 2.66.1–2.66.3 (can't assign above your own level; can't change the role, email or password of, or delete, a user who outranks you). The **Knowledge Base** ([kb.php](templates/pages/admin/docs/kb.php)) and **Tickets** ([tickets.php](templates/pages/admin/docs/tickets.php)) docs get the updated <em>Settings → …</em> breadcrumbs, and the Tickets doc now describes the live Assigned-To re-filtering when the Group is changed in the Update Ticket panel (2.65.5).
+
+---
+
+## 2.66.5 &mdash; 2026-06-01
+
+### Fixed
+- **The agent onboarding tour no longer walks agents into a 403.** The tour ([agent-tour.php](templates/partials/agent-tour.php)) navigated every taker to `/admin/ticket-templates` (from the "no tickets yet" branch and the end of the in-ticket section), but that page requires `ticket_templates.manage` — so an agent or custom level without it landed on a Forbidden page mid-tour. The tour is now permission-aware: it only routes to Templates when the viewer holds `ticket_templates.manage`, and for everyone else the page-agnostic wrap-up steps (Email Notifications & Email Commands) are appended to the final ticket section so the tour still finishes cleanly with no 403 and no lost content. Verified with Playwright by driving the full tour as a level lacking the permission — it completes across dashboard → tickets → ticket → wrap-up without ever hitting `/admin/ticket-templates`.
+
+---
+
+## 2.66.4 &mdash; 2026-06-01
+
+### Fixed
+- **The "Templates" button on the ticket list no longer 403s for staff who lack the permission.** The button on the agent ([index.php](templates/pages/agent/tickets/index.php)) and admin ([index.php](templates/pages/admin/tickets/index.php)) ticket lists linked to `/admin/ticket-templates` unconditionally, but that route requires `ticket_templates.manage`. Any agent or custom level without that permission saw the button and hit a 403 on click. The button is now gated on `Auth::can('ticket_templates.manage')` (admins always pass), so it only appears for staff who can actually open the page; the route itself stays gated.
+
+---
+
+## 2.66.3 &mdash; 2026-06-01
+
+### Security
+- **A lower-level user can no longer delete a user who outranks them.** Completing the user-editor privilege guards (2.66.1/2.66.2), the delete route ([admin.php](src/routes/admin.php)) now rejects a deletion when the target user's level is not assignable by the actor (i.e. the target outranks them); admins and editors at/above the target's level are unaffected. The Delete control is hidden on the user profile ([view.php](templates/pages/admin/users/view.php)) and in the user list ([index.php](templates/pages/admin/users/index.php)) for such users. Verified with Playwright: a forged delete POST against an admin leaves the admin in place, while deleting an equal-or-lower user still works.
+
+---
+
+## 2.66.2 &mdash; 2026-06-01
+
+### Security
+- **A lower-level user can no longer reset the email or password of a user who outranks them (account-takeover guard).** Following 2.66.1, a non-admin with `users.manage` still could not change a higher-level user's *role*, but could change that user's **email or password** — an account-takeover path. The user-edit handler ([admin.php](src/routes/admin.php)) now keeps the email and password unchanged whenever the edited user outranks the editor (the role being un-assignable by the editor), regardless of what is posted; admins and editors at/above the target's level are unaffected. The edit form ([form.php](templates/pages/admin/users/form.php)) makes the email read-only and disables the password field in that case. Verified with Playwright: a forged POST trying to hijack an admin's email + password leaves both unchanged in the database, while normal edits of an equal-or-lower user still apply.
+
+---
+
+## 2.66.1 &mdash; 2026-06-01
+
+### Security
+- **Closed a privilege-escalation hole in the user editor: a non-admin with `users.manage` could set any user (including themselves) to Admin.** The create, edit and CSV-import paths validated the submitted role only with `roleExists()` (edit used a stale hardcoded list that also silently dropped custom levels), so any existing role slug — `admin` included — was accepted. Now a non-admin may only assign a level whose capabilities are a **subset of their own**, and never `admin`; admins remain unrestricted. New `roleAssignableBy()` / `assignableRoleChoices()` helpers ([helpers.php](src/helpers.php)) enforce this on [user create/edit and import](src/routes/admin.php), and the user form ([form.php](templates/pages/admin/users/form.php)) now lists only assignable levels — locking the field entirely when the edited user already outranks the editor (so a non-admin can neither escalate a user nor alter someone above their own level). Verified with Playwright: forged POSTs attempting to escalate, create-as-admin, or demote a higher-level user are all rejected, while legitimate same-or-lower assignments and full admin control still work.
+
+---
+
+## 2.66.0 &mdash; 2026-06-01
+
+### Changed
+- **The left sidebar no longer grows one icon per granted permission — management areas now live on the Settings page.** Granting permissions to a staff level used to append a link to the rail for each capability, so a level with many permissions could push icons off-screen. Standard day-to-day actions stay on the rail; everything else is reached through the Settings page's permission-filtered left nav. Specifically:
+  - **Admin sidebar** ([helpers.php](src/helpers.php)) trimmed to Dashboard, Tickets, Settings, Docs. **Users, Ticket Forms, Knowledge Base management, Recurring Tickets, Audit Log and Reports** moved off the rail into the Settings nav.
+  - **Non-admin staff sidebar** now shows a **single "Settings" link** (when the level holds any grantable permission) instead of one link per permission. The Settings page's own left nav reveals exactly the areas the level can open — same permission gating as before, just relocated.
+  - **Settings left-nav** ([settings-nav.php](templates/partials/settings-nav.php)) gained **Users & Access** (Users, Permission Levels), **Knowledge Base** (Manage Articles, Categories & Folders) and **Reports** groups, plus **Ticket Forms** (Organization), **Ticket Templates** (Customization), **Recurring Tickets** (Automation) and **Audit Log** (System). Every grantable permission now maps to a nav item so no granted capability is ever unreachable.
+  - **Non-admins can now open `/admin/settings`** ([admin.php](src/routes/admin.php)): any staff holding a settings-area permission lands on a nav-only [landing page](templates/pages/admin/settings/landing.php); the full email/SMTP index remains gated to `settings.manage`. New `canAccessSettingsArea()` helper drives both the sidebar link and the landing gate.
+
+---
+
+## 2.65.5 &mdash; 2026-05-29
+
+### Fixed
+- **Changing the Group in a ticket's update panel now re-filters the Assigned To list immediately — no save-and-reload required.** Previously the **Assigned To** dropdown was populated server-side from the ticket's group (admin) or ticket-type group (agent) and never updated when you picked a different **Group** in the same panel, so assigning to a member of the newly chosen group meant saving the group change first, waiting for the reload, then editing the assignee. Both ticket-view handlers now pass a group&rarr;members map ([admin.php](src/routes/admin.php), [agent.php](src/routes/agent.php)) and both view templates ([admin/tickets/view.php](templates/pages/admin/tickets/view.php), [agent/tickets/view.php](templates/pages/agent/tickets/view.php)) rebuild the Assigned To options the moment the Group changes — showing all staff when Group is None, preserving the current assignee if they belong to the new group, and resetting to Unassigned otherwise.
+
+---
+
+## 2.65.4 &mdash; 2026-05-29
+
+### Documentation
+- **In-app help now covers permission levels and the new inline status/priority controls.** The **Users &amp; Agents** doc ([users.php](templates/pages/admin/docs/users.php)) had a "Roles Overview" that still described only the three old fixed roles; it now lists all four built-in levels (Admin, Power User, Agent, End User) and gains a **Permission Levels &amp; Granular Permissions** section documenting custom levels, the grantable capabilities, and the no-self-escalation rule (shipped in 2.65.0). The **Tickets** doc ([tickets.php](templates/pages/admin/docs/tickets.php)) and the agent **Ticket List** doc ([ticket-list.php](templates/pages/agent/docs/ticket-list.php)) now document the inline **Status** and **Priority** quick-change badges added in 2.63.0/2.64.0 — including the side effects each fires (timeline entry, requester notification, CSAT, SLA pause/resume/recalculation, `ticket_updated` automations) — alongside the existing Agent/Type/Group inline actions.
+
+---
+
+## 2.65.3 &mdash; 2026-05-29
+
+### Fixed
+- **Every grantable permission now works end-to-end for custom staff levels — no admin-shell 403 traps.** 2.65.1/2.65.2 fixed the Knowledge Base case; this completes the same fix across *all* admin areas. Three structural changes: (1) `adminSidebar()` now returns the viewer's permission-filtered **staff** sidebar for any non-admin, so a granted staff level reaching any `/admin/*` page sees only the areas it can open instead of the full admin menu (whose links 403) — this covers all 117 admin templates at once ([helpers.php](src/helpers.php)). (2) The `/admin` dashboard route now redirects non-admin staff to `/agent` instead of returning 403, so the "Admin" breadcrumb on shared pages is no longer a dead end ([routes.php](src/routes.php)). (3) The staff sidebar gained direct entry links for the remaining grantable areas — Ticket Templates, Recurring Tickets, SLA Policies, Automations, CSAT Surveys, AI Classification and Import Data — each shown only when its capability is granted, so levels that hold these (but not full `settings.manage`) can actually navigate to them. Verified by granting each of the 17 capabilities in isolation and confirming its area renders the staff shell with no admin links leaking and no 403.
+
+---
+
+## 2.65.2 &mdash; 2026-05-29
+
+### Fixed
+- **KB management pages no longer trap granted staff with admin-only 403 links.** When a non-admin staff level opened the KB management UI (`/admin/kb/articles`, `/admin/kb/categories`, `/admin/kb/folders` and their forms/history/diff/preview), the page rendered the full **admin** sidebar and breadcrumb — Settings, Workflows, Audit log, etc. — every one a 403 for that role. These pages now render the permission-filtered **staff** sidebar and an `Agent` breadcrumb for non-admins (mirroring how the Reports pages already handle Power Users), and the in-page cross-links (Categories/Folders, Import CSV) are shown only when the viewer holds the matching capability (`kb.structure.manage` / `import.manage`). Admins are unaffected. ([admin/kb/](templates/pages/admin/kb/))
+
+---
+
+## 2.65.1 &mdash; 2026-05-29
+
+### Fixed
+- **Granting a staff level "Create & delete KB articles" (or "Manage KB categories & folders") now adds a working sidebar link.** The 2.65.0 permission-driven staff sidebar honoured every admin-area capability except the two Knowledge Base ones, so a custom level granted KB management had the backend access but no way to reach the management UI — it looked like the permission did nothing. `staffSidebar()` now surfaces **Manage KB Articles** (`/admin/kb/articles`) for `kb.articles.manage` and **KB Categories & Folders** (`/admin/kb/categories`) for `kb.structure.manage` ([helpers.php](src/helpers.php)).
+
+---
+
+## 2.65.0 &mdash; 2026-05-29
+
+### Added
+- **Custom permission levels with granular permissions.** Admins can now create their own staff permission levels beyond the built-in Admin / Agent / Power User / End User, and grant each level exactly the capabilities it needs — create & delete KB articles, run reports, manage ticket forms & types, automations, SLA policies, users, groups, and every admin settings area. Manage them under **Admin → Settings → Permission Levels** ([admin/roles/index.php](templates/pages/admin/roles/index.php), [admin/roles/form.php](templates/pages/admin/roles/form.php)), backed by new `/admin/roles` CRUD routes in [admin.php](src/routes/admin.php). Each level is a row in the new `roles` table; capabilities are rows in `permissions` granted via `role_permissions` (migration [042_roles_permissions.php](database/migrations/042_roles_permissions.php)).
+
+### Changed
+- **Role checks are now permission-based throughout.** Introduced `Auth::can()`, `Auth::isAdmin()`, `Auth::isStaff()`, `Auth::requirePermission()`, `Auth::requireAdmin()` and `Auth::requireStaff()` ([Auth.php](src/Auth.php)), resolved per-request from a cached roles→permissions map ([helpers.php](src/helpers.php)). Every route gate, navigation item, sidebar, and the REST API ([api.php](src/routes/api.php)) was migrated from hardcoded role strings (`requireRole('admin')`, `in_array(Auth::role(), [...])`, `WHERE role IN (...)`) to these helpers. The four built-in roles are seeded to reproduce their previous behaviour **exactly** — Admin keeps full access, Power User keeps reports, Agents keep ticket/template/KB-edit access — so nothing changes for existing installs until you create or customise a level.
+- The staff sidebar is now permission-driven: it shows each admin-area shortcut (Reports, Users, Settings, …) only when the role is granted the matching capability, so custom levels see exactly what they can open.
+- The user create/edit form, user-list role filter, and user CSV import now source their role options from the `roles` table instead of a hardcoded list, so custom levels are assignable everywhere ([users/form.php](templates/pages/admin/users/form.php)).
+
+### Notes
+- Admins always have unrestricted access (the Admin level bypasses every permission check). Built-in levels can't be deleted; a level still assigned to users can't be deleted until those users are reassigned. Managing permission levels is admin-only and is intentionally **not** a grantable capability, so a level can never escalate its own privileges. Custom levels are staff-side (they sign in to the agent interface).
+- `users.role` changed from an `ENUM` to `VARCHAR(64)` to hold custom level slugs; existing values are preserved. Fresh installs get the new tables and seed data via the updated [schema.sql](database/schema.sql) and installer.
+
+---
+
+## 2.64.0 &mdash; 2026-05-29
+
+### Added
+- **Change a ticket's priority inline from the ticket list.** The priority badge on the agent and admin ticket lists is now a quick-change dropdown — click it to pick a new priority (or clear it) without opening the ticket, matching the new inline status control and the existing agent/group/type ones. The change is saved over a new `POST /api/tickets/{id}/set-priority` endpoint that mirrors the ticket-detail priority logic (timeline entry, SLA recalculation via `Sla::onPriorityChanged`, and `ticket_updated` automations). The badge updates in place. Added in both the agent and admin lists ([agent/tickets/index.php](templates/pages/agent/tickets/index.php), [admin/tickets/index.php](templates/pages/admin/tickets/index.php)) with the endpoint in [routes.php](src/routes.php).
+
+---
+
+## 2.63.0 &mdash; 2026-05-29
+
+### Added
+- **Change a ticket's status inline from the ticket list.** The status badge on the agent and admin ticket lists is now a quick-change dropdown — click it to pick a new status without opening the ticket, exactly like the existing agent/group/type quick-change controls. The change is saved over a new `POST /api/tickets/{id}/set-status` endpoint that mirrors the ticket-detail status logic (timeline entry, requester notification for closed-bucket statuses, CSAT survey trigger, SLA pause/resume, and `ticket_updated` automations). Only active statuses are offered, and the badge updates in place. Added in both the agent and admin lists ([agent/tickets/index.php](templates/pages/agent/tickets/index.php), [admin/tickets/index.php](templates/pages/admin/tickets/index.php)) with the endpoint in [routes.php](src/routes.php).
+
+---
+
+## 2.62.8 &mdash; 2026-05-29
+
+### Fixed
+- **@mention autocomplete now flips above the caret when there's no room below it.** Near the bottom of a long reply (or when the caret sits low in the viewport) the dropdown opened downward and ran off-screen. It now measures the available space and anchors above the caret instead when placing below would overflow the viewport. Fixed in both the agent and admin ticket views ([agent/tickets/view.php](templates/pages/agent/tickets/view.php), [admin/tickets/view.php](templates/pages/admin/tickets/view.php)).
+
+---
+
+## 2.62.7 &mdash; 2026-05-29
+
+### Fixed
+- **@mention autocomplete now opens right below the caret instead of floating below the whole reply box.** The dropdown was `position:absolute` with no coordinates, so it dropped to its static flow position under the entire CKEditor. It now anchors to the live caret position via CKEditor's DOM converter each time it opens. Fixed in both the agent and admin ticket views ([agent/tickets/view.php](templates/pages/agent/tickets/view.php), [admin/tickets/view.php](templates/pages/admin/tickets/view.php)).
+
+---
+
+## 2.62.6 &mdash; 2026-05-28
+
+### Changed
+- **Video walkthrough working files no longer show up in `git status`.** The screenshots, audio, and rendered video clips under `docs/screenshots/agent-walkthrough/` are scratch assets for the in-progress product walkthrough, not source we want to commit. Added `/docs/screenshots/agent-walkthrough/` to [.gitignore](.gitignore) so the PNGs and the `annotated/`, `audio/`, `v2/`, `video/` subdirs stay local.
+
+---
+
+## 2.62.5 &mdash; 2026-05-28
+
+### Fixed
+- **Notification badge sits closer to the bell without overlapping it.** The badge was anchored at `start-100 translate-middle-x`, which centred it on the nav-link's right edge and left an awkward gap from the bell glyph. Dropped the Bootstrap positioning utilities and pinned the badge with `right:.15rem` in [templates/partials/navbar.php](templates/partials/navbar.php) so the count snugs into the upper-right of the bell with a hairline gap.
+
+---
+
+## 2.62.4 &mdash; 2026-05-28
+
+### Fixed
+- **Notification bell badge is no longer almost as big as the bell itself.** 2.62.3 fixed the clipping but left the badge at Bootstrap's default size, which rendered nearly as tall as the `fs-5` bell icon next to it. Tightened the badge in [templates/partials/navbar.php](templates/partials/navbar.php) with `font-size:.55rem`, `padding:.15em .35em`, and `line-height:1` so the count sits as a compact pill in the upper-right of the bell instead of competing with it.
+
+---
+
+## 2.62.3 &mdash; 2026-05-28
+
+### Fixed
+- **Notifications page no longer shows raw HTML like `<p>@fake agent did you get this?</p>`.** The mention preview was double-handling the body: the message column stores the WYSIWYG HTML the agent typed, and [templates/pages/notifications.php](templates/pages/notifications.php) was just running it through `e()`, which faithfully escaped the angle brackets so the tags rendered as literal text. Switched to `e(trim(html_entity_decode(strip_tags($n['message']), ENT_QUOTES, 'UTF-8')))` so we strip the markup down to plain text first, decode any entities CKEditor wrote (`&nbsp;`, `&amp;`, etc.), and *then* re-escape for safe display — short, readable preview with no tags leaking through.
+- **Notification bell badge no longer gets sliced off at the top of the navbar.** The badge in [templates/partials/navbar.php](templates/partials/navbar.php) used Bootstrap's `top-0 start-100 translate-middle` pattern, which anchors the badge center at the top-right corner of the nav-link and then pulls it up by half its own height — so the upper half of the "1" rendered above the navbar's top edge and got clipped. Replaced with `start-100 translate-middle-x` plus an inline `top:.35rem;`, which keeps the horizontal overlap on the bell but seats the badge fully inside the green bar.
+
+---
+
+## 2.62.2 &mdash; 2026-05-28
+
+### Fixed
+- **Clicking a name in the @mention dropdown actually inserts it now.** With 2.62.1 the dropdown showed up again but clicking a result threw `CKEditorError: Cannot read properties of undefined (reading 'is')` deep inside `Position._createAt`. Root cause: `selectMention()` was calling `writer.insertText(text, writer.createSelection(range))` — but CKEditor 5's `writer.insertText` signature is `(text, attributesOrPosition, offset)`, **not** `(text, selection)`. When a `Selection` was passed in the second arg, CKEditor's overload resolution treated it as a position-like target, then handed `undefined` down to `Position._createAt`, which crashed on `node.is(...)`. This path had never been exercised before because the earlier `getMentionInfo()` bug (fixed in 2.62.1) meant the dropdown never showed, so nobody ever clicked an entry. Rewritten with unambiguous calls: build the `@query` range from `info.parent` + `info.start`/`info.endOffset`, `writer.remove(range)` it, then `writer.insertText(text, writer.createPositionAt(info.parent, info.start))` and `writer.setSelection(...)` the caret to land after the inserted mention. Also added `editor.editing.view.focus()` after the change so focus returns cleanly to the editor when the click was on the dropdown. Same fix in both [templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php) and [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php).
+
+---
+
+## 2.62.1 &mdash; 2026-05-28
+
+### Fixed
+- **@mention autocomplete works again on the admin and agent ticket reply editors.** When the reply textarea was replaced with a CKEditor 5 WYSIWYG in v2.34.x (commit `188c91d`), the `getMentionInfo()` helper that watches the editor for `@` was wired to `position.textNode` — which CKEditor 5 documents as returning `null` whenever the caret sits at the **end** of a text node. After typing any character, the caret *is* at the end of the text node it just extended, so `textNode` was `null` on every keystroke, the function bailed out before fetching, and no dropdown ever appeared. The feature was silently broken on every ticket reply composer ([/admin/tickets/{id}](http://localhost:8000/admin/tickets/1) and [/agent/tickets/{id}](http://localhost:8000/agent/tickets/1)) from March 2026 onward — typing `@j` produced absolutely nothing, with no network request to `/api/mention-search` and no console error. Fix: fall back to `pos.nodeBefore` (the text node the caret just left) when `pos.textNode` is null, compute the typed text using `textNode.startOffset` so we read the right slice regardless of where the text node sits in its parent, and use the parent element + absolute parent offset when replacing the typed `@query` with the chosen full-name mention — so `writer.createPositionAt(parent, offset)` resolves correctly whether the text node is freshly created, mid-paragraph, or co-existing with siblings. Both [templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php) and [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php) carry parallel copies of the autocomplete (per the standing rule that admin/agent ticket templates are mirrors), so the same fix landed in both.
+
+---
+
+## 2.62.0 &mdash; 2026-05-28
+
+### Added
+- **New report: Group Coverage.** Lives at [/admin/reports/group-coverage](http://localhost:8000/admin/reports/group-coverage) and answers "which group covers each ticket type, and who's on the hook for it?" — one card per ticket type, showing the type's default group (the value set in **Admin &rarr; Ticket Types &rarr; Edit &rarr; Default Group**, i.e. `ticket_types.group_id`) and a one-row-per-member table beneath listing every user in that group, their email, role, and whether they hold the group's **Manager** flag (from `group_user_map.is_manager`). Types with no default group set are surfaced with a "No default group assigned" badge so misconfigurations don't hide; groups with no members render a "this group has no members" hint that links straight to the group's edit page. The group name in each card header links to **Admin &rarr; Groups &rarr; Edit** for one-click jump-to-fix. A **Print** button strips chrome (sidebar, top nav, breadcrumb, buttons) via a `@media print` block so the report photocopies cleanly for staff handouts. People deliberately appear more than once when the same group covers multiple types or when they belong to multiple groups across types — that repetition is the point of the report, since it shows the actual coverage as configured. The route is gated to `admin` and `power_user` (same as every other report at `/admin/reports/*`), and a new card is added to the **Reports &amp; Analytics** index ([/admin/reports](http://localhost:8000/admin/reports)) under "Detailed Reports" with a `bi-diagram-3` icon.
+
+---
+
+## 2.61.5 &mdash; 2026-05-28
+
+### Docs
+- **Help documentation now covers configurable ticket statuses end-to-end.** The Tickets help page previously described the seven hardcoded statuses as if they were immutable; now the "Ticket Statuses" card explicitly notes they are fully configurable, links to [/admin/settings/ticket-statuses](http://localhost:8000/admin/settings/ticket-statuses), and lists the seven seeded statuses as the starting point rather than the law. New subsections walk through each lever an admin can pull (bucket, pauses SLA, colour, active toggle), document the three default-status slots (default for new, default for resolved, default for closed) and the bucket rules each one must satisfy, explain that slugs are permanent after create while labels/colours/everything else are editable, cover drag-reorder, and enumerate every guardrail the settings page enforces (built-in rows can't be deleted, default-flag holders can't be deleted or deactivated until promoted out, last-active-in-bucket protection, automation/escalation/CSAT reference checks, and the reassign-tickets-to dropdown that the delete modal surfaces when in-flight tickets hold the slug being deleted). A new anchor `#ticket-statuses` lets other pages link straight to the section. The agent <em>Working Tickets</em> doc was also de-hardcoded &mdash; references to "Send &amp; Set as ..." and to the Status dropdown now note that the menu reflects whatever statuses admins have configured, with the seven seeded statuses listed as defaults rather than as the only options; the SLA-pause note now points at the per-status "Pauses SLA" flag rather than naming Waiting on Customer / Waiting on Third Party as hard-coded pausers. The Tickets help page also dropped its hardcoded "Send &amp; set status" option list for the same reason. The docs search index gained ten new entries covering "configure ticket statuses", "bucket", "pauses SLA", default-slot promotion, slug immutability, deactivation, reassign-on-delete, built-in row protection, and the broader guardrails &mdash; so admins searching for any piece of this feature land on the right anchor.
+
+---
+
+## 2.61.4 &mdash; 2026-05-28
+
+### Fixed
+- **Every row on the ticket-status admin page rendered with `data-id="0"`, so edit / delete / toggle-active / Set Default / drag-reorder all silently no-op'd.** The real root cause of the symptoms that 2.61.2 and 2.61.3 were chasing &mdash; the previous patches addressed real-but-secondary issues (missing reorder feedback, an over-eager submit-disable handler), but the underlying bug was in `_ticketStatusCache()` in [src/helpers.php](src/helpers.php): the `SELECT` omitted the `id` column, and the per-row array it built didn't include `id` either. The admin template renders `<tr data-id="<?= (int) $s['id'] ?>">` and the same value into every inline form's action URL &mdash; with the key missing, `(int) null` produced `0` for every row. The route handlers ran `WHERE id = 0`, found nothing, and (thanks to the 2.61.2 silent-no-row redirect) bounced cleanly back to the list without an error flash, which made it look exactly like the click did nothing. Drag-reorder posted `[0,0,0,...]` and updated zero rows. Create worked because it has no ID in the URL &mdash; consistent with the symptom report. Fix: added `id` to the SELECT and to the cache row shape. Also strengthened `test_ticketStatuses_rows_have_expected_keys` to assert `id` is present and is a positive int, so this regression can't sneak back in. Full suite: 401 passing / 1 pre-existing failure.
+
+---
+
+## 2.61.3 &mdash; 2026-05-28
+
+### Fixed
+- **Form submissions on the ticket-status admin page were silently cancelled by the double-click guard added in 2.61.2.** Setting `disabled = true` on the submit button during the `submit` event handler can cause some browsers (Firefox in particular) to abort the form submission &mdash; the click triggered the submit event, the handler disabled the submitter, and the browser then refused to send the POST because its submitter was disabled. Delete, deactivate (the new inline toggle), and Set Default all failed silently as a result &mdash; the click looked like it did nothing. Removed the entire submit-disable handler; the silent row-not-found redirect added in 2.61.2 already covers the original concern (accidental double-submit). Also added `Cache-Control: no-store` headers to the GET ticket-statuses route so the browser never serves a stale post-redirect view (a 304 here would mask a successful reorder/edit and look like the change was lost).
+
+---
+
+## 2.61.2 &mdash; 2026-05-27
+
+### Fixed
+- **Ticket status admin page UX fixes from first-touch testing.** Four issues surfaced when an admin walked through the new page: (1) **No visible deactivate control.** Built-in statuses (correctly) can't be deleted, and the only way to hide one from dropdowns was buried inside the Edit modal as an "Active" checkbox — making it look like there was no way to remove a built-in status at all. Fixed by adding an **inline Active toggle** in the table's Active column: the green check / grey eye-slash icon is now a single-click button that POSTs to a new `/admin/settings/ticket-statuses/{id}/toggle-active` endpoint (carrying the same Phase 5 guardrails — refuses to deactivate a default-flag holder or the last active in a bucket). The help banner was also reworded to point at the inline toggle. (2) **"Status not found" flash after a successful reassign-then-delete.** Caused by an accidental double-submit: the first POST deleted the row and redirected, the second POST hit the now-missing row and flashed the error. The delete handler now **silently redirects** when the row is already gone, on the reasoning that the user just saw a "deleted successfully" flash on the previous render — scaring them with a "not found" message confuses more than it helps. (3) **Same "Status not found" error when creating and immediately deleting a status.** Same double-submit root cause; same fix covers it. (4) **Drag-reorder appeared to not save.** It actually did save (DB inspection confirmed) but there was zero visible confirmation, so users assumed nothing happened. Added a floating green **"Order saved"** toast to [templates/partials/sortable-list.php](templates/partials/sortable-list.php) that appears briefly in the top-right of the card after every successful drag-end commit. Benefits the other sortable pages (priorities, types, escalation paths) as a side effect. Also added a **submit-button double-click guard** to every form on the ticket-statuses page: clicked submit buttons disable themselves and show a spinner until the redirect lands, so a fast double-click can't fire two POSTs. New tests: `test_toggle_active_flips_state`, `test_toggle_active_blocked_for_default_holder`. The existing helper tests were also relaxed to filter on `is_system=1` rather than assert exact row counts, so they tolerate admin-added custom statuses in the working DB.
+
+---
+
+## 2.61.1 &mdash; 2026-05-27
+
+### Added
+- **Phase 5 guardrails for the ticket-status admin page &mdash; destructive actions now have safety checks, and the delete modal lets admins reassign tickets in-place before removing a status.** Five new categories of protection: (1) **default-flag holders** cannot be deleted or deactivated until another status is promoted to that role &mdash; this protects the resolved/closed email triggers and the default-status-for-new-tickets pick. (2) **Last-active-in-bucket** is enforced on both delete and deactivate &mdash; you can't leave the «open» or «closed» bucket with zero active statuses (which would break new-ticket creation and dashboard counters). (3) **Reference checks** scan automations + escalation_rules JSON conditions/actions for `field=status value=<slug>` and `action=set_status value=<slug>` shapes (plus the `csat_trigger_status` setting), and surface the affected rule names in the block message so admins know exactly what to fix. (4) **Default-target bucket validation** &mdash; "Make default for resolved" / "for closed" now require a closed-bucket status; "for new tickets" requires open-bucket. Inactive statuses can't be promoted to a default. (5) **Reassign-then-delete flow** &mdash; when a status has tickets pointing at it, the delete modal now shows a "Reassign tickets to:" dropdown (active statuses, same-bucket options first) and the backend runs `UPDATE tickets SET status = target` then `DELETE` in a single transaction. New helper `ticketStatusReferences($slug)` in [src/helpers.php](src/helpers.php) returns a structured manifest of every place a slug is referenced &mdash; reused by the delete handler and the test suite. Also hardened `buildTicketFilterQuery()` to silently drop unknown status slugs from the input array, so saved filters referencing a since-removed status quietly degrade to "no filter" instead of producing empty result sets. 9 new tests added to [tests/Feature/Admin/TicketStatusesTest.php](tests/Feature/Admin/TicketStatusesTest.php): default-flag-holder protection, reassign-then-delete happy path, inactive-target rejection, deactivate guards, default-bucket validation, saved-filter slug filtering, automation-reference detection, and the end-to-end "automation blocks delete" path. Full suite stays at 399 passing / 1 pre-existing failure.
+
+---
+
+## 2.61.0 &mdash; 2026-05-27
+
+### Added
+- **Admin settings page for ticket statuses &mdash; admins can now add, rename, recolor, re&dash;order, and deactivate ticket statuses without touching code.** This is the feature that unlocks the previous three releases of plumbing. New route: [/admin/settings/ticket-statuses](http://localhost:8000/admin/settings/ticket-statuses), reachable from the Settings sidebar under "Organization" (between Locations and Ticket Types). The page lists every status &mdash; including deactivated ones &mdash; with its live badge preview, slug, bucket, SLA-pause flag, default-target flags, and active state. Each row has a drag handle (powered by the existing [templates/partials/sortable-list.php](templates/partials/sortable-list.php) infrastructure) so reorder persists immediately to all status dropdowns site-wide. **Add Status** opens a modal asking for a label, slug (auto-suggested from the label, but editable on create &mdash; <em>permanent</em> after that), bucket (Open/Closed), color picker, and a "Pause SLA" toggle. **Edit** opens a modal with everything except the slug. **Set default** (a gear menu in the Defaults column) promotes a status to the default-for-new, default-for-resolved, or default-for-closed flag; promoting a status clears whichever row previously held that flag in the same transaction. **Delete** is allowed only for non-system, unused custom statuses &mdash; built-in statuses can be deactivated but not deleted, and any status with tickets pointing at it is blocked with a count of how many. New endpoints: `POST /create`, `POST /{id}/edit`, `POST /{id}/set-default`, `POST /reorder`, `POST /{id}/delete` (all admin-only, all CSRF-protected). All writes call `ticketStatusCacheRefresh()` so the change is visible without a full page reload. Audit log entries: `status.created`, `status.updated`, `status.default_changed`, `status.deleted`. New `tests/Feature/Admin/TicketStatusesTest.php` (16 tests covering access control, page render, create+validation, edit+slug-immutability, default promotion, reorder persistence, and the baseline delete guards). Phase-4 delete guards are intentionally minimal &mdash; Phase 5 will add last-in-bucket protection, default-reassignment flows, and reference checks against automations/escalation rules.
+
+---
+
+## 2.60.2 &mdash; 2026-05-27
+
+### Changed
+- **Phase 3 of configurable ticket statuses &mdash; every hardcoded slug reference in the codebase now reads from the lookup table.** Behavior is preserved; this is a wide-but-mechanical refactor that swaps the inline `['open','in_progress','pending',...]` arrays and `status IN ('resolved','closed')` SQL clauses for the helper functions added in 2.60.1. Three more helpers were added along the way: `ticketStatusSqlIn($slugs, $col, $negate)` builds a PDO-quoted `IN (...)` / `NOT IN (...)` SQL fragment so the dozens of inline `IN` clauses become one-line calls; `ticketStatusTextColor($hex)` picks a readable black/white text color using the ITU-R BT.601 luma threshold Bootstrap uses internally; and `ticketStatusBadgeHtml($slug, $extraClass)` / `ticketStatusBadgeStyle($slug)` / `ticketStatusLabelMap()` give templates a single drop-in for status badges and dropdowns. **Files refactored:** [src/helpers.php](src/helpers.php) (5 sites), [src/routes.php](src/routes.php) (8 sites + portal close), [src/Sla.php](src/Sla.php) (1 site), [src/routes/api.php](src/routes/api.php) (5 sites including the three v1 API endpoints), [src/routes/agent.php](src/routes/agent.php) (3 sites incl. status-after-reply and ticket update), [src/routes/floor.php](src/routes/floor.php) (5 sites), [src/routes/portal.php](src/routes/portal.php) (5 sites incl. portal close + edit guard), [src/routes/admin.php](src/routes/admin.php) (~18 sites incl. AI classifier candidate filter, list views, replies, updates, bulk-action automation, all 8 report queries, CSAT trigger setting, CSV import default), and 11 templates (agent/admin/portal dashboards, ticket lists + views, floor views, automations index + form, admin ticket create, admin user view, status-changed email). **Semantic notes:** (a) the SLA recalc scan in [src/Sla.php:197](src/Sla.php#L197) now covers the full open bucket including waiting statuses &mdash; the previous query missed `waiting_on_customer` / `waiting_on_third_party`, an oversight from migration 003 that's now silently fixed; (b) the lifecycle chart at [src/routes/admin.php](src/routes/admin.php) now iterates every configured status instead of a hardcoded 5, so admin-added statuses appear in lifecycle reports for free; (c) `notifyRequesterStatusChanged` and the CSAT trigger now compare incoming statuses against the default-flag accessors (`ticketDefaultResolvedStatusSlug()` / `ticketDefaultClosedStatusSlug()`), so an admin renaming `resolved` to `completed` keeps the resolved-email and CSAT firing on the right state. (d) Portal templates retain their `portal.status.*` friendly-label overrides for the seven seeded slugs; admin-added custom statuses fall through to their configured label. **Visual:** status badges now use inline hex colors with auto-contrast text instead of Bootstrap `bg-*` classes &mdash; this is what unlocks admin-picked colors. The seven seeded slugs each get a distinct hue rather than the previous Bootstrap class shared by `in_progress`/`waiting_on_customer` (both used `warning`). Full test suite stays at 373 passing / 1 pre-existing failure (unrelated portal regression).
+
+---
+
+## 2.60.1 &mdash; 2026-05-27
+
+### Added
+- **Phase 2 of configurable ticket statuses &mdash; helper functions that read from the `ticket_statuses` lookup table.** Still infrastructure: nothing in the app yet calls these (Phase 3 will swap out the hardcoded slug arrays and `IN(...)` SQL clauses). New helpers live at the bottom of [src/helpers.php](src/helpers.php) and share a single request-scoped static cache so the cost is one query per request, however many call sites read. Functions added: `ticketStatuses()` (all rows), `ticketActiveStatuses()` (is_active=1 only), `ticketStatusSlugs()` / `ticketActiveStatusSlugs()`, `ticketOpenBucketSlugs()` and `ticketClosedBucketSlugs()` (for the two semantic SQL filters), `ticketSlaPausingSlugs()` (for SLA pause logic), `ticketDefaultNewStatusSlug()` / `ticketDefaultResolvedStatusSlug()` / `ticketDefaultClosedStatusSlug()` (for new-ticket assignment + the resolved/closed email template triggers), and `ticketStatusLabel()` / `ticketStatusColor()` / `ticketStatusMeta()` for templates. Label and color helpers fall back gracefully for orphan slugs (humanized slug, neutral gray) so a ticket whose status was deactivated still renders a readable badge instead of a blank or a 500. The previous hardcoded `ticketStatusLabel()` helper (a 7-arm `match` statement, never called from anywhere outside its own file) was removed in favor of the lookup-driven version. New `tests/Feature/TicketStatusHelpersTest.php` (16 tests / 44 assertions) covers the seeded values, the orphan fallback paths, and verifies the request-scoped cache actually caches.
+
+---
+
+## 2.60.0 &mdash; 2026-05-27
+
+### Added
+- **Phase 1 of configurable ticket statuses &mdash; new `ticket_statuses` lookup table seeded with the 7 original statuses.** This is infrastructure only; behavior is unchanged until later phases wire up the helpers, refactor the hardcoded SQL, and add the admin settings UI. Migration [database/migrations/041_ticket_statuses.php](database/migrations/041_ticket_statuses.php) (a) creates `ticket_statuses` with columns `slug`, `label`, `bucket` (`open`/`closed`), `pauses_sla`, `sort_order`, `color`, `is_default_new`/`is_default_resolved`/`is_default_closed`, `is_system`, `is_active`, plus a unique index on `slug` and a composite index on `(bucket, is_active, sort_order)`; (b) seeds the 7 existing slugs verbatim (`open`, `in_progress`, `pending`, `waiting_on_customer`, `waiting_on_third_party`, `resolved`, `closed`) with their original ordering, bucket assignments, SLA-pause flags, and the three default-target flags pointing at `open` / `resolved` / `closed`; (c) verifies every distinct value in `tickets.status` matches a seeded slug and aborts otherwise; (d) `ALTER`s `tickets.status` from a 7-value `ENUM` to `VARCHAR(64) NOT NULL DEFAULT 'open'` so future admin-defined slugs are accepted; (e) adds `idx_tickets_status` (none existed). Existing rows are preserved bit-for-bit &mdash; the slug strings carry over unchanged. New `tests/Feature/MigrationStatusesTest.php` (11 tests / 40 assertions) locks the schema shape, the seed contents, and the column conversion in place.
+
+---
+
+## 2.59.1 &mdash; 2026-05-27
+
+### Fixed
+- **Dismissing the status banner now sticks across tabs and page loads, and no longer leaves blank space behind.** Previously [templates/partials/status-banner.php](templates/partials/status-banner.php) recorded dismissal only in `localStorage` and hid the alert via `display: none`. In practice that meant a) opening a new tab re-surfaced the banner (cross-tab `localStorage` reads weren't reliable for some users), and b) the wrapper `<div class="mb-3">` stayed in the DOM, leaving a chunk of empty space at the top of the page between the breadcrumb and the page content. Dismissal now POSTs to a new `POST /api/banners/{id}/dismiss` endpoint that stores the chosen banner+`updated_at` pair in `$_SESSION['dismissed_banners']`, and `getActiveBanners()` filters those out before render &mdash; so on every subsequent page in every tab, the banner simply isn't emitted (no wrapper, no margin, no gap). Editing a banner bumps `updated_at` and re-surfaces it as before. The dismiss button itself also now drops the wrapper element after the last banner fades, so the current page reflows immediately without waiting for the next navigation.
+
+---
+
+## 2.59.0 &mdash; 2026-05-26
+
+### Added
+- **Cron Jobs page now shows both Linux and Windows commands side by side.** Previously [templates/pages/admin/settings/cron-jobs.php](templates/pages/admin/settings/cron-jobs.php) auto-detected the host platform (via `PHP_OS`) and emitted *only* the matching command &mdash; great for Linux servers, invisible for Windows admins reading the docs from a Linux host (or vice versa). The page now renders a pill-tab toggle at the top (**Linux / macOS** vs **Windows**) that flips visibility across every command block, including each per-job card, the per-job log-file line, and the combined block at the bottom. The detected platform is the default tab and gets a "Detected" badge. Windows commands use the `schtasks /Create /TN "&hellip;" /TR "'php.exe' 'script.php'" /SC &hellip; /F` shape, which parses identically in both cmd.exe and PowerShell. When viewing the non-host platform, paths fall back to conventional placeholders (`/var/www/freshwpl` for Linux, `C:\xampp\htdocs\freshwpl` / `C:\xampp\php\php.exe` for Windows-on-XAMPP) with a banner reminding the admin to substitute their real install path.
+
+---
+
+## 2.58.3 &mdash; 2026-05-26
+
+### Fixed
+- **Matrix print now actually fits on a single sheet.** 2.58.2 emulated the print stylesheet via Playwright's `media: print` and looked fine, but the *real* browser print pipeline (Chrome DevTools' page.pdf, same one File &rarr; Print uses) still split the 12-row matrix onto two pages because the on-screen page heading, description paragraph, and per-row group-name sub-line ate too much vertical space. In print, [templates/pages/admin/types/matrix.php](templates/pages/admin/types/matrix.php) now hides the screen heading + description (`d-print-none`), replaces them with a compact one-line print-only title that includes today's date, drops the per-row group-name sub-text (which was a screen convenience &mdash; the "Group assigned" column already encodes the boolean), tightens row padding to 2px, drops the rotated header to 130px at 9pt body / 8.5pt header, and trims the legend's margin and font. Re-verified by rendering an actual landscape Letter PDF: **1 page** with all 12 ticket types.
+
+---
+
+## 2.58.2 &mdash; 2026-05-26
+
+### Fixed
+- **Matrix print headers no longer clip long column labels.** 2.58.1 shrank the rotated header height to 110px, which truncated longer labels like "Show 'To' / Location" and "Custom stale threshold" at the top edge in print. Print header height is now 140px with an 8.5pt font &mdash; still tighter than the on-screen 150px, but enough room for every label to render in full. The matrix still fits on one landscape sheet.
+
+---
+
+## 2.58.1 &mdash; 2026-05-26
+
+### Fixed
+- **Printing the Ticket Types Settings Matrix is now a single landscape sheet without the site chrome.** The 2.58.0 print stylesheet missed three things: the site-wide status banner ([templates/partials/status-banner.php](templates/partials/status-banner.php), class `ld-banner`) printed at the top of every page; the "Settings" page heading ate vertical space; and the matrix overflowed onto a second page in portrait. [templates/pages/admin/types/matrix.php](templates/pages/admin/types/matrix.php) now hides `.ld-banner`, the "Settings" heading (via `d-print-none`), and the settings sub-nav sidebar in print, switches `@page` to Letter landscape with 0.4" margins, and tightens row/column padding and font sizes so a 12-row matrix prints on one page with room to grow. Also fixed the page title showing a literal `&mdash;` instead of an em-dash &mdash; the title is set as a plain PHP string, not HTML, so the entity wasn't being decoded.
+
+---
+
+## 2.58.0 &mdash; 2026-05-26
+
+### Added
+- **Ticket Types now have a Settings Matrix page for an at-a-glance view of every type's configuration.** A new page at [`/admin/types/matrix`](templates/pages/admin/types/matrix.php) renders every ticket type as a row against the seven optional settings as rotated columns &mdash; Group assigned, Confidential, AI route to group, AI dup-check, Show "To" / Location, Custom dup threshold (i.e. `ai_dup_threshold` &ne; 0.75), and Custom stale threshold (`stale_threshold_hours` set). Each cell is a green check or a muted dash; the threshold columns show the actual override value (e.g. `0.50`, `12h`) when set, not just a check. Below each ticket type name the matrix prints the assigned group, so the page doubles as a quick "what queue does this type drop into" reference. A **Print** button uses a tuned `@media print` stylesheet so the matrix prints landscape-cleanly without the surrounding chrome &mdash; this replaces the ad-hoc HTML/PDF the user previously generated by hand. Linked from the **Settings &rarr; Organization** sub-nav as **Type Settings Matrix** in [templates/partials/settings-nav.php](templates/partials/settings-nav.php). To stop the sub-page from also highlighting its parent in the settings sidebar, the same partial now picks the active item via a longest-prefix match across all nav URLs instead of marking every URL whose prefix matches the current path. New route added in [src/routes/admin.php](src/routes/admin.php) above `/admin/types/{id}/edit` so the literal `matrix` segment is not captured as an ID.
+
+---
+
+## 2.57.3 &mdash; 2026-05-26
+
+### Fixed
+- **Type-change Update-button fix now applies to the admin ticket view too.** 2.57.2 fixed the watcher on [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php) but the admin route has a parallel copy of the same form at [templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php), and admins viewing tickets through `/admin/tickets/<id>` were still hitting the original bug. Added `type_id` to the watcher array in the admin template as well.
+
+---
+
+## 2.57.2 &mdash; 2026-05-26
+
+### Fixed
+- **Changing the Type dropdown on a ticket no longer leaves the Update button stuck disabled.** The right-side ticket-properties form gained a Type selector earlier, but the bit of JS that enables the Update button when a field changes was never taught about it &mdash; it only watched `status`, `priority_id`, `assigned_to`, and `group_id`. So picking a different type updated the dropdown's value but the submit button stayed greyed out and there was no way to save the change without also poking one of the other four fields. The backend update handler in [src/routes/agent.php](src/routes/agent.php) has accepted `type_id` the whole time; this was purely a missing entry in the watcher array in [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php). Added `type_id` to the list &mdash; one-line fix.
+
+---
+
+## 2.57.1 &mdash; 2026-05-25
+
+### Documentation
+- **In-app help now covers Satisfaction Surveys end-to-end, including the new external-provider mode (2.57.0).** CSAT had no dedicated docs page &mdash; the docs search-index even shipped with a broken pointer (<em>"CSAT satisfaction survey"</em> jumped to [admin/docs/portal](templates/pages/admin/docs/portal.php), which never said a word about surveys). A new [admin/docs/csat.php](templates/pages/admin/docs/csat.php) page now lives under <strong>Admin &rarr; Docs &rarr; Satisfaction Surveys</strong>: how/when surveys are sent (trigger status, one-per-ticket guard, requester opt-out), the Built-in vs External mode trade-off, the full placeholder reference (<code>{ticket_id}</code>, <code>{user_email}</code>, <code>{first_name}</code>, <code>{last_name}</code>, <code>{user_name}</code>, <code>{subject}</code>) with per-provider notes for HappyOrNot, SurveyGizmo/Alchemer, Jotform, Typeform, and Microsoft Forms, the reopen-button switch (with the explicit warning that external surveys can't trigger reopens on their own), what the Satisfaction report shows in each mode (and how the optional dashboard URL surfaces as an "Open external dashboard" button), the test-send preview, and a full settings reference table. The page is registered in the docs router (`$validDocPages` + `$titles` in [src/routes/admin.php](src/routes/admin.php)), added to the docs sidebar at [templates/partials/docs-nav.php](templates/partials/docs-nav.php), and gets its own card on the [docs overview grid](templates/pages/admin/docs/index.php). The dead search-index pointer was rewritten to target the new page, and six fresh entries were added so searches for <em>"external survey"</em>, <em>"HappyOrNot"</em>, <em>"SurveyGizmo"</em>, <em>"placeholders"</em>, <em>"reopen button"</em>, <em>"trigger status"</em>, <em>"external dashboard"</em>, and <em>"test survey"</em> all land on the right spot. No code or behaviour changes &mdash; documentation only.
+
+---
+
+## 2.57.0 &mdash; 2026-05-25
+
+### Added
+- **CSAT surveys can now be delegated to an external service (HappyOrNot, SurveyGizmo, Jotform, Typeform, etc.) instead of the built-in 1&ndash;5 star page.** Every site that had its own customer-feedback tooling was forced to either turn CSAT off (losing the trigger-on-resolve email entirely) or run two parallel surveys for the same ticket. [admin/settings/csat](templates/pages/admin/settings/csat.php) gains a **Survey type** radio (Built-in &middot; External) and, when External is selected, two new URL fields: the **External survey URL** the rating button links to, and an optional **External dashboard URL** used by the Reports page as a "jump to your survey provider" shortcut. The survey URL accepts placeholders that are URL-encoded at send time &mdash; `{ticket_id}`, `{user_email}`, `{first_name}`, `{last_name}`, `{user_name}`, `{subject}` &mdash; so SurveyGizmo / Jotform / Typeform can pre-fill or correlate responses to the originating ticket. HappyOrNot and other single-URL providers just paste their link and ignore the placeholders. A separate **Include &ldquo;No, please reopen it&rdquo; button** switch was added too &mdash; on by default for both modes &mdash; because external surveys can't trigger ticket reopens, so admins who want a "reopen if not actually resolved" path need to keep that button visible while the rating step itself goes elsewhere. With it off, the email collapses to a single centered **Rate your experience** button styled in the brand colour. [sendCsatSurvey()](src/helpers.php) was updated to branch on the new `csat_mode` setting, substitute placeholders via a new `csatSubstitutePlaceholders()` helper, and bail without burning the one-survey-per-ticket slot if External is selected but the URL is blank. The admin test-send handler in [src/routes/admin.php](src/routes/admin.php) mirrors the same logic so admins can preview the external flow end-to-end before going live. The [csat-survey email template](templates/emails/csat-survey.php) renders the two-button or one-button layout based on a new `$showReopen` flag. The [Satisfaction report](templates/pages/admin/reports/csat.php) shows a banner when External mode is on, noting that ratings live in the external service and counts on the page only reflect surveys *sent*, with an "Open external dashboard" button when the dashboard URL is set. New settings: `csat_mode` (default `internal`), `csat_external_url`, `csat_external_dashboard_url`, `csat_show_reopen` (default `1`). All six CSAT settings are now captured in the audit log on save.
+
+---
+
+## 2.56.0 &mdash; 2026-05-25
+
+### Changed
+- **Admin dashboard now lists Recent Tickets instead of Recent Activity.** The dashboard's main panel previously joined `ticket_timeline` and surfaced the last 10 individual events &mdash; so a single noisy ticket (one that got assigned, replied to, status-changed, and SLA-paused in quick succession) would push everything else off the list, and admins had to scan past four rows for the same ticket subject before finding any other work. The panel now queries `tickets` directly and shows the 10 most recently-updated tickets, one row per ticket, ordered by `t.updated_at DESC`. Each row links straight to `/admin/tickets/{id}` and renders the subject, ID, status badge, type chip, priority chip, and the last-updated timestamp &mdash; same chip styling used on the admin tickets list so the dashboard reads consistently. Confidential tickets are filtered out at the SQL layer using the same rule the rest of the admin UI uses ([isTicketRedactedForUser()](src/helpers.php) in [src/helpers.php](src/helpers.php)): a ticket whose type has `is_confidential = 1` and a `group_id` is hidden from any admin who is not a member of that group. The filter is applied via a `NOT (... AND tt.group_id NOT IN (...))` clause built from the current admin's `group_user_map` rows, so non-confidential tickets and tickets whose confidential group the admin belongs to still appear normally. Updated [templates/pages/admin/dashboard.php](templates/pages/admin/dashboard.php) (panel header, list markup, status badge / chip rendering) and the `/admin` handler in [src/routes.php](src/routes.php) (replaced the `ticket_timeline` query with the tickets query + group filter, renamed the render key from `recentActivity` to `recentTickets`). The old `$actionIcons` map is gone since per-action icons are no longer rendered.
+
+---
+
+## 2.55.1 &mdash; 2026-05-25
+
+### Documentation
+- **In-app help now covers drag-to-resize column widths (2.53.0) and drag-to-reorder + click-to-sort admin lists (2.55.0).** Neither feature had landed in the help docs, so two new cards were added to [admin/docs/tickets.php](templates/pages/admin/docs/tickets.php): **Reordering &amp; Sorting Admin Lists** (the grip handle on Ticket Types, Groups, Priorities, Skills, Automations, Canned Responses, Escalation Rules, KB Categories, and KB Folders, plus the click-header sort with its Save Order / Revert toolbar) and **Resizing Columns** (the drag-to-resize handle on every list, per-page persistence in `localStorage`, the merged-header opt-out, and the inline-quick-change auto-fit interaction). The agent-side [ticket-list.php](templates/pages/agent/docs/ticket-list.php) gets a matching **Resizing Columns** card. Inline Ticket List Actions (Type column) was clarified to note the whole cell is clickable now, not just the chevron (2.52.4). The admin and agent docs search indexes ([admin/docs/index.php](templates/pages/admin/docs/index.php), [agent/docs/index.php](templates/pages/agent/docs/index.php)) gained entries for both features so search finds them. No code or behaviour changes &mdash; documentation only.
+
+---
+
+## 2.55.0 &mdash; 2026-05-25
+
+### Added
+- **Admin lists can now be reordered by drag-and-drop, with click-to-sort column headers.** The order that Ticket Types, Groups, Priorities, Skills, Automations, Canned Responses, Escalation Rules, KB Categories, and KB Folders appear in &mdash; in their settings tables, and everywhere those values surface as dropdowns on the agent and portal sides &mdash; was governed by a `sort_order` column that was only editable as a raw integer on each item's edit form. Setting a custom order meant editing every row, juggling values like 10/20/30, and reloading the list to see the result. There is now a grip handle on the left of every row: drag a row to a new position and the new order is saved immediately. Any sortable column header (Name, Members, Created, etc.) is also clickable &mdash; clicking re-sorts the visible rows ascending/descending, and a yellow toolbar appears above the table with **Save Order** and **Revert** buttons so the user has to explicitly commit a sort-by-column action before it overwrites the existing custom order. This safer pattern means a stray click on a header never destroys a carefully-curated drag arrangement. Delivered as a single shared partial &mdash; [templates/partials/sortable-list.php](templates/partials/sortable-list.php) &mdash; that auto-enhances any `<table data-sortable-list data-reorder-url="...">` on the page by injecting the handle column, wiring SortableJS, decorating headers with `data-sort-col`, and posting `{ ids: [...] }` to the per-resource reorder endpoint. The matching backend helper &mdash; `handleSortableReorder()` in [src/helpers.php](src/helpers.php) &mdash; verifies CSRF, whitelists the table name, and writes `sort_order = position * 10` inside a transaction so a partial failure doesn't leave the list half-reordered. New routes: `POST /admin/types/reorder`, `/admin/groups/reorder`, `/admin/priorities/reorder`, `/admin/skills/reorder`, `/admin/settings/automations/reorder`, `/admin/settings/canned-responses/reorder`, `/admin/settings/escalations/reorder`, `/admin/kb/categories/reorder`, `/admin/kb/folders/reorder`. The redundant raw "Sort Order" integer column was dropped from each list (the drag handle and the row position now communicate it directly), and date/badge/count cells gained `data-sort-value` attributes so header-click sort compares timestamps, integers, and label text rather than rendered HTML.
+
+---
+
+## 2.54.0 &mdash; 2026-05-25
+
+### Changed
+- **Status, priority, type, and other coloured labels are now muted "soft chips" instead of vivid blocks.** Every list and detail view in the app was full of fully-saturated badges &mdash; a bright red **High** priority, a saturated green **Resolved** status, a vibrant indigo type chip &mdash; that drew the eye away from the actual ticket text and made busy pages feel noisy. Labels now render as a light tint of the original colour with dark, readable text (and the inverse in dark mode), preserving the colour identity (red still reads as red, green as green) without shouting. Delivered as a single shared partial &mdash; [templates/partials/badge-soft-styles.php](templates/partials/badge-soft-styles.php), loaded from the [app](templates/layouts/app.php) and [base](templates/layouts/base.php) layouts &mdash; so the change applies everywhere a `.badge` appears without touching individual templates. Bootstrap's `bg-primary`/`bg-success`/`bg-warning`/`bg-danger`/`bg-info`/`bg-secondary`/`bg-dark` status badges get explicit muted overrides; inline-coloured badges (priority, type, tag, custom field options) are toned down via a translucent overlay on top of the inline `background:` declaration &mdash; that overlay is `!important` so it survives the inline shorthand. A handful of places that genuinely need the raw colour to show through &mdash; the small "swatch" indicators on the [admin priorities list](templates/pages/admin/priorities/index.php) and [admin types list](templates/pages/admin/types/index.php), the per-type tab swatches on [SLA policies](templates/pages/admin/settings/sla-policies.php), the navbar/timeline-note previews on [Branding settings](templates/pages/admin/settings/branding.php), and the deliberately-pale visibility-pill legend on the [ticket types docs](templates/pages/admin/docs/tickets.php) &mdash; opt out with a new `.badge-vivid` class.
+
+---
+
+## 2.53.0 &mdash; 2026-05-22
+
+### Added
+- **Every table column can now be resized by dragging its header — "grab bars".** Each list in the app (tickets, users, groups, knowledge base, reports, settings tables, and so on) hung onto whatever column widths the layout happened to produce; a long subject or location name would either get clipped or hog the row, with no way for the user to rebalance it. There is now a resize handle on the right edge of every column header: hover it and the cursor becomes a `col-resize` grip, drag to make the column wider or narrower. Widening past the card edge scrolls the table horizontally instead of overflowing. Chosen widths are remembered per page in `localStorage`, so a list comes back the way each person left it (per browser). This is delivered as a single site-wide enhancement — [templates/partials/table-resize.php](templates/partials/table-resize.php), loaded from the [app](templates/layouts/app.php), [base](templates/layouts/base.php) and [public](templates/layouts/public.php) layouts — that auto-attaches to any table with a plain single-row header; no per-page markup was needed. It measures each column's natural width first and then switches the table to `table-layout: fixed`, so a table looks identical until the user actually drags something. Tables with grouped/multi-row headers (some report views) are skipped, since a single per-column width can't represent a merged header; a table can also opt out explicitly with a `data-no-resize` attribute. On the admin and agent ticket lists ([templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php), [templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php)) the existing `resizeColumns()` auto-fit — which re-measures columns after an inline quick-change — now skips any column the user has hand-sized and re-pins the overall table width, so a manual width survives a quick assign/type/group change.
+
+---
+
+## 2.52.4 &mdash; 2026-05-22
+
+### Fixed
+- **The Type column in the ticket list now opens its dropdown from anywhere in the cell.** On the agent and admin ticket lists ([templates/pages/agent/tickets/index.php](templates/pages/agent/tickets/index.php), [templates/pages/admin/tickets/index.php](templates/pages/admin/tickets/index.php)) the **Assigned To** and **Group** quick-change cells open their dropdown when you click anywhere in the cell, but **Type** required clicking precisely on the small chevron button — the only column whose `quick-*-wrap` span had no click handler. The Type wrap now gets the same wrap-level click listener (open on any click except a re-click of the button, which closes), the cell stops row-navigation propagation like the other two, and the outside-click close logic checks `.quick-type-wrap` instead of just `.quick-type-btn`. All three quick-change columns now behave identically.
+
+---
+
+## 2.52.3 &mdash; 2026-05-21
+
+### Added
+- **The installer's Requirements step now checks that URL rewriting is enabled.** A fresh install on a web server missing Apache `mod_rewrite` completed the six-step wizard with a green success page and then returned a 404 on the very first click — `/login` — because every request is meant to route through `public/index.php` and nothing rewrites it there. [public/install/index.php](public/install/index.php) now adds a **URL rewriting** row to the Step 1 check-list: when PHP runs as an Apache module it inspects `apache_get_modules()` and fails the check (blocking **Continue**) if `mod_rewrite` is absent, with a note to run `a2enmod rewrite` and restart Apache. Under PHP-FPM/FastCGI, nginx, or IIS — where Apache's module list can't be introspected — the check passes with a "could not auto-detect, please verify" note rather than blocking those setups. This surfaces the misconfiguration before the wizard reports success instead of after.
+
+---
+
+## 2.52.2 &mdash; 2026-05-21
+
+### Fixed
+- **A fresh install now completes on MySQL 8.** The installer aborted at the schema step with `SQLSTATE[HY000]: General error: 1215 Cannot add foreign key constraint`. The cause was in [database/schema.sql](database/schema.sql): the `sla_policies` table has a stored generated column `type_id_norm` (`COALESCE(type_id, 0)`, used for NULL-safe uniqueness), and its `type_id` foreign key to `ticket_types` was declared `ON DELETE CASCADE`. MySQL 8 rejects a cascading foreign key on the base column of a generated column; MariaDB allows it, so the MariaDB-dumped schema passed on dev but failed on a MySQL 8 target. The `sla_policies` → `ticket_types` foreign key (and the matching `ADD FOREIGN KEY` in [migration 018](database/migrations/018_sla_policies_type_id.php)) is now `ON DELETE RESTRICT`, which both engines accept. To preserve the previous cleanup behaviour, the ticket-type delete handler in [src/routes/admin.php](src/routes/admin.php) now removes that type's `sla_policies` rows explicitly before deleting the type. The `priority_id` foreign key keeps `ON DELETE CASCADE` — it is not a generated-column base column and was never affected.
+- **Fresh installs now create the `password_resets` table.** [database/schema.sql](database/schema.sql) was missing the `password_resets` table (introduced by [migration 040](database/migrations/040_password_resets.php)). Because the installer applies `schema.sql` and then records every migration as already-applied baseline, migration 040 never ran on a fresh install and the table was absent — the "Forgot password" / self-service reset flow would fail. The table is now part of `schema.sql` (50 tables total). Existing installs that already ran migration 040 are unaffected; the `CREATE TABLE IF NOT EXISTS` is a no-op for them.
+
+---
+
+## 2.52.1 &mdash; 2026-05-21
+
+### Documentation
+- **In-app help docs brought up to date with the last two weeks of features.** None of the feature work since 2.38.0 had reached the `/admin/docs` and `/agent/help` pages; this pass closes the gap. The **Form Builder** section of [admin/docs/tickets.php](templates/pages/admin/docs/tickets.php) was rewritten for the 2.42.0 per-ticket-type editor — the old copy still described the retired global field list with scope pills, the "Preview as" chip strip, and the segmented all/specific switch. It now covers the type rail, the per-type canvas, the Required/Optional/Hidden visibility pill (which also absorbs the 2.41.0 per-type priority visibility), sharing fields across types via *Add existing field* and the edit dialog, removing vs. deleting fields, and the current Live Preview pane. New sections added: **Marking a Comment as the Solution** (2.44.0) and **hiding system/AI timeline notes** (2.51.0/2.52.0) in [tickets.php](templates/pages/admin/docs/tickets.php) and [agent/docs/working-tickets.php](templates/pages/agent/docs/working-tickets.php); the **site-wide SLA on/off toggle** (2.50.0) in [sla.php](templates/pages/admin/docs/sla.php); **AI duplicate-ticket detection** (2.38.0) in [ai.php](templates/pages/admin/docs/ai.php); and a **forgot-password / self-service reset** section plus an expanded **Audit Log** card — broader coverage, the prune UI, and the unified ticket-timeline Source filter (2.45.0–2.48.0) — in [users.php](templates/pages/admin/docs/users.php). The docs search index in [admin/docs/index.php](templates/pages/admin/docs/index.php) was refreshed: stale form-builder search terms replaced, new entries added for every feature above. No code or behaviour changes — documentation only.
+
+---
+
+## 2.52.0 &mdash; 2026-05-21
+
+### Added
+- **Admins can hide all system notes from ticket timelines.** Alongside the existing "AI notes" switch, each detailed ticket timeline — the [agent](templates/pages/agent/tickets/view.php) and [admin](templates/pages/admin/tickets/view.php) ticket views — now gets a "System notes" switch in the Timeline card header. It shows or hides every automated, human-author-less timeline entry (SLA timer events, escalation reminders, automatic group assignment, AI classifications, and similar) instantly, and the floor (tablet) ticket view ([templates/pages/agent/floor-ticket.php](templates/pages/agent/floor-ticket.php)) follows the same preference without its own switch. A matching toggle on the [profile page](templates/pages/profile/edit.php) sets the account-wide default. The timeline switch and the profile toggle share one per-user setting (`system_notes_visible:<id>`): flipping the switch persists immediately via the new `POST /profile/system-notes` endpoint in [src/routes.php](src/routes.php), so the choice sticks across tickets and sessions. AI notes are a subset of system notes, so hiding system notes also hides AI notes; the two switches are otherwise independent. The notes are only hidden from view, never deleted. Backed by the new `systemNotesVisible()` helper in [src/helpers.php](src/helpers.php); defaults to visible, so existing installs are unaffected.
+
+---
+
+## 2.51.1 &mdash; 2026-05-21
+
+### Fixed
+- **The test suite no longer delivers real email to real recipients.** `sendMail()` in [src/helpers.php](src/helpers.php) now honours a `MAIL_ENABLED` flag in `.env` — when set to `false` it logs a skipped-send line to `storage/logs/smtp.log` and returns without contacting SMTP. Dev, staging, and test instances should set `MAIL_ENABLED=false` (now the default in this repo's `.env` and documented in [.env.example](.env.example) and [phpunit.xml](phpunit.xml)). Previously, because feature tests create real tickets against a database that carries live SMTP credentials, every test ticket fired `notifyGroupMembers()` and emailed every member of a notified group — so running the suite locally sent `[TEST]` "New Ticket" messages to live staff. Production omits the flag (or sets it `true`) and is unaffected.
+
+---
+
+## 2.51.0 &mdash; 2026-05-21
+
+### Added
+- **Admins can hide AI system notes from ticket timelines.** AI-generated system notes (group classification, skill suggestions, and similar) are still recorded, but an admin who doesn't want to see them can now turn them off. Each detailed ticket timeline — the [agent](templates/pages/agent/tickets/view.php) and [admin](templates/pages/admin/tickets/view.php) ticket views — gets an "AI notes" switch in the Timeline card header that shows or hides the notes instantly, and the floor (tablet) ticket view ([templates/pages/agent/floor-ticket.php](templates/pages/agent/floor-ticket.php)) follows the same preference without its own switch. A matching toggle on the [profile page](templates/pages/profile/edit.php) sets the account-wide default. The timeline switch and the profile toggle are one shared per-user setting (`ai_notes_visible:<id>`): flipping the switch persists immediately via the new `POST /profile/ai-notes` endpoint in [src/routes.php](src/routes.php), so the choice sticks across tickets and sessions. The notes are only hidden from view, never deleted, and can be shown again at any time. Backed by the new `aiNotesVisible()` helper in [src/helpers.php](src/helpers.php); defaults to visible, so existing installs are unaffected.
+
+---
+
+## 2.50.3 &mdash; 2026-05-20
+
+### Fixed
+- **Admin ticket view now scopes and trims custom fields like the agent/portal views.** The 2.50.1/2.50.2 fixes were applied to the agent and portal ticket views but missed the dedicated `GET /admin/tickets/{id}` route in [src/routes/admin.php](src/routes/admin.php), which still queried every custom field and rendered empty ones as bare "&mdash;" rows. It now uses the same `getFormLayoutForType()` scoping (fields on the ticket type's form, plus any with a stored value) and `customFieldHasDisplayValue()` filtering as the other two views.
+
+---
+
+## 2.50.2 &mdash; 2026-05-20
+
+### Changed
+- **Empty custom fields are now hidden on ticket views.** Following 2.50.1, the agent and portal ticket views still listed every custom field on the type's form even when it had no value, rendering a row of bare "&mdash;" placeholders. A new `customFieldHasDisplayValue()` helper in [src/helpers.php](src/helpers.php) decides per field type whether a stored value would render real data, and [src/routes/agent.php](src/routes/agent.php) / [src/routes/portal.php](src/routes/portal.php) now filter the Custom Fields panel down to fields with an actual value — if none remain, the panel itself is hidden. Checkboxes are always shown (they render Yes/No, never a placeholder).
+
+---
+
+## 2.50.1 &mdash; 2026-05-20
+
+### Fixed
+- **Ticket views no longer show custom fields from other ticket types' forms.** When viewing a ticket, the agent ([src/routes/agent.php](src/routes/agent.php)) and portal ([src/routes/portal.php](src/routes/portal.php)) views queried *every* custom field in the system and rendered them all, so a field added to one ticket type's form appeared (as an empty "&mdash;" row) on tickets of every other type. Both views now build the Custom Fields panel from `getFormLayoutForType()` for the ticket's own type, showing only the non-hidden fields on that type's form. Any field that already has a stored value for the ticket is still shown even if it was later removed from the form, so historically-submitted data is never dropped.
+
+---
+
+## 2.50.0 &mdash; 2026-05-20
+
+### Added
+- **Site-wide SLA on/off toggle.** A new "Enable SLA tracking" switch at the top of [Settings › SLA Policies](templates/pages/admin/settings/sla-policies.php) turns SLA tracking off — or back on — for the whole site. When disabled, [src/Sla.php](src/Sla.php) skips all timer work: new tickets get no first-response/resolution due dates, priority/type changes and pending pause/resume no longer touch SLA, and the `public/sla-cron.php` recalculation becomes a no-op. The SLA state badge and SLA card are hidden on agent and admin ticket views; the "SLA" column drops out of every ticket list and its column picker; the SLA column is removed from the Unresolved Tickets report; and the SLA Compliance report shows a "disabled" banner. Existing SLA policies and historical SLA data are left intact, so the feature can be re-enabled at any time. Backed by the new `sla_enabled` setting, which defaults to enabled — existing installs are unaffected.
+
+---
+
+## 2.49.3 &mdash; 2026-05-20
+
+### Fixed
+- **Agent floor-ticket timeline no longer shows literal `&nbsp;` entities.** The per-ticket "Recent activity" body at [templates/pages/agent/floor-ticket.php](templates/pages/agent/floor-ticket.php) stripped HTML tags but escaped the result with `e()` without decoding entities, so `&nbsp;` in comment bodies rendered as visible `&nbsp;` text. It now decodes entities and inserts separators before tags (same plain-text treatment as the admin-dashboard fix in 2.49.2).
+
+---
+
+## 2.49.2 &mdash; 2026-05-20
+
+### Fixed
+- **Admin-dashboard "Recent Activity" no longer shows raw HTML markup.** The timeline-entry preview at [templates/pages/admin/dashboard.php](templates/pages/admin/dashboard.php) escaped `ticket_timeline.details` directly with `e()`, so comment-body entries rendered visible `<p>` tags and `&nbsp;` entities (e.g. ticket 44992 showed `<p>Hi Julia,</p>...`). The preview now strips tags and decodes entities to plain text before display.
+
+---
+
+## 2.49.1 &mdash; 2026-05-19
+
+### Fixed
+- **`power_user` accounts no longer hit a 403 "You do not have permission to access this page" after login.** The home redirector at [src/routes.php](src/routes.php) sent power_users to `/agent`, but `Auth::requireRole()` on `/agent` (and `POST /agent/tour/dismiss`) only allowed `agent` and `admin` — so every power_user landing on the dashboard was bounced into the 403 page. Most visible after Microsoft 365 SSO, since the SSO callback always lands on `/` and can't fall through `intended_url` like a password login sometimes can. Both routes now accept `power_user` alongside `agent`/`admin`, restoring the agent dashboard for the role.
+- **`/agent` dashboard now applies group-based ticket visibility to power_users**, mirroring how `/agent/tickets` already treats them: counts and the recent-tickets list are restricted to the user's groups instead of showing every ticket in the system. The auto-show agent tour also fires for power_users now, so the tour-dismiss button (which they can hit) corresponds to a tour they can see.
+- **`/notifications` renders the correct sidebar and area prefix for power_users** (`powerUserSidebar` + `/agent`) instead of falling through to the portal sidebar / `/portal` prefix.
+- **Three `/admin/kb/articles/{id}/...` routes (edit GET, edit POST, preview) now accept `power_user`.** Previously agents could edit/preview KB articles but power_users — who otherwise have full agent-plus-reports access — were 403'd on the same screens.
+- **Ticket-creation redirect after `POST /admin/tickets/create` now sends power_users to `/agent/tickets/{id}`** instead of `/admin/tickets/{id}` (which is admin-only and would 403). The `ticket-templates/index` and `ticket-templates/form` views similarly route the "Back to Tickets" link and sidebar/breadcrumbs through the agent area for power_users.
+- **SQL filters that build "agents" lists were missing `power_user`** in eight places, so power_user accounts were invisible to features that select agents/admins: the assignee autocomplete on `/api/users/agents-search`, the agent dropdowns on `/agent/tickets` / `/agent/tickets/create` / `/agent/tickets/{id}/split`, the `@mention` parser, the watcher-notification fan-out and escalation-watcher seeding helpers, the admin-dashboard "total agents" stat, the agent-performance report on `/admin/reports/agent-performance`, and the `agent_performance` + `workload` scheduled-report builders. All now include `power_user` alongside `agent`/`admin`.
+
+---
+
+## 2.49.0 &mdash; 2026-05-19
+
+### Added
+- **"Forgot password?" self-service reset flow on the login page.** Users who can't remember their password no longer have to ping an admin — the login form now has a small `Forgot password?` link next to the password label that routes to a dedicated request form at [/forgot](src/routes.php). They enter their email, get a one-time link emailed to them, click through to [/reset?token=...](src/routes.php), choose a new password, and are bounced back to `/login` with a success flash to sign in normally. Works for any account with a password set (portal users, agents, admins) — SSO-only accounts simply won't have a usable password to reset, which is the intended behaviour.
+- **New `password_resets` table** (migration [040](database/migrations/040_password_resets.php)) stores `user_id`, the **SHA-256 hash** of the random 32-byte token (never the raw token), `expires_at`, `used_at`, requesting IP, and creation timestamp. Token rows are kept post-use as an audit trail. `ON DELETE CASCADE` from `users` so deleted accounts can't have lingering reset rows.
+- **New email template** [templates/emails/password-reset.php](templates/emails/password-reset.php) follows the same brand-colour header / button / footer pattern as the existing transactional emails, with the reset URL rendered both as a button and as a plain copy-pasteable link for clients that strip the styled CTA.
+- **Two new audit-log actions** — `auth.password_reset_requested` (written whenever an existing user's email is submitted, target=user_id) and `auth.password_reset_completed` (written when a token is successfully consumed). Both are visible in `/admin/audit-log` and tied to the user.
+
+### Security
+- **Email-address enumeration is blocked at the request endpoint.** Whether or not the submitted email matches a real account, the response is the same generic "if an account exists for X we sent a link" confirmation — and the throttle counter increments either way, so an attacker can't infer existence from timing or rate-limit behaviour either.
+- **Rate-limiting reuses the existing `login_attempts` table** with a synthetic key (`pwreset:<email>`) so the same 15-minute sliding window protects the inbox from being flooded: max 5 reset requests per email per window. No new infrastructure, no new indexes — the existing `idx_login_attempts_email_time` does the work.
+- **Tokens are 32 bytes of `random_bytes()` rendered as 64 hex characters**, stored only as their SHA-256 hash, single-use, and expire after 60 minutes. The reset GET route validates `ctype_xdigit` + length 64 before hitting the DB so malformed tokens never touch the query layer. Successfully completing a reset also invalidates any *other* outstanding reset rows for that user (`UPDATE … SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL`), so a stolen-but-stale link from an earlier request can't be used after the legitimate reset went through.
+- **CSRF on both POST endpoints** (`/forgot`, `/reset`) plus the standard input validation chain — email format, password length ≥ 8, password = confirmation. The "Forgot password?" link itself is rendered through the existing auth layout so the same Bootstrap branding tokens (`--ld-primary`, `branding_app_name`, navbar gradient) carry through; no new CSS, no new JS, no new external dependencies.
+
+---
+
+## 2.48.0 &mdash; 2026-05-19
+
+### Changed
+- **Audit log action names standardized on `<area>.<verb>` convention (Phase 4) with single-source-of-truth back-compat aliases so existing rows still filter correctly.** Seventeen legacy action names from before the Phase-1/2/3 work — `login`, `logout`, `2fa.enable`, `2fa.disable`, `2fa.admin_reset`, `ticket_escalated`, `confidential_ticket_viewed`, `group_managers_changed`, `ai_settings_saved`, `ai_classification_override`, `ai_backfill_run`, `manager_skill_assignments_changed` / `_created` / `_updated` / `_deleted`, `default_group_changed`, `escalation_path_saved` — are now written under their canonical equivalents (`auth.login`, `auth.logout`, `auth.2fa_enabled`, `auth.2fa_disabled`, `user.2fa_reset_by_admin`, `ticket.escalated`, `ticket.confidential_viewed`, `group.managers_changed`, `ai.settings_changed`, `ai.classification_override`, `ai.backfill_run`, `manager.skill_assignments_changed` / `_created` / `_updated` / `_deleted`, `settings.default_group_changed`, `escalation_path.saved`).
+- **Single alias-map source of truth** in [`auditAliases()`](src/helpers.php) feeds three places at once: `logAudit()` rewrites legacy → canonical at write time (so even an un-renamed third-party callsite emitting an old name lands canonically in the table); the audit-log viewer route canonicalizes each fetched row before render so legacy entries display under their new name and badge color; and the action-filter dropdown deduplicates legacy + canonical into one entry while the WHERE clause expands the user's selection back out to `action IN (canonical, ...legacy)` so old rows still match. Result: rolling out the rename was a one-table change, no DB migration, no broken filter on historical data.
+- **`auditCanonicalAction()`** and **`auditLegacyAliasesFor()`** helpers exposed for any future caller (e.g. analytics scripts, scheduled-report jobs) that needs to bridge the two namespaces.
+- **The confidential_\* family** of action names (`confidential_flag_removed`, `confidential_delete_attempted`, `confidential_entity_deleted`, etc.) was intentionally **not** renamed — those names form a cohesive feature namespace with consistent semantics across the seven entries, and renaming a coherent set would have been churn for churn's sake. They stay as-is.
+- **Audit-log viewer badge-color map** was rekeyed to canonical names only, with entries added for every new action introduced in Phases 1–3 (`auth.api_login`, `api_token.rotated`, `backup.deleted`, `audit_log.pruned`, etc.) so the colored chips on the results page reflect actual severity instead of falling through to the default `info` color.
+
+---
+
+## 2.47.0 &mdash; 2026-05-19
+
+### Added
+- **Audit log viewer — Phase 3: cross-references `ticket_timeline` so the admin gets a single pane of glass for "who did what" without forcing a double-write.** Per-ticket state-machine events (status, priority, assignment, group, type, merge, escalated, created) were already captured in `ticket_timeline` and shown on the per-ticket page; previously they were invisible at `/admin/audit-log` and any attempt to mirror them into `audit_log` would have doubled-up the write path for every ticket mutation. Now the viewer's `SELECT` builds a UNION-ALL subquery that pulls from `audit_log` *and* from a curated allowlist of `ticket_timeline` actions (the eight listed above; comments, notes, and automation-generated rows are excluded so routine reply traffic doesn't drown out actual admin events). Counts, pagination, ordering, actor list, and action list all run against the unified set; `ip_address` is `NULL` for timeline rows because the original write path doesn't capture it.
+- **"Source" filter dropdown** at `/admin/audit-log` — `All sources` / `Audit log only` / `Ticket history only`. The viewer also auto-routes when the action filter is set: picking a `ticket.*` action implicitly hides `audit_log`, picking a non-prefixed action implicitly hides `ticket_history`, so the existing action dropdown still narrows correctly without the user needing to also touch the source filter. The action dropdown now lists both audit-log actions and `ticket.<verb>` actions in one sorted list, deduplicated across the union. A `Source` column on the results table renders each row with a colored badge (gray "Audit" for `audit_log`, blue "Timeline" for `ticket_timeline`) so it's never ambiguous which write path a row came from. Ticket targets are linkified — `ticket #N` in the Detail column is now a clickable badge that opens the ticket detail page in admin.
+- **Pagination preserves the source filter** across page navigation (the prior commit's `from`/`to`/`user_id`/`action` round-tripping is now joined by `source`).
+
+### Notes
+- **No new writes added.** Per the Phase-1 design decision documented in the plan, ticket-scoped state changes continue to live in `ticket_timeline` exclusively; the audit log just quotes them at read time. This keeps each event in exactly one place and avoids the per-mutation write amplification that mirroring would have caused.
+- **Audit-log prune still only touches `audit_log`** — `ticket_timeline` has its own retention story (it's tied to ticket lifetime via `ON DELETE CASCADE`).
+
+---
+
+## 2.46.0 &mdash; 2026-05-19
+
+### Added
+- **Audit log coverage — Phase 2: admin config CRUD pass.** Every create/update/delete on the admin settings surfaces that previously left no audit trail now emits one entry, with `logAuditChange()` used on update handlers so the detail field carries a `field: old→new` diff rather than just the row id. Areas instrumented in this pass:
+  - **Catalog entities** — locations (`location.created`/`location.updated`/`location.deleted` + `location.timezone_settings_changed`), priorities, ticket types (full-row diff incl. `is_confidential`, `ai_route_group`, `ai_dup_check_enabled`, `ai_dup_threshold`, `show_to_location_visibility`, `stale_threshold_hours`; non-confidential deletes get a standard `ticket_type.deleted` row, confidential deletes continue to use the existing dedicated entry), canned responses, groups (full-row diff incl. `assign_strategy` / `assign_fallback` / `is_confidential`; non-confidential delete gets `group.deleted`), agent skills, ticket templates, recurring tickets (CRUD + `recurring_ticket.toggled` + `recurring_ticket.run_now`), KB categories/folders/articles, and the KB import-confirm step (`kb.import_confirmed` with article count + `publish_all` flag).
+  - **Business-hours & SLA** — `business_hours.updated` and `sla.policies_saved` / `sla.recalculated`. Holidays now emit `holiday.created` / `holiday.deleted` / `holiday.toggled` / `holiday.auto_populated` (with country + year + added/skipped counts).
+  - **Automations** — full CRUD (`automation.created` / `.updated` / `.deleted`) plus `automation.toggled` and `automation.run_now` (with `tickets_affected` count).
+  - **Escalation rules** — full CRUD plus `escalation_rule.toggled` and a top-level `escalation.run_now` from the manual processor button.
+  - **Scheduled reports** — CRUD plus `scheduled_report.toggled`.
+  - **Form builder** — `form_field.created` (with shared-with type count), `form_field.updated`, `form_field.deleted`.
+  - **Tenant settings** — SMTP (`smtp.settings_changed` with `smtp_password` redacted to `(rotated)`/`(unchanged)`), Microsoft Graph (`graph.settings_changed` with `graph_client_secret` redacted the same way), email-to-ticket, email templates (per-tab save + per-template reset + footer reset), email notifications, branding (full colour-palette + logo state diff), label upload/reset, tags, organization, CSAT, stale-tickets settings.
+  - **Bulk imports** — `ticket.import_confirmed` and `user.import_confirmed` join the existing `kb.import_confirmed`, each carrying the imported and skipped row counts so admins can reconstruct any CSV-driven mass mutation from the audit log.
+  - **Danger zone** — `system.factory_reset` is written immediately before `/admin/settings/danger-zone/reset` truncates every table (the row itself is wiped along with the rest, but the running request's record gives the trail one final entry in any external sink); `tables_truncated=<count>` is included for the same reason.
+
+This is a wide, mechanical pass — no new infrastructure, just call-sites. Phase 3 (cross-referencing `ticket_history` for ticket-scoped actions in the audit-log viewer) and Phase 4 (naming standardization with back-compat aliases) are still pending.
+
+---
+
+## 2.45.0 &mdash; 2026-05-19
+
+### Added
+- **Audit log coverage — Phase 1: security & high-blast-radius gaps.** A wide swath of mutating actions that previously left no audit trail are now logged, with the granularity scaled to the actor's privilege (admin/power_user actions log everything; agents log ticket mutations; portal users log only auth + self-service changes). New entries:
+  - **Authentication.** Web `auth.login_failed` (resolves the attempted email to a user_id when one exists so credential-stuffing patterns against real accounts are visible in the log); web `auth.password_changed` on `/profile/password`; web `user.profile_updated` on `/profile` with a per-field old→new diff via the new `logAuditChange()` helper.
+  - **API authentication & tokens.** `auth.api_login` / `auth.api_login_failed` / `auth.api_logout` for `POST /api/v1/auth/login` and `POST /api/v1/auth/logout`, plus `api_token.created` (issuance) and `api_token.rotated` (rotate endpoint). Because these flows run before/without a session, `logAudit()` gained an optional `$userIdOverride` parameter so the row is attributed to the right user even when `Auth::id()` is `null`.
+  - **SSO settings.** `POST /admin/settings/sso` now records `sso.settings_changed` with a per-field diff — the client secret is treated as sensitive and rendered as `(rotated)` / `(unchanged)` rather than logging the value.
+  - **Bulk ticket operations.** `POST /admin/tickets/bulk` and `POST /agent/tickets/bulk` emit one summary audit row per action: `ticket.bulk_closed`, `ticket.bulk_assigned`, `ticket.bulk_merged`, `ticket.bulk_deleted` — each with the operation count and the affected ticket IDs in the detail field. Individual per-ticket state changes continue to live in `ticket_timeline` (no double-write).
+  - **Mass-destructive admin operations.** `POST /admin/tickets/delete-all` writes `ticket.delete_all`; `POST /admin/settings/backup/create` and `POST /admin/settings/backup/delete` write `backup.created` / `backup.deleted` with the backup filename and (for create) the archive size.
+- **`logAuditChange()` helper.** New `logAuditChange($action, $targetId, $targetType, array $before, array $after, array $sensitiveFields = [])` in [`src/helpers.php`](src/helpers.php). Diffs two snapshots and writes a single audit_log row with a `field: old→new; field2: old→new` summary; long values are truncated at 60 chars to keep the detail column readable, fields listed in `$sensitiveFields` render as `field: (changed)` so secrets and passwords never land in the log as plaintext, and the function returns silently (no row written) when nothing actually changed. Used today by the SSO settings handler and the profile update handler; will be the default change-recording mechanism for the Phase 2 config-CRUD pass.
+- **Admin audit-log prune UI** at `/admin/audit-log`. The audit log retains entries forever by default, but admins can now permanently delete every entry older than a chosen date via a new red "Prune older entries" button in the page header which expands a confirmation card; submitting it `POST`s to `/admin/audit-log/prune` with a `before_date` (validated against `YYYY-MM-DD`) and clears `audit_log` rows whose `created_at < <date> 00:00:00`. The date picker's `min` is pinned to the oldest existing entry so it's impossible to pick a cutoff that would delete zero rows, the form requires a JS `confirm()` echoing the chosen date, and the prune action itself is logged as `audit_log.pruned` with the cutoff and the deleted-row count — so the record of pruning survives even after the rows it pruned are gone. CSRF-gated and admin-only like the rest of the audit log surface.
+
+---
+
+## 2.44.2 &mdash; 2026-05-15
+
+### Documentation
+- **GETTING_STARTED.md gains a new top-level §16 "Marking a comment as the solution"** covering the 2.44.0 / 2.44.1 feature end-to-end: where the **Mark as solution** button lives on agent + admin views (next to the timestamp on every customer-visible reply, absent on system events and on internal notes), how to unmark or reassign the flag (single solution per ticket; marking a different one replaces the previous), what changes visually when a comment is marked (green top-of-page alert with poster + timestamp, green left border on the marked row, **Solution** badge, brief :target highlight pulse, and force-show out of the "Show N older updates" collapser so the anchor never lands on a `display:none` element), the privacy reasoning behind excluding internal notes (the portal timeline filters out is_internal=1 rows, so allowing one would point the anchor at HTML the requester can't see *and* leak the existence of the note via the URL fragment) and the corresponding muted "internal — can't be the solution" hint that explains the absence in place, the requester-side experience on `/portal/tickets/{id}` (same green alert and badge, no Mark/Unmark control, default labels are **Answer** rather than **Solution** but renameable via the application label system at Settings → Application name & labels), the explicit non-coupling to ticket status (marking a solution does not auto-resolve — agents change status separately, which lets you flag a candidate fix on a ticket that's still **Waiting on Customer** without prematurely closing the SLA clock), and the recommended public-reply → mark → resolve → CSAT workflow. Subsequent sections renumbered 17–29 (was 16–28); appendix entries in the TOC bumped to 30–33; appendix labels A/B/C/D unchanged. No body cross-references used numbered anchors so no other internal link updates were needed.
+
+---
+
+## 2.44.1 &mdash; 2026-05-15
+
+### Fixed
+- **Explain why the "Mark as solution" button is missing on internal notes.** A ticket with only internal notes (or only system events — no public reply yet) showed no Mark button anywhere, which read as "the feature isn't deployed" when in fact the privacy gate from 2.44.0 was working correctly: internal notes are filtered out of the portal timeline, so flagging one would create a `Go to solution` anchor that lands on nothing for the requester. The agent and admin timelines now render a small muted hint in the slot the button would occupy on internal-note rows — `internal — can't be the solution` with a tooltip explaining that the requester can't see internal notes and a public reply is needed first. Portal view unchanged (it never sees internal notes). No change to the route gate or schema.
+
+---
+
+## 2.44.0 &mdash; 2026-05-15
+
+### Added
+- **Mark a comment as the ticket's solution + green "Go to solution" jump-link near the top of every ticket view.** Long-running tickets often end with the answer buried halfway down the timeline; now agents and admins see a small **Mark as solution** button on every customer-visible reply in the timeline, and once one is marked the ticket detail page (agent, admin, and the portal `/portal/tickets/{id}` requester view) renders a green alert at the top with a **Go to solution** button that anchors-and-scrolls to the marked comment, which itself gets a green left-border, "Solution" badge, and a brief :target highlight pulse so it's obvious where you landed. The marked comment is force-shown even when it would otherwise be hidden inside the "show N older updates" collapser, so the anchor never points at a `display:none` row. Internal notes are explicitly rejected by `POST /agent/tickets/{id}/solution` and `POST /admin/tickets/{id}/solution` — the portal timeline filters out `is_internal=1`, so allowing one would create a "Go to solution" link that anchors to nothing on the requester's view *and* leak the existence of the internal note via the URL fragment. Agents are still gated by the same group/confidential checks as every other ticket-action route (`_agentRequireTicketAccess`). Database side: migration 039 adds `tickets.solution_timeline_id INT UNSIGNED NULL` with `ON DELETE SET NULL` to `ticket_timeline.id`, so deleting the comment automatically clears the flag rather than leaving a dangling reference. Portal labels are wired through the `label()` helper (`portal.solution.available` / `portal.solution.go` / `portal.solution.badge`) so admins can rename "Answer" → "Solution" → "Resolution" to match their team's vocabulary.
+
+---
+
+## 2.43.4 &mdash; 2026-05-15
+
+### Fixed
+- **SMTP card no longer wipes itself when another Settings sub-form is posted to the wrong URL.** The SMTP form was the only card on `/admin/settings` whose POST handler lived at the bare page URL (`POST /admin/settings`) — every other card (ticket routing, email-to-ticket, Graph, test-email, run-reply-processor) already had its own scoped route. That meant any form on the page that submitted to `/admin/settings` instead of its intended sub-route would trip the SMTP handler, and because that handler reads every SMTP field with `$_POST['smtp_host'] ?? ''`, missing fields silently overwrote the saved values with empty strings — host, port, encryption, username, from-address, from-name all zeroed in one POST. Moved the SMTP card to its own `POST /admin/settings/email` route so the page is now consistent: each card owns its own URL, and a mis-targeted submit produces a 404 instead of corrupting unrelated settings.
+
+---
+
+## 2.43.3 &mdash; 2026-05-15
+
+### Documentation
+- **GETTING_STARTED.md &mdash; three gaps closed after a brand-new-user end-to-end test on a fresh DB.** Added a "Verifying a response was saved" subsection to §15 explaining that responses land in `csat_surveys.responded_at` and surface at **Reports → Satisfaction**, with the common-failure note that a mismatched `APP_URL` is what produces "the email went out but no one ever replied" (the survey link points at an unroutable URL). Documented the **per-ticket co-presence indicator** in §21 — the previously-undocumented "Marcus Lee is also viewing this ticket" banner, separate from the global online-presence list, polled from `/api/tickets/{id}/presence` every 15s, with 45-second pruning and portal-user exclusion. Added a "Required-field gotcha" callout to §16 explaining that custom fields marked Required are enforced on every creation path (portal, agent, REST, email-to-ticket, CSV import), aren't retroactive against pre-existing tickets, and that the **Staff-only** flag is the correct way to keep a field "required for agents but invisible on the portal" — overused Required fields are the most common cause of "Submit just reloads the page" complaints on the portal form.
+
+---
+
+## 2.43.2 &mdash; 2026-05-15
+
+### Documentation
+- **GETTING_STARTED.md §6 now has full Windows Task Scheduler instructions** in place of the previous one-paragraph "Windows alternative" stub. Three paths are documented: (A) the `schtasks /Create` one-liner from the admin page, (B) wrapper `.bat` files that redirect output to `storage/logs/` so the Cron Jobs status dashboard actually turns green, and (C) a click-through `taskschd.msc` walkthrough using **Create Task** with the right knobs (Run whether logged on or not, Run with highest privileges, sub-daily repeat with a typed "5 minutes" interval, **Start in** set so relative `.env`/`vendor` lookups work, **Do not start a new instance** so 5-minute jobs can't pile up). Also calls out the silent gotcha that the bare `schtasks` form leaves the dashboard sitting at "Not configured" forever because it doesn't redirect output, and gives `schtasks /Query` and **History** tab pointers for verification.
+
+---
+
+## 2.43.1 &mdash; 2026-05-15
+
+### Fixed
+- **Fresh installs can now create or edit ticket types again.** `database/schema.sql` was missing two columns (`ai_dup_check_enabled`, `ai_dup_threshold` on `ticket_types`) and the entire `ai_duplicate_classifications` audit table added by migration 036 — but the installer stamps all migrations as already-applied immediately after loading the schema, so the gap was never filled in. The result: any fresh install hit a fatal `Column 'ai_dup_check_enabled' not found` PDOException the moment an admin tried to add a ticket type. Schema.sql now matches the post-migration-038 canonical shape verified column-for-column against a long-lived production database.
+- **Cron Jobs page emits real Windows Task Scheduler commands on Windows servers** instead of malformed Linux `*/5 * * * * php C:\xampp\…/script.php` lines that were neither valid cron syntax nor valid Windows command lines. The page detects the platform server-side and switches to ready-to-paste `schtasks /Create /TN "OpenHelpDesk …" /TR "'C:\xampp\php\php.exe' 'C:\…\script.php'" /SC … /F` commands, plus a one-shot combined block. Intro/help text, the per-card field label, and the combined-block heading all switch accordingly.
+- **Group create/update form correctly treats `is_confidential=0` as off.** Previously the controller checked `isset($_POST['is_confidential'])` — fine for browser checkboxes (which simply omit unchecked fields), but any API client, CSV importer, or test harness that posts `is_confidential=0` explicitly was silently flipping the group into confidential mode, triggering all the membership-alert plumbing in Section 8.5. Switched to `!empty()` to match the ticket-types route's existing pattern.
+
+### Documentation
+- **GETTING_STARTED.md &mdash; rev pass after a brand-new-user install test on Windows/XAMPP.** Added a Section 7.0 covering the previously-undocumented **Organization Type** setting with its `k12_school`, `public_library`, `higher_education`, `government_*`, `hospital`, `corporation`, and `non_profit` options. Added an Option B `php -S` evaluation install path for laptop tyre-kicking (no Apache/IIS required). Documented the "switch the mode toggle first" prerequisite for per-location timezones (Section 7.4 and 8.1). Expanded the ticket types field reference (Section 8.2) to cover **AI duplicate check**, **Show to Location-Visibility users**, and **Sort order**; clarified that **Confidential** is locked until a Default Group is picked, and that **No Wrong Door** is stored as `ai_route_group` internally. Split the user-fields list (Section 8.7) into create-form fields vs edit-form fields. Reconciled the PHP-extension list between Sections 2 and 4 (both now include `fileinfo` and `zip`). Added a `ticket_priorities` table-name parenthetical to Section 8.3. Added XAMPP-on-Windows hints to Section 3.2: how to handle the antivirus-locked `composer install` retry, that `Include conf/extra/httpd-vhosts.conf` may need uncommenting, that editing `hosts` requires Administrator elevation, and that the bundled `public/.htaccess` covers the rewrite rules automatically. Same `.htaccess` note added to the LAMP path. Replaced the dead `https://github.com/yourorg/openhelpdesk.git` placeholder with a more obvious `REPLACE-WITH-YOUR-FORK` token. Rewrote Section 6's Windows alternative to match the new schtasks output and added a `schtasks /Query` verification recipe.
+- **Renamed `claude.md` → `CLAUDE.md`** for the canonical capitalization. On a case-sensitive filesystem, fresh clones were silently shipping a lowercase `claude.md` that no other project documentation referenced.
+
+---
+
+## 2.43.0 &mdash; 2026-05-15
+
+### Added
+- **`GETTING_STARTED.md` &mdash; a comprehensive cradle-to-grave setup guide** covering prerequisites, server install on XAMPP / LAMP / IIS, the six-step web installer wizard, the cron job dashboard, every settings page (SMTP, branding, labels, business hours, holidays, locations, types, priorities, tags, groups, agent skills, users, SLA policies, ticket routing, inbound email via Microsoft Graph and IMAP, automations, time-based and manual escalations, stale-ticket notifications, AI triage with No-Wrong-Door routing, CSAT, custom form fields, ticket templates, the knowledge base, email templates, scheduled reports, notifications, 2FA, Microsoft 365 SSO, the portal, floor mode, the REST API, backups, importing data, maintenance, the danger zone), plus four appendices (cron reference, URL reference, environment variables, further reading). 1,700+ lines.
+- **24 new screenshots** in `docs/screenshots/` captured against the bundled demo data: settings index, business hours, holidays, SLA policies, AI Classification, CSAT, escalation rules, cron jobs dashboard, label customisation, users, groups, ticket types, priorities, automations, locations, agent skills, the Microsoft Graph email-reply setup guide, SSO, danger zone, stale tickets, scheduled reports, email templates list, custom ticket fields builder, audit log. The guide embeds all of them inline.
+
+---
+
+## 2.42.11 &mdash; 2026-05-14
+
+### Changed
+- **Renamed the project from LocalDesk to OpenHelpDesk.** The GitHub repository is now `openhelpdesk`, and the brand name has been updated everywhere it was hardcoded: README, docs pages, the web installer, email templates, PWA manifest, page titles, and the default `app_name` / `branding_app_name` fallback strings throughout the codebase. The configurable branding setting is unaffected — existing installs keep their chosen name. The `localdesk` MySQL database name is unchanged. Every historical entry in this changelog has also been updated to read OpenHelpDesk.
+
+---
+
+## 2.42.10 &mdash; 2026-05-14
+
+### Fixed
+- **The header account dropdown is no longer covered by page content.** The navbar and Bootstrap's `.sticky-top` page elements (e.g. the Branding page's Live Preview card) shared the same stacking level (`z-index: 1020`), so later-rendered content painted over the header's dropdown menu. The sticky navbar now sits at `z-index: 1040` — above all page-level sticky content and the tour-resume pill, still below modals/offcanvas. Applied in both the `app` and `base` layouts.
+
+---
+
+## 2.42.9 &mdash; 2026-05-14
+
+### Documentation
+- **Replaced the one-line README intro with a three-paragraph project description** suitable for a GitHub release: core ticketing and lifecycle features, the broader feature set (KB, reports, email integration, SSO, REST API, security), and the optional AI-assisted triage layer (Anthropic/OpenAI skill routing, "No Wrong Door" group routing, sentiment-driven priority bumps, duplicate detection, and its fail-safe design).
+
+---
+
+## 2.42.8 &mdash; 2026-05-14
+
+### Documentation
+- **Expanded the README Screenshots section with seven more screenshots.** Public Help Center, a rendered KB article (with helpfulness voting), the KB article editor and email template editor (showing rich-text editing throughout), the Branding settings page (logo, colors, live preview), and the iPad "floor mode" card queue plus its streamlined ticket detail. Captured against the bundled demo data and stored in `docs/screenshots/`.
+
+---
+
+## 2.42.7 &mdash; 2026-05-14
+
+### Bug fixes
+- **`schema.sql` carried `AUTO_INCREMENT=N` counters on 28 of 49 tables**, leftovers from a database dump (e.g. `AUTO_INCREMENT=10214`). Fresh installs would start those tables' IDs at the dumped values instead of 1, breaking the seeders' hard-coded foreign-key references (locations 1/2/3, etc.) with FK constraint violations. Stripped every `AUTO_INCREMENT=N` table-option clause; column-level `AUTO_INCREMENT` definitions are untouched. This was the second half of the broken-manual-setup story alongside the migration-stamping fix in 2.42.6.
+
+### Documentation
+- **Added a Screenshots section to the README.** Eight screenshots of the running app (admin dashboard, ticket list, ticket detail, reports, form builder, knowledge base, end-user portal, sign-in) captured against the bundled demo data and stored in `docs/screenshots/`.
+- Corrected the `/admin/kb` key-endpoint reference to `/admin/kb/articles` (the bare path 404s).
+
+---
+
+## 2.42.6 &mdash; 2026-05-14
+
+### Bug fixes
+- **Manual setup (`php database/seed.php`) crashed on first page load.** The seeder applied `schema.sql` (the full table snapshot) but never recorded the migrations as applied, so the auto-migrator in `src/bootstrap.php` replayed all 38 migrations against the already-complete schema on first request &mdash; some are deliberately destructive and would crash. `seed.php` and `seed_test_data.php` now stamp every committed migration into `schema_migrations` as a baseline immediately after applying the schema, matching what the web installer already does.
+
+### Documentation
+- **Corrected README inaccuracies.** `schema.sql` table count (35 &rarr; 49); `scripts/` listing now reflects the real layout (`scripts/admin/rescue.php` plus the five `process-*` cron scripts); `database/` listing now includes `migrate.php` and `seed_test_data.php`; `APP_TIMEZONE` default corrected to `UTC` to match `.env.example`; the PHP-extensions requirement list now matches what the installer checks; and the old single-job "SLA Cron Job" section is now a "Cron Jobs" section listing all seven background scripts.
+
+---
+
+## 2.42.5 &mdash; 2026-05-14
+
+### Licensing
+- **Released under the MIT License.** Added a top-level `LICENSE` file (MIT, &copy; 2026 Chris Jasztrab, Waterloo Public Library). The `README.md` licence section now states the project is open source and free to the world, and `openapi.json` / `composer.json` declare `MIT` instead of `Proprietary`.
+- **Added credits & donation note.** `README.md` now records that OpenHelpDesk was vibe coded by Chris Jasztrab at the Waterloo Public Library, with a link to donate at <https://www.wpl.ca/your-library/donate/>.
+
+---
+
+## 2.42.4 &mdash; 2026-05-14
+
+### Housekeeping (open-source prep)
+- **Removed internal infrastructure from the tracked tree.** `scripts/deploy.py` hard-coded the production host IP, SSH user, and webroot path; it is now git-ignored and untracked (the working copy stays for local use). `.claude/settings.local.json` (a personal editor config) was likewise untracked &mdash; `.claude/*` was already ignored, it had just been committed before that rule existed.
+- **Scrubbed organisation-identifying details from sample data.** All example/seed email addresses in `openapi.json`, `database/seed_test_data.php`, and `scripts/test-email-commands.php` now use `example.com`. The email-signature test fixtures, seed branch names and addresses, seed branding/footer strings, KB article titles, the OpenAPI contact name, and the `README.md` description/licence line no longer reference a specific organisation &mdash; they use generic placeholders (`Example Library`, `Anytown` addresses, `(555) 010-1234`). The backup-restore help page's example path is now `/var/www/localdesk` to match the product name.
+- **Marked the demo seeders as dev-only.** `database/seed.php` and `database/seed_test_data.php` carry a prominent header warning that they drop all tables and insert well-known demo credentials, and must never be run against production &mdash; the real administrator account is created by the web installer (`public/install/`).
+
+---
+
+## 2.42.3 &mdash; 2026-05-13
+
+### Bug fixes
+- **Form Builder live preview still not opening (2.42.2 follow-up).** The previous attempt switched the iframe to `data-src` and copied it into `src` on toggle open, but that depended on the main builder IIFE running through to where the preview-toggle handler was bound &mdash; if anything earlier in the IIFE threw (e.g. a transient `Sortable` load issue or a missing modal element), the click handler was never wired and clicking "Live Preview" did nothing visible. **Fix:** the preview toggle now lives in its own separate IIFE before the main builder code, so it binds regardless of what happens later, and the iframe is rendered with a plain `src=` again (browsers will load it on page paint, even with the pane initially `display:none` &mdash; only rendering is suppressed). Every `getElementById` in the toggle is null-guarded; `localStorage` reads/writes are wrapped in `try/catch` for private-window safety. The main IIFE retains a `reloadPreview()` shim that delegates to the toggle's reload, so visibility-pill clicks and drag-reorders still refresh the preview when changes save.
+
+---
+
+## 2.42.2 &mdash; 2026-05-13
+
+### Bug fixes
+- **Form Builder's live preview never loaded.** The `<iframe id="previewFrame">` in [templates/pages/admin/workflows/ticket-fields.php](templates/pages/admin/workflows/ticket-fields.php) was rendered with both `src=` and `loading="lazy"`, while its parent pane started with `display: none` until the user clicked **Live Preview**. Chrome (and a few other browsers) decline to start loading a lazy iframe whose parent is `display: none`, and once the parent becomes visible the deferred load never fires for that DOM node &mdash; so the user clicked the toggle, saw the pane open, and got a blank rectangle. **Fix:** the iframe is now rendered with `data-src=` instead of `src=`, and the toggle's open path copies `data-src` into `src` on the first open (subsequent opens are no-ops; the reload button reassigns the existing src to force a refresh). Verified end-to-end against prod by forging a session, curling the builder page to confirm the iframe markup, then curling the embed URL itself to confirm headers + body were healthy &mdash; the page was rendering fine; the iframe just wasn't being asked to load. While here, encoded the `&` in the iframe URL as `&amp;` for HTML-attribute correctness.
+
+---
+
+## 2.42.1 &mdash; 2026-05-13
+
+### Bug fixes
+- **Form Builder page errored with "Invalid parameter number" instead of rendering.** The new builder route at [src/routes/admin.php](src/routes/admin.php) (`/admin/workflows/ticket-fields`) computed the "fields not on this type's form" list by passing `array_map(..., array_filter(...))` straight into `PDOStatement::execute()` for a `NOT IN (?, ?, ...)` query. `array_filter()` preserves the original (non-sequential) array keys, and `array_map()` carries them through, so the resulting positional-parameter array looked like `{"1": 40}` instead of `{"0": 40}` &mdash; which PDO rejects with `SQLSTATE[HY093]: Invalid parameter number: parameter was not defined`. **Fix:** wrap the chain in `array_values()` so the params are zero-indexed. The matching cleanup query on the field-update endpoint already used `array_values()` correctly. Confirmed via a probe script against prod's PHP runtime before re-deploying.
+
+---
+
+## 2.42.0 &mdash; 2026-05-13
+
+### New features
+- **Form Builder rewritten as a per-ticket-type editor.** Before, [templates/pages/admin/workflows/ticket-fields.php](templates/pages/admin/workflows/ticket-fields.php) presented a single global field list with a "filter by type" preview chip — so to hide priority on one type you had to leave the builder, edit the ticket type, come back; drag-and-drop while filtered didn't actually reorder per type (because `ticket_form_fields.sort_order` was one number for all types); and there was no visual indication on the builder when priority was hidden somewhere. **Fix:** new migration [database/migrations/038_form_builder_per_type_layout.php](database/migrations/038_form_builder_per_type_layout.php) introduces `ticket_type_form_layout (type_id, field_kind, field_key, sort_order, visibility, label_override)` — every ticket type now has its own authoritative form definition. The page picks a type from a left rail; the canvas shows that type's form. Drag handles reorder within that type (writes to `sort_order` for those rows only). Each field row has a clickable visibility pill that cycles **Required → Optional → Hidden** without leaving the page; hidden rows render with a hashed background so the state is obvious at a glance. Subject and Description are pinned at the top and locked to Required. **Add field** creates a new custom field and inserts a layout row; **Add existing field** picks from custom fields used on other types and shares them onto this one. Editing a custom field's definition (label, options, placeholder) opens a modal that surfaces every other ticket type the field appears on as checkboxes — toggle to share/unshare. Removing a row from a type's form preserves the field definition (and any saved values on past tickets); a separate "Delete field entirely" action soft-deletes it from every type. The live-preview pane in the right rail iframes `/portal/tickets/create?embed=1&type_id={N}` so admins see exactly what requesters will see for the type they're editing; preference is persisted in `localStorage`. Retired in the migration: `ticket_form_field_type_map`, `ticket_types.priority_visibility` (added briefly in v2.41), `ticket_form_fields.is_required` / `is_visible` / `sort_order`, and the global settings `sys_field_required_priority`, `sys_field_required_tags`, `sys_field_sort_order_*` — all of which became redundant once visibility/required/order moved per-type. Existing installs are auto-converted: the migration seeds every type's layout from the previous global sort order + the type's old field-type-map memberships + the v2.41 `priority_visibility` column, so behaviour is preserved end-to-end. The "Priority Field" dropdown that v2.41 added to [templates/pages/admin/types/form.php](templates/pages/admin/types/form.php) is replaced by an "Edit this type's form" button that deep-links to the builder for that type. New helpers in [src/helpers.php](src/helpers.php): `getFormLayoutForType()`, `resolveFieldVisibility()`, `seedDefaultLayoutForType()`, `getDefaultPriorityId()`. The portal / admin / agent ticket-create pages now render every field that appears on any type once, then JS reorders + toggles required/hidden as the user picks a type — driven by a per-type `formLayouts` map injected into the page. Server-side, [src/routes/portal.php](src/routes/portal.php) and [src/routes/admin.php](src/routes/admin.php) validate the submitted ticket against the chosen type's layout regardless of what the client did, so a hidden priority always backfills to the system default and a required custom field still fails closed even if the input was JS-stripped.
+
+---
+
+## 2.41.0 &mdash; 2026-05-13
+
+### New features
+- **Priority field can now be hidden per ticket type.** Before, the priority picker on the New Ticket form was governed by a single global setting (`sys_field_required_priority`) at [templates/pages/admin/workflows/ticket-fields.php](templates/pages/admin/workflows/ticket-fields.php) &mdash; either *Required* everywhere or *Optional* everywhere, no way to suppress it for ticket types where the requester shouldn't be picking severity (e.g. simple lost-and-found or "I need a key cut" requests, where every ticket of that type lands at the same urgency anyway). **Fix:** migration [database/migrations/037_ticket_types_priority_visibility.php](database/migrations/037_ticket_types_priority_visibility.php) adds `priority_visibility ENUM('inherit','required','optional','hidden') NOT NULL DEFAULT 'inherit'` to `ticket_types`. A new **Priority Field** dropdown on [templates/pages/admin/types/form.php](templates/pages/admin/types/form.php) lets admins override the global default per type with four states: *Use global setting* (the previous behaviour), *Required*, *Optional*, or *Hidden*. New helpers `resolvePriorityVisibility()`, `getDefaultPriorityId()`, and `getPriorityVisibilityMap()` in [src/helpers.php](src/helpers.php) centralise the resolution logic so portal, admin, and agent create forms behave identically. The portal form ([templates/pages/portal/tickets/create.php](templates/pages/portal/tickets/create.php)) and the staff form ([templates/pages/admin/tickets/create.php](templates/pages/admin/tickets/create.php)) now drive priority visibility from a `priorityVisibilityMap` injected into the page &mdash; on type-change the JS shows/hides `#priorityFieldWrap`, toggles the required attribute + asterisk + help text, and clears any submitted priority when the field becomes hidden so a stale value can't sneak through. **Server-side** ([src/routes/portal.php](src/routes/portal.php) and [src/routes/admin.php](src/routes/admin.php)) enforces the resolved visibility regardless of what the client posted: when the type's effective visibility is `hidden`, the submitted priority is discarded and replaced with the system default (lowest `sort_order`) so the ticket always has a priority on creation (SLA timers, escalation, list views all keep working) &mdash; agents can still change it after the fact. The system field edit modal at [templates/pages/admin/workflows/ticket-fields.php](templates/pages/admin/workflows/ticket-fields.php) shows a per-type-override hint only when editing the Priority field, pointing admins to Admin &rarr; Ticket Types for finer control. `'inherit'` is the install-wide default so existing installs see zero behaviour change until an admin opts a type in.
+
+---
+
+## 2.40.2 &mdash; 2026-05-12
+
+### Bug fixes
+- **Escalate button is now hidden on tickets whose type has no escalation path configured.** Before, [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php) and [templates/pages/portal/tickets/view.php](templates/pages/portal/tickets/view.php) always rendered the **Escalate** button and merely disabled it with a tooltip when no path was wired up &mdash; which still drew the eye, invited hover-discovery, and suggested an action the user could never take. **Fix:** both views now gate the button on `$hasEscalationPath` (computed in [src/routes/agent.php](src/routes/agent.php) and [src/routes/portal.php](src/routes/portal.php) as `COUNT(*) > 0` against `ticket_escalation_steps` for the ticket's `type_id`), so the button is omitted entirely when the type has no steps &mdash; or when no type is set yet, since `$hasEscalationPath` is initialised to `false` in that case too. The "at the top of the chain" and "closed ticket" disabled states are preserved (path exists, but no `$nextEscalationStep` is reachable), since those are meaningful "you have an escalation lane, you just can't take it right now" signals rather than configuration gaps. The escalate modal is unchanged &mdash; it was already gated on `$nextEscalationStep`.
+
+---
+
+## 2.40.1 &mdash; 2026-05-11
+
+### Bug fixes
+- **Header search placeholder is now legible.** The "Search&hellip; ( / )" placeholder in the global search input was rendered at 45% white opacity against the dark indigo navbar gradient, which made it look washed out and easy to miss. **Fix:** bumped the placeholder colour in [templates/layouts/app.php](templates/layouts/app.php) from `rgba(255,255,255,.45)` to `rgba(255,255,255,.75)`. Typed text was already pure white via Bootstrap's `text-white` class on the input, so only the placeholder needed the boost.
+
+---
+
+## 2.40.0 &mdash; 2026-05-08
+
+### New features
+- **Unresolved Tickets report now paginates and supports drill-down filtering.** Before, [templates/pages/admin/reports/unresolved.php](templates/pages/admin/reports/unresolved.php) dumped *every* unresolved ticket onto a single page with no way to narrow the view &mdash; an instance with a few hundred unresolved tickets meant a slow render and an unusable wall of rows. The "By Status" and "By Age" tiles were also static read-outs, not navigation. **Fix:** the route at [src/routes/admin.php](src/routes/admin.php) (`/admin/reports/unresolved`) now (1) accepts `status`, `age` (0&ndash;4), `page`, and `per_page` (10/25/50/100, default 25) query params; (2) computes summary cards + tile counts from a single `SUM(CASE WHEN ...)` aggregate plus a `GROUP BY status` query against `tickets` (unfiltered &mdash; tiles are the navigation source, not filtered); (3) runs a separate `LIMIT/OFFSET`-paginated query against the same table for just the on-screen page; and (4) when called with `?ajax=1` returns only the new partial [templates/pages/admin/reports/_unresolved-table.php](templates/pages/admin/reports/_unresolved-table.php) instead of the full layout. The page template wraps the table card in `#unresolvedDrillRegion`; the inline JS intercepts tile clicks, the per-page `<select>`, and pagination links, fetches the partial, and swaps the region's innerHTML &mdash; with `history.pushState` so URLs stay bookmarkable and Back/Forward work via `popstate`. Status + age filters are combinable (e.g. `?status=open&age=4` for "open tickets older than 14 days"); clicking an already-active tile (or its `&times;` chip in the table header) toggles it off; "Clear all" wipes both at once. Tiles paint an active border + funnel icon when applied, and the region dims briefly during fetch so the swap doesn't feel ghosty. Aging buckets are computed in SQL with `TIMESTAMPDIFF(HOUR, created_at, NOW())` against fixed hour cutoffs (24 / 72 / 168 / 336) which matches the existing `< 1d / 1&ndash;3d / 3&ndash;7d / 7&ndash;14d / > 14d` labels exactly.
+
+---
+
+## 2.39.0 &mdash; 2026-05-08
+
+### New features
+- **Submit button now cycles playful "we are working on it" phrases while the AI and server do their thing.** Before, the only feedback while a ticket was being processed was a single "Checking for duplicates&hellip;" string &mdash; if the dup check + post-create AI tasks (skill classification, group routing, SLA setup) ran for more than a couple of seconds, the user had no idea anything was still happening. **Fix:** new shared partial [templates/partials/ticket-submit-progress.php](templates/partials/ticket-submit-progress.php) defines `window.startTicketSubmitProgress(btn)` which swaps the submit button for a spinner + rotating message every 1.8&nbsp;s, starting with "Checking for duplicates&hellip;" so the first frame still tells the truth, then shuffling through 13 phrases including "Phoning a friend&hellip;", "Flashing the bat signal&hellip;", "Putting your ticket in the paper shredder&hellip;", "Waking the help desk gnomes&hellip;", "Bribing the printer with cookies&hellip;", "Consulting the magic 8-ball&hellip;", "Sharpening every pencil in the building&hellip;", "Untangling the cables&hellip;", "Decoding ancient library scrolls&hellip;", "Polishing the crystal ball&hellip;", "Negotiating with the wifi router&hellip;", "Re-inking the stamp pad&hellip;", and "Looking under the rug&hellip;". **Wired in** all three create flows: [templates/pages/portal/tickets/create.php](templates/pages/portal/tickets/create.php), [templates/pages/admin/tickets/create.php](templates/pages/admin/tickets/create.php), [templates/pages/agent/floor.php](templates/pages/agent/floor.php), and the dup-preview modal's "Create anyway" button in [templates/partials/dup-preview-modal.php](templates/partials/dup-preview-modal.php). The helper returns a `stop()` so synchronous form-post flows let the cycling die naturally on navigation (no flicker), while async flows (floor mode dup-check &rarr; create chain, dup-warning re-render) explicitly stop the cycling the moment the server responds &mdash; so we never waste the user's time animating after the work is done.
+
+---
+
+## 2.38.3 &mdash; 2026-05-08
+
+### Bug fixes
+- **Dup-check modal now actually opens.** The "Click here to see this ticket" button was a silent no-op because the modal partial's inline script ran at parse time &mdash; before [templates/layouts/app.php](templates/layouts/app.php) loaded the Bootstrap bundle in the footer &mdash; so `typeof bootstrap === 'undefined'` and the IIFE returned without registering `window.openDupPreviewModal`. **Fix:** [templates/partials/dup-preview-modal.php](templates/partials/dup-preview-modal.php) now defers init to `DOMContentLoaded` (Bootstrap's parser-blocking script tag finishes by then) and falls back to a 50 ms retry if the script somehow runs even later. The button now opens the modal as designed.
+
+---
+
+## 2.38.2 &mdash; 2026-05-08
+
+### New features
+- **Friendlier dup-check warning + modal preview of the matched ticket.** The dup-check banner copy was reading like an internal error message ("Looks like someone may have already reported this") and the per-match action ("View this existing request") opened a new tab, pulling the requester out of their flow. **Fix:** new patron-friendly opening line &mdash; "Oops! It looks like someone else might have already submitted a ticket for this issue." &mdash; and every match now has a "Click here to see this ticket" button that opens a Bootstrap modal showing the existing ticket's subject, status, when it was opened, who reported it, the description, and the reply count, all without leaving the create form. The override button now reads "Create anyway &mdash; This is a Different Issue" everywhere (portal, agent, floor) and is rendered as a warning-coloured action so it doesn't look like the default. **Privacy:** new `getDupPreviewTicket()` helper in [src/helpers.php](src/helpers.php) re-validates each preview request server-side &mdash; non-confidential type, not merged-out, not closed, and (for portal users) at the user's branch &mdash; so the modal never leaks tickets the user wouldn't have been a candidate for, and portal users see only first name + last initial. **Backbone:** new shared partial [templates/partials/dup-preview-modal.php](templates/partials/dup-preview-modal.php) renders the modal once per page; the create form templates ([portal](templates/pages/portal/tickets/create.php), [agent/admin](templates/pages/admin/tickets/create.php), [floor](templates/pages/agent/floor.php)) include it with the right endpoint + view base. JSON endpoints `GET /portal/tickets/dup-preview` and `GET /agent/tickets/dup-preview` ([src/routes/portal.php](src/routes/portal.php), [src/routes/agent.php](src/routes/agent.php)) hand back the preview data. Floor mode's bottom sheet uses z-index 1070, so the partial pushes the modal + its backdrop to 1090/1085 on `shown.bs.modal` to render above the sheet. All user-facing copy is full sentences throughout the warning banner and modal.
+
+---
+
+## 2.38.1 &mdash; 2026-05-08
+
+### New features
+- **AI classification notes are now visible to admins in the ticket timeline.** AI-generated timeline entries (`ai_classified` skill verdicts, `ai_group_routed` "No Wrong Door" decisions, the new `ai_duplicate_warned` audit, plus any other system-generated internal entries) were always being written to `ticket_timeline` but the agent ticket view was filtering out everything `is_internal=1` with no `user_name` &mdash; meaning admins couldn't actually see the AI's reasoning, confidence, or sentiment. **Fix:** [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php) now lets system entries through when `Auth::role() === 'admin'`, renders them with the existing `ld-timeline-system` blue stripe, and tags them with an "AI &middot; Admin only" badge so admins know what they're looking at and that requesters/agents don't see it. Action label + icon maps gained `ai_classified`, `ai_group_routed`, `ai_group_routing_skipped`, `ai_duplicate_warned` so each renders with a robot/signpost/files icon and a human-readable label instead of the generic "Ai Classified" fallback. Same label/icon map updates added to [templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php) which already renders system entries.
+- **Dup-check overrides are now audited on the new ticket.** When the requester sees the AI duplicate warning and clicks _Submit anyway_, all three create flows ([src/routes/portal.php](src/routes/portal.php), [src/routes/admin.php](src/routes/admin.php), [src/routes/floor.php](src/routes/floor.php)) now write an `ai_duplicate_warned` timeline entry on the new ticket linking the matched ticket numbers + subjects, so admins can see overrides happened. Hidden field `_dup_matched_ids` is populated by JS on the override click; new `recordDupOverrideOnNewTicket()` helper in [src/helpers.php](src/helpers.php) writes the timeline entry and links the original `ai_duplicate_classifications` audit row to the new ticket id with `decision='suppressed'`.
+
+---
+
+## 2.38.0 &mdash; 2026-05-08
+
+### New features
+- **AI duplicate-ticket detection on submit.** Branches with multiple shifts kept filing the same ticket twice because staff don't routinely scan every open ticket before opening their own. **Fix:** new opt-in feature on `ticket_types`. When enabled, every Submit click runs the new ticket through AI against open non-confidential tickets at the same branch (last 14 days, capped at 30) and shows a warning card listing any matches above the type's confidence threshold; the user can click through to the existing ticket or click _Submit anyway_ to override. **Hard rule:** confidential ticket types are NEVER scanned and never appear as candidates &mdash; their bodies are not sent to a third-party provider, full stop. **Per-type config** lives in [templates/pages/admin/types/form.php](templates/pages/admin/types/form.php) (toggle + 0.50&ndash;0.99 threshold spinbox), persisted via the create/edit handlers in [src/routes/admin.php](src/routes/admin.php). **Wired into all three create flows:** portal ([templates/pages/portal/tickets/create.php](templates/pages/portal/tickets/create.php) + endpoint in [src/routes/portal.php](src/routes/portal.php)), agent/admin ticket form ([templates/pages/admin/tickets/create.php](templates/pages/admin/tickets/create.php) + endpoint in [src/routes/agent.php](src/routes/agent.php)), and floor mode quick-create ([templates/pages/agent/floor.php](templates/pages/agent/floor.php) reuses the same `/agent/tickets/check-duplicates` endpoint). All three soft-fail: provider timeout/error silently lets the ticket through, never blocking creation. **Backbone:** new `findDuplicates()` method on `AIClassifier` + Anthropic + OpenAI implementations in [src/AI.php](src/AI.php), and a shared `checkTicketDuplicates()` helper in [src/helpers.php](src/helpers.php) that gathers candidates, calls AI, filters by threshold, and audits to a new `ai_duplicate_classifications` table for tuning. **Migration 036** ([database/migrations/036_ai_duplicate_detection.php](database/migrations/036_ai_duplicate_detection.php)) adds `ai_dup_check_enabled` (default 0) + `ai_dup_threshold` (default 0.75) on `ticket_types` and creates the audit table. Admin form blocks the dup-check toggle when Confidential is checked.
+
+---
+
+## 2.37.0 — 2026-05-07
+
+### New features
+- **Floor mode now has help docs &mdash; agent side and a brand-new patron help section.** 2.36.x shipped the floor ticket detail views without any documentation; nothing in `/agent/help` or anywhere on the patron side mentioned floor mode existed. **Agent doc:** new page at `/agent/help/floor` ([templates/pages/agent/docs/floor.php](templates/pages/agent/docs/floor.php)) covering the queue + tabs (All open / Mine / Unassigned), the quick-create bottom sheet (subject + voice dictate, type, location, photo, barcode scan including the BarcodeDetector / Chrome-on-Android caveat), the floor ticket detail view (subject card, who-cards, collapsible description, Quick Actions, recent activity, add-a-note with photo + Internal toggle), the `?from=floor` full-detail escape hatch, permissions/visibility, and PWA-install tips. Wired into [src/routes/agent.php](src/routes/agent.php) by adding `floor` to `$validHelpPages` + the titles map; into [templates/partials/agent-help-nav.php](templates/partials/agent-help-nav.php) (sticky sidebar) and [templates/pages/agent/docs/index.php](templates/pages/agent/docs/index.php) (an extra card and four entries in the in-page search index). **Patron docs:** the portal had no docs section at all, so this stands one up: new routes `GET /portal/help` and `GET /portal/help/{page}` in [src/routes/portal.php](src/routes/portal.php), a `bi-question-circle` Help icon added to `portalSidebar()` in [src/helpers.php](src/helpers.php), and three new templates &mdash; [templates/partials/portal-help-nav.php](templates/partials/portal-help-nav.php) (sticky sidebar matching the agent partial), [templates/pages/portal/docs/index.php](templates/pages/portal/docs/index.php) (overview cards), and [templates/pages/portal/docs/floor.php](templates/pages/portal/docs/floor.php) (patron-friendly walkthrough: status pill labels, Helping you, What you reported, Updates, Reply, Close-this-request gating, and the Full request details escape hatch). Tone is patron-facing throughout &mdash; "request" not "ticket", plain-English status labels.
+
+---
+
+## 2.36.1 — 2026-05-07
+
+### New features
+- **Patron-side floor mode now has its own ticket detail view too.** 2.36.0 only built the simple detail view for the agent floor queue; the matching `/portal/floor` page (regular users tapping cards from a phone in the stacks) was still routing to the dense `/portal/tickets/{id}` page. **Fix:** new route `GET /portal/floor/tickets/{id}` rendering [templates/pages/portal/floor-ticket.php](templates/pages/portal/floor-ticket.php), with the same single-column layout as the agent version but tuned for patrons — patron-friendly status labels ("Submitted" / "We're working on it" / "Done"), a "Helping you" who-card showing the assigned agent, an Updates timeline that strips internal notes (patrons never see those), a Reply form with camera-capture photo input, and a Close-this-request button shown only when the user owns the ticket and it's not already closed/resolved. Companion `POST /portal/floor/tickets/{id}/action` handles `comment` (reuses `notifyCcUsers` + `notifyAgentRequesterReplied`) and `close` (writes the same internal audit-trail entry as the dense `/portal/tickets/{id}/close`). Access checks mirror the dense view exactly: own ticket OR merged-master OR location-visible non-confidential type. Cards in [templates/pages/portal/floor.php](templates/pages/portal/floor.php) now link here. The "Full request details" escape hatch goes to `/portal/tickets/{id}?from=floor` — the route handler ([src/routes/portal.php](src/routes/portal.php)) detects the flag and passes `embedMode=true` + `fromFloor=true`, so [templates/pages/portal/tickets/view.php](templates/pages/portal/tickets/view.php) drops the breadcrumbs (the layout already drops navbar/sidebar/banner) and overlays a fixed top-right ✕ pill that returns to `/portal/floor/tickets/{id}`. Same UX as the agent path, same chrome-stripping primitive.
+
+---
+
+## 2.36.0 — 2026-05-07
+
+### New features
+- **Floor mode now has its own ticket detail view.** Tapping a card in [/agent/floor](src/routes/floor.php) used to drop the user into the dense desktop ticket page ([templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php)) — sidebar, full edit form, dozens of small targets — which broke the touch-first design promise of the queue. **Fix:** new route `GET /agent/floor/tickets/{id}` rendering [templates/pages/agent/floor-ticket.php](templates/pages/agent/floor-ticket.php), a single-column card layout sized for thumbs: large subject + status/priority/type/location pills, two who-cards (Reported by, Assigned to), an auto-collapsing description, a Quick Actions grid (Claim/Release plus contextual In Progress / Pending / Resolve / Reopen — each a one-click form to `POST /agent/floor/tickets/{id}/action`), the most recent 8 timeline entries, and an Add-a-note form with camera-capture photo input and an "Internal only" toggle. The action endpoint reuses the existing helpers (`Sla::pause/resume`, `notifyAssignedAgent`, `notifyTicketCreator`, `notifyCcUsers`, `notifyWatchers`, `notifyAgentNoteAdded`, `notifyRequesterStatusChanged`, `processAtMentions`, `runAutomations`, `sendCsatSurvey`) so SLA timers, CSAT survey triggers, first-response marking, @-mention notifications, and auto-claim-on-reply all behave identically to the regular detail page. Floor cards in [templates/pages/agent/floor.php](templates/pages/agent/floor.php) now link here instead of `/agent/tickets/{id}`.
+- **"Full ticket details" escape hatch with chrome-stripped, ✕-to-close return path.** The floor detail page links to `/agent/tickets/{id}?from=floor` for cases that need fields/merge/escalate the simple view doesn't expose. The route handler ([src/routes/agent.php](src/routes/agent.php) at `GET /agent/tickets/{id}`) detects `?from=floor` and passes `embedMode=true` plus `fromFloor=true` to `render()` — the layout's existing `embed-mode` body class hides navbar, sidebar, breadcrumbs, status banner, and PWA install prompt, and [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php) overlays a fixed top-right ✕ pill that returns to `/agent/floor/tickets/{id}`. Breadcrumbs are also nulled in floor-entry mode (they were already CSS-hidden, but emptying the array is cleaner). Net effect: a staffer can drop into the dense view for one specific edit and bounce straight back to the simple view without ever seeing the desktop chrome.
+
+---
+
+## 2.35.4 — 2026-05-07
+
+### Bug fixes
+- **Regenerated [database/schema.sql](database/schema.sql) from the live database and switched the installer to a snapshot-based install instead of a migration replay.** 2.35.3 had the installer walk every file in `database/migrations/` after applying `schema.sql`, which exposed a latent problem: migration 006 isn't idempotent — it intentionally adds `api_tokens.token_hash`, backfills it from `api_tokens.token`, then DROPs `token`. Replaying it against a database where `token` was never present (because the regenerated `schema.sql` reflects the *post*-006 shape) crashes with `Unknown column 'token'`. **Fix:** `schema.sql` is now the canonical fresh-install snapshot — dumped from the live DB, comments stripped, every CREATE wrapped in `IF NOT EXISTS`, and the file wraps itself in `SET FOREIGN_KEY_CHECKS = 0/1`. The installer applies it in a single `PDO::exec()` (PDO+MySQL handles the multi-statement payload natively, which matters because one `COMMENT 'NULL = global; non-null = personal to that agent'` contains an embedded semicolon that broke the old naive splitter). Then it marks every committed migration as already-applied in `schema_migrations` *without* running them, so [database/migrate.php](database/migrate.php) on later upgrades correctly skips everything in the snapshot and only runs migrations added after the snapshot was cut. **Verified end-to-end** against a freshly created MySQL database: 48 tables, 399 columns, 88 FK constraints — exact match with the canonical DB; `migrate.php` immediately after install re-runs zero migrations.
+
+---
+
+## 2.35.3 — 2026-05-07
+
+### Bug fixes
+- **Web installer no longer produces a broken database on a fresh `/install/` run.** [public/install/index.php](public/install/index.php) used to read [database/schema.sql](database/schema.sql) and execute it directly, but `schema.sql` represents only the migration-001 baseline — every table added since (api_tokens, escalation_paths, login_attempts, ai_classifications, user_presence, status_banners, recurring_tickets, ai_group_classifications) plus a long list of column additions from migrations 011–035 lived in [database/migrations/](database/migrations/) and never made it into the fresh-install path. So a brand-new install booted with a half-built schema and would crash on first use of any of those features. **Fix:** the installer now runs the same migration loop as [database/migrate.php](database/migrate.php) — creates `schema_migrations`, walks every file in `database/migrations/` in order, executes each, and records it as applied. Migration 001 still applies the `schema.sql` baseline; migrations 002–035 are all idempotent (each guarded by an `information_schema` lookup) so they layer cleanly on top, and post-install runs of `migrate.php` correctly skip everything that's already recorded. **Cron list filled in:** the post-install "Next Steps" panel listed only 4 cron jobs, but the app's own [Admin → Settings → Cron Jobs](templates/pages/admin/settings/cron-jobs.php) page lists 6, plus `process-recurring-tickets.php` (added by migration 034) was missing from both. The installer panel now lists all 7 with their correct schedules, and the admin page also gained the recurring-tickets entry. **Storage dirs:** the installer only created `storage/attachments/`, but the app also writes to `storage/logs/`, `storage/imports/`, `storage/backups/`, and `storage/pwa/` — first-run permission errors on each of those would fail silently or surface as flash errors deep in admin flows. All five are now created at install time. **`.env.example` synced:** it was missing `APP_TIMEZONE`, `UPLOAD_MAX_SIZE`, and `UPLOAD_ALLOWED_TYPES` (which the installer already writes to `.env`); manual-setup users now get the same complete file.
+
+---
+
+## 2.35.2 — 2026-05-07
+
+### Bug fixes
+- **Fix 500 on /agent/floor caused by `extract($data)` clobbering the template path.** The floor route was passing `'view' => $view` (the All / Mine / Unassigned filter) to `render()`, but `render()` itself uses a `$view` parameter internally for the *template name* — `extract($data)` overwrote it, so PHP tried to `require .../templates/pages/all.php` (or `mine` / `unassigned`) which doesn't exist, and the request fataled before any output. Renamed the data key to `activeView` in [src/routes/floor.php](src/routes/floor.php) and the matching reads in [templates/pages/agent/floor.php](templates/pages/agent/floor.php). Added a comment at the call site warning that `view` is a reserved key for `render()` so future routes don't repeat the mistake. Affected only the agent-side floor route; portal floor never had a `view` filter and was always fine.
+
+---
+
+## 2.35.1 — 2026-05-07
+
+### Bug fixes
+- **Service worker no longer breaks page styling.** Shipping 2.34.0 caused every page (login, admin dashboard, agent UI) to render as unstyled raw HTML on browsers that had registered the new service worker — Bootstrap and Bootstrap-Icons were loading from `cdn.jsdelivr.net` but the SW was intercepting those cross-origin requests, calling `fetch()` from inside the worker, which is governed by the page's `connect-src` CSP directive (currently `'self' https://cdn.ckeditor.com` only — no jsdelivr). The cross-origin fetches inside the SW were therefore blocked, the worker returned an empty response, and the browser applied the empty stylesheet. Native `<link rel="stylesheet">` requests are governed by `style-src` (which DOES allow jsdelivr) and worked fine before the SW started intercepting. **Fix:** the SW now early-returns on any cross-origin request — those go to the browser's native loader, where the correct CSP directive applies. Cross-origin URLs were also dropped from the SW precache list. Same-origin caching (`/offline` shell, `/pwa/icons`, future own-origin CSS/JS) is unchanged. The fix self-deploys: the new sw.js content rotates the cache version, install + activate auto-skipWaiting + clients.claim, and the existing `controllerchange` listener reloads the page so users on a broken cached state recover on next page load. Affected versions were 2.34.0 (where the bug was introduced) and 2.35.0 (which inherited it). Anyone still seeing unstyled pages after 2.35.1 deploys should hard-reload (Ctrl+Shift+R) once to pick up the new worker; subsequent pages render normally.
+
+---
+
+## 2.35.0 — 2026-05-07
+
+### Features
+- **Floor mode: tablet-friendly card view of the ticket queue, with a single-screen quick-capture FAB.** Staff carrying an iPad through the building (printer jam in the makerspace, frozen public PC, lock-up at the self-checkout) and patrons reporting things from a phone in the stacks now have a touch-first surface that doesn't make them squint at a 12-column desktop table. New section in the agent / power-user / portal sidebars (key `floor`, `bi-grid-1x2` icon) above *Knowledge base* on every role: [/agent/floor](src/routes/floor.php) and [/portal/floor](src/routes/floor.php) ([src/helpers.php](src/helpers.php) `agentSidebar()` / `powerUserSidebar()` / `portalSidebar()`). **Agent view.** A pill-tab strip across the top — *All open / Mine / Unassigned* with live counts — drives the same group-restricted query that powers `/agent/tickets` (agents in groups only see their groups' tickets, agents in no groups see everything). Below the tabs, up to 100 tickets are rendered as a CSS-grid of cards (`auto-fill, minmax(280px, 1fr)`, single column on phones), each card 140 px+ tall with a coloured priority left rail, the subject 3-line-clamped at 1 rem, a status pill (open / in-progress / pending in distinct hues, dark-mode variants included), the type chip with the type's own colour, a location chip, and either an *assigned-agent* green pill or an *Unassigned* red pill so the next person to grab a ticket can see at a glance what's waiting. Tap-targets are 44 pt+ everywhere; pressing a card scales it 2 % for haptic feedback before navigating to `/agent/tickets/{id}`. **Portal view.** Patrons see a simpler version — a big gradient *New help request* CTA card linking to the existing rich create form (which has all the validation and custom-field handling), and below it a card for each of their last 50 tickets ordered open-first then most-recently-updated, so they can confirm something they reported earlier was acted on. **Floating action button + bottom-sheet quick-capture** ([templates/pages/agent/floor.php](templates/pages/agent/floor.php)). Bottom-right circular `+` button (60 px, brand-coloured shadow, safe-area-inset-aware so it doesn't disappear under iOS home-indicator gestures); tapping it slides a bottom-sheet up over a backdrop with three inputs and three media buttons. **Subject** with a microphone button on the right that uses the Web Speech API (`webkitSpeechRecognition`) to dictate — useful when staff are carrying a laptop and supplies in the other hand; the mic pulses red while listening and the transcript is appended (or capitalised when the field is empty) to whatever's already typed. **Type** dropdown (required, `is_confidential = 0` types only — so nothing private slips out of the streamlined path) and **Location** dropdown (defaults to "My branch" which falls back to the agent's profile location server-side). **Take photo** opens the camera directly via `<input type="file" accept="image/*" capture="environment" multiple>` — every modern phone respects that and goes straight to the rear camera, bypassing the gallery — captured shots are previewed as 60 × 60 thumbs you can tap × to remove before submit. **Scan barcode** uses the native Chromium `BarcodeDetector` API to read code_128 / EAN / QR / code_39 off the rear camera, then auto-prepends `[Asset {code}]` to the subject; on browsers without the API (iOS Safari today) it shows a friendly fallback message instead of failing silently. The form posts as multipart/form-data to a new [POST /agent/floor/quick-create](src/routes/floor.php) endpoint (`X-CSRF-TOKEN` header) which inserts the ticket through the **same backbone the regular create paths use** — `resolveTicketGroup()` picks the destination group from the type, `runPostTicketCreateHooks()` runs the AI No-Wrong-Door routing + skill classification + auto-assign, `saveAttachments()` persists the photo, `notifyRequesterTicketCreated()` / `notifyGroupMembers()` / `notifyAssignedAgent()` fire the right inboxes, and `Sla::initializeForTicket()` starts the timers — so a ticket born in floor mode is indistinguishable from one filed through the full form once it's in the system. **Custom field validation is intentionally skipped** in the quick-capture path so a tap-it-and-go floor capture isn't blocked by a 14-field type schema; the agent fleshes out the missing context on the standard ticket detail page after the ticket is created (the JSON response includes `redirect_url` to that page). The first timeline entry is recorded as *"Ticket created from floor mode quick-capture."* so the audit trail makes the origin obvious. **Defaults.** Subject ≥ 3 chars; description defaults to subject when blank (floor capture often only knows the headline); priority defaults to the lowest-sort_order priority; type falls back to the first non-confidential type if not picked. **Empty state.** When the queue is empty for the selected tab, staff get a green-check empty state ("Nothing in this queue right now. Tap the + button if you spot something on the floor.") instead of a blank page; patrons get an analogous "No requests yet" empty state. **Manifest shortcuts** (already in 2.34.0) now link to a real destination — long-press the home-screen icon and *Floor mode* / *New ticket* / *My tickets* are one tap away.
+
+---
+
+## 2.34.0 — 2026-05-07
+
+### Features
+- **Progressive Web App: install to home screen, offline shell, push-ready service worker.** Staff working off iPads on the floor (and patrons on phones at home) can now install the helpdesk as a real app — full-screen, app icon on the home screen, instant cold-start, last-visited screen still loads when wifi blips. The whole layer auto-themes from the existing Branding settings, so there's nothing to configure beyond uploading a logo. **Manifest.** A new dynamic Web App Manifest is served at [/manifest.webmanifest](public/index.php) ([src/routes/pwa.php](src/routes/pwa.php)) — name + short_name from `branding_app_name`, theme_color from `branding_navbar_start`, background_color from the app's slate-50 chrome, plus eight `icons[]` entries (192/256/384/512 in both `purpose: any` and `purpose: maskable` for Android adaptive masking) and three `shortcuts[]` (Floor mode, New ticket, My tickets) so a long-press on the home-screen icon shows a jump-list. **Icon generation.** A new [src/PWA.php](src/PWA.php) helper class renders icons on-demand using GD: rounded-square brand-colour background (radius 22% for iOS aesthetic) with the configured raster logo composited dead-centre at 80%-of-canvas, falling back to a single white-letter glyph (first character of `branding_app_name` rendered in DejaVu/Liberation/Arial Bold via `imagettftext`, or built-in font 5 as a last resort) when no logo is set or the upload is an SVG that GD can't ingest. Maskable variants drop the corner radius and tighten the safe-zone padding to ~80% so Android's circular/rounded mask doesn't clip the foreground. Generated PNGs are cached at `storage/pwa/icon-{key}-{size}{s|m}.png` keyed by a 10-char hash of (logo mtime, brand colour, app-name initial, app version) — branding edits invalidate cleanly without manual cache busting. **Service worker.** A version-baked SW is served at [/sw.js](src/routes/pwa.php) with `Service-Worker-Allowed: /` and the cache version stamped from `APP_VERSION` plus a hash of the manifest payload, so every deploy auto-rotates caches and a branding tweak (which doesn't bump the version number) still busts. Strategy is purposely conservative for a stateful CSRF-bearing PHP app: GETs only (POSTs always pass through so ticket replies and comment submits keep their CSRF + flash flow), navigations use **network-first → last-cached HTML → /offline shell** so staff keep reading the screen they had open through a wifi drop, static assets (CDN Bootstrap + Bootstrap Icons + own-origin CSS/JS/fonts/images, plus `/pwa/` icons) use **stale-while-revalidate**, and a hard-coded uncacheable list (`/api/`, `/admin/`, `/sso/`, `/login`, `/2fa`, attachment downloads, the SW itself) skips the worker entirely so per-user state never crosses sessions on shared tablets. **Update flow.** `controllerchange` reloads the page when a new SW takes control, and a "New version ready / Reload" toast appears at the top of the page when an updated SW is waiting — tapping Reload posts `SKIP_WAITING` so users get the fresh assets without having to fully close the app. **Offline shell.** [/offline](src/routes/pwa.php) renders a self-contained brand-coloured page (no DB calls, no auth, no flash partial) with a "Try again" button — that's what the SW shows when both the network and the runtime cache have nothing for a navigation. **Install banner.** A new partial at [templates/partials/pwa-install.php](templates/partials/pwa-install.php) captures `beforeinstallprompt` on Chromium/Edge/Android and renders a small bottom-centre dismissible banner with a single "Install" button that fires the native prompt; on iOS Safari (which has no install API) it shows a "Tap Share ↗, then *Add to Home Screen*" hint instead, since iOS PWA install is still a manual gesture. The banner self-suppresses for 14 days after dismissal (`localStorage` keyed by `ld_pwa_install_dismissed_v1`) and never appears in standalone display mode (i.e. when already installed). **Wired into every layout.** `<link rel="manifest">`, `theme-color` meta, `apple-touch-icon`, and the iOS `apple-mobile-web-app-*` capability metas are set via [templates/partials/pwa-head.php](templates/partials/pwa-head.php), included in all four layouts ([app.php](templates/layouts/app.php), [base.php](templates/layouts/base.php), [auth.php](templates/layouts/auth.php), [public.php](templates/layouts/public.php)), so the install + theming work no matter whether the user lands on the patron portal, the agent UI, or the public help center first. The install banner partial is wired in the same four places, except `embed-mode` (form-builder live preview iframe) where it would clutter the preview. **CSP.** No new directives needed — the existing `default-src 'self'` covers manifest, icon, and SW fetches; the SW does its own out-of-band fetches (cross-origin caching of CDN Bootstrap is fine — service workers run outside the page CSP). **Note for prod.** This release also depends on `php-gd` being installed on the prod box, which the user installed today (2026-05-07). Without GD the icon route writes a 1×1 transparent PNG instead of the branded glyph — the install still works, just with a blank icon.
+
+---
+
+## 2.33.1 — 2026-05-07
+
+### Documentation
+- **In-app docs catch up to the "No Wrong Door" AI group routing shipped in 2.33.0.** A new *No Wrong Door — Let AI Pick the Group* card is added to [Admin → Docs → AI Classification](/admin/docs/ai#no-wrong-door) ([templates/pages/admin/docs/ai.php](templates/pages/admin/docs/ai.php)) covering when to use it, the five-step setup walk-through (tick the type flag, set the Default Group as fallback queue, sharpen group descriptions, confidence threshold behaviour, downstream skill classifier), the audit trail badges shown on the ticket detail page (*Routed to X* / *No confident match* / *Suggested X (below threshold)*), and a tuning playbook for reading the audit to fix vague or overlapping group descriptions. Seven new search-index entries are added to [templates/pages/admin/docs/index.php](templates/pages/admin/docs/index.php) so admins typing "no wrong door", "ai group routing", "don't know who handles this", "ai_route_group", "ai group routing card", "group description ai signal", or "fallback queue default group" surface the new card. [DOCS.md](DOCS.md) gets a new *Let AI route this to the best group ("No Wrong Door")* row in the *Ticket Types* field reference, plus updated copy on the *Default Group* and *Confidential* rows explaining how each interacts with the new flag (Default Group doubles as fallback queue; Confidential is mutually exclusive because confidential bodies must never reach a third-party provider).
+
+---
+
+## 2.33.0 — 2026-05-06
+
+### Features
+- **"No Wrong Door" AI group routing for ticket types.** Some patron requests don't fit a clear category — the patron knows they need help but doesn't know which team handles it. A ticket type can now be flagged with **Let AI route this to the best group** (new `ai_route_group` column on `ticket_types`, migration **035** at [database/migrations/035_ai_group_routing.php](database/migrations/035_ai_group_routing.php)) and on submit the AI picks the most appropriate group from every non-confidential group, using each group's `description` to ground the choice. The flag surfaces as a checkbox below *Confidential* on [Admin → Settings → Ticket Types → Edit](/admin/types) ([templates/pages/admin/types/form.php](templates/pages/admin/types/form.php)) with a `bi-signpost-split` icon and copy explaining that AI uses group descriptions and that the type's *Default Group* doubles as the fallback queue when AI isn't confident — so admins should make that group their literal "No Wrong Door" team. The two flags are mutually exclusive (a confidential ticket body must never reach a third-party provider) and the form has client-side JS to enforce that, plus a server-side guard in both POST handlers ([src/routes/admin.php](src/routes/admin.php)). The types list at [/admin/types](/admin/types) gains a small `bi-signpost-split` indicator beside any AI-routed type so admins can spot them at a glance ([templates/pages/admin/types/index.php](templates/pages/admin/types/index.php)). **Routing flow.** A new `aiRouteTicketToGroup()` helper ([src/helpers.php](src/helpers.php)) is wired in as the FIRST step of `runPostTicketCreateHooks()` — it runs before the existing skill classification so when AI re-routes, the skill candidate list is filtered against the destination group's skills, not the launching queue's. The helper soft-fails on every error path (AI off, type not flagged, no candidate groups, provider error, ticket type confidential) and never blocks ticket creation. Confidence is checked against the existing `ai_confidence_threshold` setting; if the AI's pick clears the bar AND it differs from the current group, `tickets.group_id` is updated and an `ai_group_routed` timeline entry records the rationale. Below-threshold suggestions, "no confident match" responses, and same-group confirmations are all logged as `ai_group_routing_skipped` instead so admins can see exactly why a ticket stayed put. **Audit trail.** Every AI call (apply or skip) writes a row to a new `ai_group_classifications` table — provider, model, candidate group ids considered, suggested group, applied group (NULL when skipped), confidence, reasoning, full raw provider output, latency and token counts. `tickets.ai_group_classification_id` points at the latest record, and the admin ticket detail page renders a new *AI Group Routing* card in the sidebar above the existing AI Classification card ([templates/pages/admin/tickets/view.php](templates/pages/admin/tickets/view.php)) showing outcome (routed / no match / suggested-but-below-threshold), AI reasoning, provider and latency. **Provider abstraction.** `AIClassifier` interface in [src/AI.php](src/AI.php) gains a `classifyGroup()` method with shared prompt + parser in `BaseAIClassifier` (analogous to the existing skill classification) and per-provider HTTP implementations in `AnthropicClassifier` and `OpenAIClassifier` — so a future provider swap stays a one-line settings change. Candidate groups passed to the model are filtered to those with a non-empty description; a group with no description gives the AI nothing to route on, so excluding them keeps the prompt clean and the routing behaviour predictable.
+
+---
+
+## 2.32.0 — 2026-05-06
+
+### Features
+- **Recurring / preventive-maintenance tickets.** Monthly toner audits, quarterly HVAC inspections, annual fire-marshal walkthroughs, weekly website-content sweeps — work that has historically lived in someone's Outlook calendar and frequently slipped now lives in [Admin → Recurring Tickets](/admin/recurring-tickets) and auto-creates on cadence. New section in the admin sidebar between *Tickets* and *Users* (`bi-arrow-clockwise` icon, key `recurring-tickets`) opens a list view showing schedule name, cadence pill, type, group/assignee, next-run date (red + warning icon when overdue), last-run with a clickable link to the ticket the schedule spawned, total run count, an On/Off toggle button, and per-row *Run now / Edit / Delete* actions. The compose form has three cards — *Schedule Details* (internal name + notes), *How often should this ticket be created?* (frequency picker + interval + start-date + frequency-specific anchors that show/hide live with a JS-rendered "Every 3 months on the 15th." plain-language summary), and *Ticket That Will Be Created* (subject, description, type, priority, location, group, assignee, due-date offset in days, requester). **Schema.** Migration 034 ([database/migrations/034_recurring_tickets.php](database/migrations/034_recurring_tickets.php)) adds a single `recurring_tickets` table holding the ticket-mint payload (`subject`, `body`, `type_id`, `priority_id`, `location_id`, `assigned_to`, `group_id`, `requester_id`, `due_date_offset_days`), the cadence (`frequency` ENUM `daily`/`weekly`/`monthly`/`yearly`/`custom`, `interval_value`, `day_of_week`, `day_of_month`, `month_of_year`, `start_date`, `next_run_at`), the audit pair (`last_run_at`, `last_ticket_id`, `run_count`), and the lifecycle flags (`is_active`, `created_by`, `updated_by`, `created_at`, `updated_at`). All FKs `ON DELETE SET NULL` so deleting a referenced type/group/user doesn't take the schedule with it. An `idx_recurring_due (is_active, next_run_at)` composite index makes the cron's due-check cheap. **Cadence math.** A new helper class [src/RecurringTickets.php](src/RecurringTickets.php) (registered in [src/bootstrap.php](src/bootstrap.php)) owns `computeNextRun()`, which anchors firing to the configured day-of-week / day-of-month / month-of-year before stepping forward — so a "monthly on the 15th" schedule lands on the 15th every month even if the cron processes it three days late, and a "every 3 months" quarterly schedule preserves the anchor through year-rollover. Day-of-month is clamped to the target month's actual length (Feb 30 → Feb 28/29, never overflows into March). Default firing time is 06:00 local so the ticket is in the agent's inbox before they sit down without colliding with overnight batch jobs (escalations, stale-ticket sweeps). **Minting.** `RecurringTickets::mintTicket()` builds the ticket through the same path as a hand-filed one — `resolveTicketGroup()` so a stale type-default doesn't strand the ticket, `runPostTicketCreateHooks()` so AI classification + automations + auto-assign all run, `Sla::initializeForTicket()` so SLA timers start, plus `notifyGroupMembers()` / `notifyRequesterTicketCreated()` / `notifyAssignedAgent()` so the right inboxes fire. Each minted ticket gets a timeline entry *"Ticket auto-created by recurring schedule: {name}."* so the audit trail is legible — anyone reading the ticket can see "this is the Q2 HVAC inspection, not a one-off." **Cron.** New script [scripts/process-recurring-tickets.php](scripts/process-recurring-tickets.php) walks every active schedule whose `next_run_at <= NOW()` and mints + advances; designed to run every 15 minutes (`*/15 * * * * php /path/to/app/scripts/process-recurring-tickets.php >> /path/to/app/storage/logs/recurring-tickets.log 2>&1`). Missed-tick-safe by design: if the cron pauses for a day, each schedule fires *once* on the next pass and is then re-scheduled forward — it does NOT back-fill a year of "monthly toner audit" tickets if the box was offline. Schedules whose requester has been deleted (and whose `created_by` fallback is also gone) are auto-disabled rather than tight-looping on a permanently broken row. **Run now.** Each schedule has a *Run now* button (lightning-bolt icon) that mints a ticket immediately without resetting the cadence — useful for testing a brand-new schedule before its first scheduled run, or for an ad-hoc preventive-maintenance pass between scheduled cycles. **Edit semantics.** When the cadence inputs change on edit (frequency / interval / anchors / start-date), `next_run_at` is recomputed from now so a schedule moving from monthly-15th to monthly-1st actually starts firing on the 1st instead of waiting out the old slot.
+
+---
+
+## 2.31.0 — 2026-05-06
+
+### Features
+- **Pinned status banner / incident notice on the portal.** When the Wi-Fi at a branch goes down or the ILS is having a slow morning we historically take 12 duplicate tickets in 20 minutes; staff now post a pinned banner once and every help-page visitor sees the heads-up before they click *New Help Request*. New section at [Agent → Status Banners](/agent/banners) (megaphone icon in the agent sidebar, also wired into the `power_user` sidebar). Any agent — not just admins — can post, edit, clear, re-post, or permanently delete a banner; gate is `requireRole('agent', 'admin', 'power_user')` on the seven new routes in [src/routes/agent.php](src/routes/agent.php) (`/agent/banners`, `/agent/banners/create`, `/agent/banners/{id}/edit`, `/agent/banners/{id}/clear`, `/agent/banners/{id}/reactivate`, `/agent/banners/{id}/delete`). The compose form uses the same CKEditor 5 build that powers KB articles ([templates/pages/agent/banners/form.php](templates/pages/agent/banners/form.php)) — a slimmer toolbar (heading, bold/italic/underline, lists, link, blockquote, undo/redo) but the same import-map, dark-mode CSS, hidden-input round-trip and submit-time empty-body guard so authors can paste rich text, add a link to the ETA page, etc. **Severity** is a three-card radio strip (info / warning / critical) that drives the banner's Bootstrap colour and `bi-info-circle` / `bi-exclamation-triangle` / `bi-exclamation-octagon` icon, plus the ARIA live-region role (critical → `role="alert" aria-live="assertive"`, others → `role="status" aria-live="polite"`). Optional **Title** sits in bold above the body. **Branch scope** is a `locations` dropdown — leave blank for *All branches*, or pick a single branch and the banner is only shown to portal users whose `users.location_id` matches; agents/admins/power-users always see every active banner regardless of their own branch so they don't miss what's posted. **Show from** / **Auto-hide at** are optional `datetime-local` inputs that set the visibility window — both blank means *show now until cleared*, and *Auto-hide at* lets staff post a maintenance notice ahead of time and stop worrying about clearing it. **Display.** A new partial at [templates/partials/status-banner.php](templates/partials/status-banner.php) is included near the top of every authenticated `app`-layout page (between the flash-message stack and the page content) and renders all currently-active banners as a stack of Bootstrap alerts; the partial is suppressed under `?embed=1` so it doesn't show in the form-builder live-preview iframe. Each banner shows the title, the rich-text body, and a small footer line with the branch (or *All branches*), the auto-hide time if set, and — for staff only — the *Posted by Name · time* byline. Staff get inline *Edit* and *Clear* buttons on every banner so they can act on an incident without navigating away from the ticket they're working on. Patron-side dismissal is client-side only via `localStorage`, keyed by `ld_banner_{id}_{updated_at_unix}` — editing a banner bumps `updated_at` and the dismissal key changes, so the updated copy re-surfaces for users who'd hidden the previous version. **Schema.** Migration 033 ([database/migrations/033_status_banners.php](database/migrations/033_status_banners.php)) adds a single `status_banners` table — `title VARCHAR(255) NULL`, `body_html MEDIUMTEXT NOT NULL`, `severity ENUM('info','warning','critical')`, `location_id INT UNSIGNED NULL` (FK to `locations`, `ON DELETE SET NULL`), `is_active TINYINT(1)` (drives the *Clear* soft-delete so cleared incidents stay around for audit), `starts_at DATETIME NULL`, `expires_at DATETIME NULL`, `created_by` / `updated_by` (FK to `users`, `ON DELETE SET NULL`), the standard `created_at`/`updated_at` pair, and two indexes — `(is_active, expires_at, starts_at)` for the visibility query and `(location_id)` for the join. **Helpers** in [src/helpers.php](src/helpers.php): `getActiveBanners()` runs the visibility query with role-aware location scoping (lazily hydrates `$_SESSION['user']['location_id']` on cold sessions) and orders critical → warning → info, then most-recent first; `sanitizeBannerHtml()` strips `<script>`, `<style>`, `on*=` event-handler attributes and `javascript:` URLs as the defence-in-depth line — CKEditor itself never produces those tokens, but the route accepts raw POST so the sanitizer is the second wall. The management list at [/agent/banners](/agent/banners) shows every banner ever posted with a *Live / Scheduled / Expired / Cleared* status pill (computed from `is_active`, `starts_at`, `expires_at`), the severity badge, a 140-char strip-tags preview of the body, the branch, the visibility window, and the *Posted by · timestamp* — plus per-row Edit / Clear / Re-post / Delete actions. Trust model matches KB articles: agents are authenticated staff, raw HTML is stored, the sanitizer guards the obvious script-injection vectors and the alert renders without `e()` so author formatting (links, lists, headings, bold) actually renders.
+- **Status Banners entry added to the agent and power-user sidebars** ([src/helpers.php](src/helpers.php)): `bi-megaphone` icon between *Canned Responses* and *Help*, key `banners`, points at `/agent/banners`. No change to the portal sidebar — patrons see the banner inline at the top of every help page, not as a nav destination, since the whole point is that they can't miss it.
+
+---
+
+## 2.29.1 — 2026-05-06
+
+### Fixes
+- **Tightened the Classification & Details grid on the staff Create Ticket page.** On wide screens the form sits in a `col-lg-8` shell (~880&nbsp;px) and the five system fields in [templates/pages/admin/tickets/create.php](templates/pages/admin/tickets/create.php) — Type, Status, Priority, Location, Due Date — were each `col-md-6`, so they laid out as Type|Status, Priority|*empty*, Location|Due Date with a half-row of dead space next to Priority and 420&nbsp;px-wide dropdowns holding single-word values like *Open* or *Medium*. Each field is now `col-md-6 col-lg-4` so on `lg+` screens they pack three-per-row (Type|Status|Priority, Location|Due Date|empty) — the leftover gap moves to the end of the section after Due Date where it doesn't break visual rhythm, dropdowns shrink to ~280&nbsp;px which suits the content, and the medium-screen layout is unchanged.
+
+---
+
+## 2.29.0 — 2026-05-06
+
+### Features
+- **"On behalf of" ticket creation, available to agents.** Public-library staff routinely phone the helpdesk; the staff *Create Ticket* page now lets you file the ticket directly for the caller so the right person owns it from the start. The **On Behalf Of** picker — already present on [Admin → Tickets → Create Ticket](/admin/tickets/create) — is now also rendered on [Agent → Tickets → Create Ticket](/agent/tickets/create) (the `<?php if (!$isAgent) ?>` guard around the field, label and live-search JS in [templates/pages/admin/tickets/create.php](templates/pages/admin/tickets/create.php) is removed; the section gets a `bi-telephone` icon and longer help text spelling out the requester-vs-submitter split). The POST handler at [/admin/tickets/create](src/routes/admin.php#L3324) used to accept `on_behalf_of_id` only when `Auth::role() === 'admin'`; that gate is widened to `admin`/`agent`/`power_user`, and a same-user guard short-circuits the picker when an agent searches for themselves so there's no spurious audit trail. **Audit trail.** Pre-2.29 the feature reused `tickets.created_by` to mean "requester" — the agent's identity was lost at insert time. Migration **032** ([database/migrations/032_tickets_submitted_by.php](database/migrations/032_tickets_submitted_by.php)) adds `tickets.submitted_by INT UNSIGNED NULL` (FK to `users.id`, `ON DELETE SET NULL`, indexed) so the actual submitter is captured whenever it differs from the requester; NULL means "self-submission" and existing tickets need no back-fill. The INSERT in the POST handler now writes both columns; the timeline's first `created` entry reads *"Ticket filed by [staff] on behalf of [requester]."* when delegating, falling back to the original *"Ticket created by [staff]."* for self-submission. **Visibility.** The two ticket-detail SELECTs ([src/routes/agent.php#L806](src/routes/agent.php#L806) and [src/routes/admin.php#L3617](src/routes/admin.php#L3617)) gain a `LEFT JOIN users s ON t.submitted_by = s.id` to surface `submitter_name`/`submitter_email`; the agent ticket sidebar at [templates/pages/agent/tickets/view.php](templates/pages/agent/tickets/view.php) renders a small *"Filed by [staff] on their behalf"* hint with a `bi-telephone-forward` icon under *Created By* whenever `submitted_by` is set. Email routing is unchanged: `notifyRequesterTicketCreated()` already joins on `created_by` so the confirmation goes to the requester's inbox; CSAT, watchers and escalations all key off the requester for the same reason. The submitter pill is agent/admin-only; end users see the ticket as theirs in the portal with no reference to who filed it. Tests: the agent-side `test_agent_create_form_does_not_show_on_behalf_of` assertion is flipped to `test_agent_create_form_shows_on_behalf_of`, and a new `test_agent_on_behalf_of_post_records_submitter_and_requester` round-trips a POST with `on_behalf_of_id` and asserts that the resulting ticket has `created_by = requester` and `submitted_by != requester`.
+
+### Documentation
+- **In-app docs catch up to the on-behalf-of work.** A new *Filing a Ticket On Behalf Of Someone Else* card is added to [templates/pages/admin/docs/tickets.php](templates/pages/admin/docs/tickets.php) (anchor `#on-behalf-of`) covering: the picker UI on both admin and agent create pages, a step-by-step walkthrough, the requester-vs-submitter data model with concrete consequences for ticket ownership / portal visibility / email routing / CSAT, the same-user-as-blank short-circuit, and the prerequisite that the requester must already have a user account (with a pointer to [Admin → Users → Add User](/admin/users/create) for new callers). The existing *Creating Tickets* card is reworded to point at both staff create-ticket entry points instead of just admin. Five new search-index entries are added to [templates/pages/admin/docs/index.php](templates/pages/admin/docs/index.php) so admins typing "on behalf of", "phone in", "submitter", "filed by", or "submitted_by" surface the new card. The user-facing [DOCS.md](DOCS.md) gets the same section under *Agent Panel* between *First Response Tracking* and *Admin Area*.
+
+---
+
+## 2.28.1 — 2026-05-06
+
+### Documentation
+- **In-app docs caught up to the form-builder and direct-link work shipped in 2.25–2.28.** None of yesterday's UX work was documented at [Admin → Docs](/admin/docs); only a thin five-line "Custom Form Fields" card existed in the *Tickets* page that listed five field types and missed the seven other supported types entirely. That card is replaced with a full *Ticket Form Builder* section in [templates/pages/admin/docs/tickets.php](templates/pages/admin/docs/tickets.php) covering: what the builder is for and the three row kinds it shows (Pinned / System / Custom), a table reference of all 12 supported field types with concrete usage examples for each (including the dependent cascade, date range, text block, image, and CC fields that weren't documented at all), the new *Global vs Specific to ticket type* scope model with an inline rendering of both pill colours and the segmented modal switch, the *Preview as* chip-strip filter (including how the row-border accent encodes Global vs Specific while filtered, and why drag-reorder is disabled in filtered mode), and the *Live Preview* iframe pane (chrome-less embed of `/portal/tickets/create?embed=1`, the three header controls, and the responsive collapse below 1200&nbsp;px). The form-builder section closes with a pointer to a new *Direct Links* heading in the Portal docs at [templates/pages/admin/docs/portal.php](templates/pages/admin/docs/portal.php#direct-links), which gets three new cards: how the `?type_id=N` and `?type=name` query parameters work and which one to pick for shareable links, where to grab a ready-made URL (the new *Direct Link* column at /admin/types with copy-to-clipboard and open-in-new-tab), and a step-by-step walk-through of the "remember where you were going" flow that runs when an anonymous visitor hits a direct link — including the survives-2FA behaviour, the explicit `/login?next=…` form for share-friendly direct-to-login URLs, and a callout explaining the open-redirect protection on both sides (relative path required, absolute / protocol-relative / backslash variants / the `/login` page itself / non-GET / >2&nbsp;000 chars all silently rejected). Twenty-five new entries are added to the docs hub search index in [templates/pages/admin/docs/index.php](templates/pages/admin/docs/index.php) so an admin typing "preview as", "scope", "direct link", "deep link", "type_id", "next", "open redirect", "live preview", "dependent", "CC field", or any of the other terms surfaces the right card.
+
+---
+
+## 2.28.0 — 2026-05-05
+
+### Features
+- **Direct-link column on the admin Ticket Types list.** [Admin → Settings → Ticket Types](/admin/types) now renders a *Direct Link* column for each type containing a read-only `font-monospace` input with the path `/portal/tickets/create?type_id={id}` (uses the `type_id` deep-link from 2.25.0 — stable, survives renames, no slug column required), a *Copy* icon-button that puts `window.location.origin + path` on the clipboard via `navigator.clipboard.writeText` (with a `document.execCommand('copy')` fallback for non-secure contexts) and shows a transient green check on success, plus an *Open in new tab* anchor with `target="_blank" rel="noopener"`. Clicking the input itself selects the path so an admin can `Ctrl+C` it without reaching for the icon. Tooltip on the input notes that anonymous visitors will be sent through login first.
+- **Login remembers where you were going.** [Auth::requireAuth()](src/Auth.php#L92) now stashes the requested URL into `$_SESSION['intended_url']` before the redirect to `/login`, and a new [consumeIntendedUrl()](src/helpers.php#L84) helper pops + validates it on the read side. The login POST and the 2FA POST both call `redirect(consumeIntendedUrl())` instead of the previous hardcoded `redirect('/')`, so a visitor who hits a Ticket-Types direct link while signed out lands on the login page, signs in (and, if applicable, completes 2FA — `intended_url` is preserved across the `/2fa` round-trip and only consumed on final success), and is bounced to `/portal/tickets/create?type_id=N` with the type pre-selected. The `/login` GET handler also accepts `?next=/path` for share-friendly direct-to-login URLs and stashes that into the same session key. Open-redirect protection is applied on **both** the write side (`requireAuth` / `?next=`) and the read side (`consumeIntendedUrl`): only paths starting with a single `/` are accepted; absolute URLs (`http://…`), protocol-relative (`//evil.com/x`), backslash-prefix variants (`/\evil.com/x`) that some user-agents normalise, non-GET requests, length > 2000 chars, and `/login` itself are all silently rejected and fall back to `/`. Invalid stashes don't break the flow — they just bounce the user to the home page after login as before.
+
+---
+
+## 2.27.1 — 2026-05-05
+
+### Fixes
+- **Live preview iframe was being blocked by the site's framing-deny baseline.** 2.27.0 shipped the form-builder live preview but [src/bootstrap.php](src/bootstrap.php#L51) emits `X-Frame-Options: DENY` and a CSP that ends with `frame-ancestors 'none'` for every response — both block framing outright, even from the same origin, so the iframe rendered as the browser's "refused to connect" error page. The `/portal/tickets/create` handler now overrides both headers when `?embed=1` is set: `X-Frame-Options: SAMEORIGIN` and the CSP re-emitted with `frame-ancestors 'self'` (PHP's `header()` replaces same-name headers by default, so the baseline emitted in bootstrap is cleanly superseded). Non-embed page loads keep the strict deny baseline — the relaxation is scoped strictly to the read-only preview response.
+
+---
+
+## 2.27.0 — 2026-05-05
+
+### Features
+- **Live preview pane on the ticket form builder.** The Ticket Form Builder now has a *Live Preview* toggle button next to *Add Custom Field*. When toggled on the layout splits into two columns — the existing builder card on the left and a sticky right-side pane that iframes the actual portal page at `/portal/tickets/create?embed=1[&type_id=N]`, so the preview is the real form (no parallel render path to drift). Clicking any chip in the *Preview as* strip swaps the iframe's `type_id` so the preview shows exactly the form a user filling in that ticket type would see — including dependent cascades, image fields, text blocks, and the dynamic show/hide of type-scoped fields driven by the existing portal JS. Reordering, adding, deleting, and saving fields all auto-reload the iframe (a `?_t=…` cache-buster is appended on every load), and the pane has its own *Reload* and *Open in new tab* buttons. Below 1200px the layout collapses to stack vertically so the iframe stays readable.
+- **`?embed=1` mode on `/portal/tickets/create`.** Adds a chrome-less rendering of the new-ticket form for use inside iframes. The layout in [templates/layouts/app.php](templates/layouts/app.php) now reads an `$embedMode` flag from the route data and, when set, adds a `body.embed-mode` class that hides the navbar, sidebar, breadcrumb, and the resume-tour overlay via CSS, plus zeroes out the sidebar margin and tightens padding on `.main-content`. The portal create handler in [src/routes/portal.php](src/routes/portal.php) reads `$_GET['embed']` and forwards the flag through `render()`. In the template itself the *Submit Request* button is rendered with `disabled` + a soft "submission disabled" tooltip and a one-line *Preview mode* alert appears at the top, plus a defensive JS submit-blocker handles keyboard submits. The *Cancel* link and template picker are suppressed in embed mode so nothing in the iframe navigates away. Read-only on purpose — embed mode never affects how portal users see the form.
+
+---
+
+## 2.26.0 — 2026-05-05
+
+### Features
+- **Ticket Form Builder rethought as a per-type form preview.** The builder at [Admin → Workflows → Ticket Fields](/admin/workflows/ticket-fields) was field-centric: a flat list with a tiny `bg-info` "3 types" badge per row that you had to hover individually to learn which fields ended up on which ticket type's intake form. The page is now type-centric. A horizontal **Preview as** chip strip sits at the top of the Form Fields card with one chip per ticket type plus an *All types* default; each chip shows a live count of how many fields appear on that type's form (pinned + system + global custom + type-scoped custom). Clicking a chip filters the list to exactly those fields — Subject, Description, the system rows, the global custom fields, and the custom fields scoped to the picked type — in the actual `sort_order` users will see them in. While a filter is active, drag-reorder is disabled with an inline indigo banner explaining that ordering is global ("switch to *All types* to reorder") so nobody mistakes per-type filtering for per-type ordering, and rows pick up a subtle left-border accent — gray for *Global*, indigo for *Specific to this type* — so global-vs-scoped is legible at a glance without reading badges. The cluttered `bg-info` "N types" pill in each row is replaced by one of two clearer **scope pills**: a gray *Globe · Global* pill when the field has no `ticket_form_field_type_map` rows, or an indigo *Tag · N types* pill (with a Bootstrap tooltip listing the type names on hover) when it does. The edit modal's *Show for Ticket Types* section is rebuilt as a Bootstrap-styled segmented control — *All ticket types* vs *Only specific types* — that matches the new pill vocabulary; the per-type checkboxes only appear when *Only specific types* is picked, and switching back to *All* clears them so a stale list can't be saved by accident. Saving with *Only specific types* and zero boxes ticked now blocks with a helpful message instead of silently making the field global. Quality-of-life: when a type filter is active and you click *Add Custom Field*, the new field's auto-opened modal is pre-scoped to the filtered type so the field you're previewing genuinely lands on that form. Pure additive UI work — no schema, no controller, no route changes; same Bootstrap 5 / indigo `--ld-primary` palette as the rest of the admin.
+
+---
+
+## 2.25.1 — 2026-05-05
+
+### Fixes
+- **Deep-link preselect now actually selects the type.** 2.25.0 shipped with a wrong null check: the template tested `old('type_id') === null` to decide whether to fall back to `?type_id` / `?type`, but the [old()](src/helpers.php#L305) helper returns `''` (string) when there's no flashed input, never `null` — so the fallback never fired and the dropdown stayed on "— Select type —" even with a valid query param. Switched the check to `=== ''` and cast `$preselectedTypeId` to string so the loose `==` comparison against `$t['id']` lights up the right `<option selected>`. The custom-field filter JS already runs on load, so the type-scoped fields appear automatically once the dropdown is preselected — no extra wiring needed.
+
+---
+
+## 2.25.0 — 2026-05-05
+
+### Features
+- **Deep-link to the new-ticket form with a pre-selected ticket type.** [/portal/tickets/create](src/routes/portal.php#L149) now reads two optional query params and pre-selects the matching `<option>` in the Ticket Type dropdown: `?type_id=N` (numeric ID — exact, survives renames, not human-friendly) and `?type=Name` (case-insensitive name match; hyphens and underscores are normalised to spaces, so `?type=hardware-issue` resolves the same as `?type=Hardware%20Issue` — shareable but breaks if the type is later renamed). ID wins when both are supplied. Unknown values are ignored silently (no error, no preselect) so a stale link still loads the form. `old('type_id')` from a failed POST still takes precedence over the query param so re-submits don't lose the user's pick.
+
+---
+
+## 2.24.1 — 2026-05-05
+
+### Fixes
+- **Showcase image now renders on production.** Migration 030 originally drew its placeholder image at apply-time via the GD extension (`imagecreatetruecolor`/`imagepng`), which silently no-op'd on the production PHP build because `php-gd` isn't installed there — the showcase `image` field landed with a NULL `config` and rendered as nothing. 030 has been rewritten to embed the same 480×140 PNG as a base64 string and write it via `file_put_contents`, removing the GD dependency entirely. New migration **031** repairs already-deployed installs by finding the showcase `image` field (matched on the `(example form)` label suffix used by 030, so it survives ticket-type renames), checking that its config is empty, and writing the placeholder PNG into [public/uploads/field-images/](public/uploads/field-images/) + setting `config.image_path`. Idempotent: skips when the field is already populated, when 030's showcase fields don't exist, or when the upload directory can't be created.
+
+---
+
+## 2.24.0 — 2026-05-05
+
+### Features
+- **"Example Ticket Form" showcase ticket type.** Migration **030** seeds a new ticket type called *Example Ticket Form* (purple `#6f42c1`, sorted last) and wires one custom field of every supported type to it via [ticket_form_field_type_map](database/migrations/016_ticket_form_field_type_map.php) so the showcase fields appear *only* on this type and don't pollute every other ticket form. The roster covers all twelve `field_type` enum values: `text_block` (intro paragraph), `text`, `textarea`, `number`, `decimal`, `date`, `date_range`, `checkbox`, `dropdown` (Option A/B/C), `dependent` (3-level Region → Country → City cascade), `cc`, and `image` (the migration draws a small placeholder PNG via GD into [public/uploads/field-images/](public/uploads/field-images/) at apply-time so the field renders immediately, with no asset file shipped in the repo). Idempotent — keyed off the type name, so re-running the migration is a no-op. Pick the type at [Portal → New Ticket](/portal/tickets/create) or [Admin → Tickets → New](/admin/tickets/new) to see all field types side-by-side. **To remove later:** delete the ticket type row at [Admin → Workflows → Ticket Types](/admin/workflows/ticket-types) — the FK CASCADE on the type-map drops the scoping; to also drop the showcase fields themselves, delete the rows in `ticket_form_fields` with labels matching `%(example form)%`.
+
+---
+
+## 2.23.0 — 2026-05-04
+
+### Features
+- **No ticket ever gets stuck in the "no group" queue again.** Pre-2.23, six different creation paths could each leave a ticket with `group_id = NULL` — most notoriously the email-to-ticket ingest in [scripts/process-replies.php](scripts/process-replies.php), which simply did not include `group_id` in its INSERT — and `autoAssignTicket()` short-circuits at line 596 of [src/helpers.php](src/helpers.php) the moment it sees a NULL group, so those tickets sat invisible in an unmonitored queue until someone happened to filter for `group_id IS NULL` in the agent list view. Three new layers of defence now prevent that:
+
+  **Layer 1 — `resolveTicketGroup($db, $explicit, $typeId)` in [src/helpers.php](src/helpers.php).** Every creation path calls this helper and uses the result as the inserted `group_id`. The helper chains: caller's explicit choice (form field, API param) → the ticket type's default group → the new system-wide `default_group_id` setting → the lowest-id existing group. Each candidate is verified to reference a currently-existing group before being returned, so a stale `ticket_types.group_id` or a stale setting pointing at a deleted group falls through to the next layer instead of poisoning the new ticket. Wired into all seven creation paths: portal submit ([src/routes/portal.php](src/routes/portal.php)), admin create ([src/routes/admin.php](src/routes/admin.php)), admin split ([src/routes/admin.php](src/routes/admin.php)), agent split ([src/routes/agent.php](src/routes/agent.php)), public REST API ([src/routes/api.php](src/routes/api.php)), email-to-ticket ingest ([scripts/process-replies.php](scripts/process-replies.php)), and the legacy CSV importer ([src/routes/admin.php](src/routes/admin.php)).
+
+  **Layer 2 — `backfillTicketGroupFromDefault()` inside `runPostTicketCreateHooks()`.** AI classification and "set group" automations both run *after* the INSERT, so it's still theoretically possible for a creation path to leave the row with NULL group (or for an automation to clear it — the automation engine supports `set_group` to NULL). The new backfill runs immediately before `autoAssignTicket()` and routes any still-NULL row to the system default, posting an internal timeline entry reading *"No group was matched by ticket type, AI, or automations — routed to the system default group so the ticket does not sit in the no-group queue."* That entry is the breadcrumb triage uses to spot unrouted arrivals.
+
+  **Layer 3 — hourly cron sweep in [scripts/process-stale-tickets.php](scripts/process-stale-tickets.php).** A new section at the end of the existing cron job finds any active ticket (status NOT IN `resolved`/`closed`/`merged`) with `group_id IS NULL`, routes it to the configured default, and logs a `WARN:` line per orphan so the bug shows up in `storage/logs/stale-tickets.log`. If no default is configured *and* there are stuck tickets, it emits a different `WARN:` line pointing the admin at the new setting. In normal operation this finds zero tickets — it's the catch-all for legacy data, hand-edited rows, and any new creation path a future developer adds without remembering to call `resolveTicketGroup()`.
+
+  **New setting at [Admin → Settings → Ticket Routing Defaults → Default Group](/admin/settings#default_group_id).** Migration **029** adds the row to the `settings` key-value store, auto-seeds it to the lowest-id existing group on first run, and back-fills any existing tickets sitting with `group_id IS NULL` into that default — so the upgrade itself drains whatever was already stuck. The save handler validates the picked group still exists before writing the setting (deleting a group used as the default is allowed; the runtime then falls through to the lowest-id-group last-resort layer in `resolveTicketGroup()` rather than failing).
+
+  **Audit + observability.** Saving the setting writes an `default_group_changed` audit entry. Every layer-2 and layer-3 backfill writes the timeline entry described above. The flows are described step-by-step at the new [Admin → Docs → Assignment Flows](/admin/docs/flows) page (Diagram 8 covers the safety net specifically); the existing [Docs → Automations](/admin/docs/automations) page now has a "No Group Safety Net" card explaining the three layers and linking to the flows page. The standalone reference [TICKET_ASSIGNMENT_FLOWS.md](TICKET_ASSIGNMENT_FLOWS.md) and [TICKET_ASSIGNMENT_FLOWS.html](TICKET_ASSIGNMENT_FLOWS.html) have both been updated to match.
+
+### Internal
+- New help docs page [Admin → Docs → Assignment Flows](/admin/docs/flows) at [templates/pages/admin/docs/flows.php](templates/pages/admin/docs/flows.php) embeds all eight ticket-assignment Mermaid diagrams (master flow, the six strategies, the strategy-fallback flow, and the new default-group fallback) — same diagrams that ship in the `TICKET_ASSIGNMENT_FLOWS.{md,html}` reference docs, but now viewable from inside the helpdesk for support staff who never see the repo. Mermaid renders client-side via the same CDN script the standalone HTML uses; no asset commits required, and updates to a diagram's source automatically re-render. The page is reachable from the docs sidebar (new "Assignment Flows" entry between Automations and AI Classification) and from a new info box on the Automations docs page.
+
+### Migrations
+- **029 — default-group fallback.** Idempotent. Seeds `settings.default_group_id` with the lowest-id existing group if it's currently unset/empty, then `UPDATE tickets SET group_id = :default WHERE group_id IS NULL` to drain the historical no-group queue. Verifies the default still references a real group before doing the back-fill, so a stale or zero-group install is handled cleanly.
+
+---
+
+## 2.22.0 — 2026-05-04
+
+### Features
+- **Audit log now records when agents disappear because they closed the browser/tab.** Until now the audit log only captured `login` and `logout` (the deliberate logout link), so an agent who simply closed the helpdesk tab — by far the more common way of "going offline" since 2.21 made closing the tab the source of truth for availability — left no trace. Two new audit actions fill the gap. **`session.tab_closed`** is written from `POST /api/presence/leave` in [src/routes.php](src/routes.php), the endpoint the client already calls via `navigator.sendBeacon` on `pagehide`; the audit detail captures the user-agent string from the dying presence row so a stale "Chrome on Windows" close can be told apart from a quick mobile-Safari close. **`session.timed_out`** is written when the beacon never arrives (browser crash, OS kill, network drop, sleep with no wake before the row ages out) by a new `sweepStalePresence(120)` helper in [src/helpers.php](src/helpers.php) that runs on every heartbeat: it `SELECT … FOR UPDATE`s any `user_presence` rows whose `last_seen` is older than the 120s online window, inserts an audit row for each (with the disappeared user's own `user_id` and last-known `ip_address`, *not* the sweeper's, plus `last_seen=…; ua=…` in the detail field), then deletes the stale rows in the same transaction so concurrent heartbeats can't double-log the same disappearance. Combined, the two events give a complete trail: every appearance has a `login`, every clean departure has a `logout` or `session.tab_closed`, and every silent disappearance has a `session.timed_out` matched to the agent's last known IP.
+
+### Internal
+- **`Auth::logout()` now also clears the user's `user_presence` row** (in [src/Auth.php](src/Auth.php), guarded with try/catch so a DB failure never blocks logout). Without this, a clean `/logout` would leave the presence row sitting around for up to 120s and the new sweep would then write a spurious `session.timed_out` on top of the already-recorded `logout` event. Cleanup runs *before* the session is destroyed so `Auth::id()` is still available. This also fixes a pre-existing minor cosmetic issue where a freshly-logged-out user could keep showing up on **Admin → Users → Who's Online** for up to 120s.
+
+---
+
+## 2.21.2 — 2026-05-01
+
+### Changes
+- **Admin → Settings → Agent Skills → Edit/Add — "Agents with this skill" now filters to members of the selected owning group.** Previously the list always showed every agent / admin / power user in the system, so an admin scoping a skill to (say) "Circulation" still saw every IT and Cataloguing agent in the checkbox grid — easy to grant the skill to someone who isn't even in the group, which then made Skill-Based routing pick people who couldn't actually see those tickets. The form now ships a `[user_id => [group_id, ...]]` map (built by `_skillFormUserGroups()` in [src/routes/admin.php](src/routes/admin.php) from `group_user_map`, scoped to agent / admin / power user roles), tags each checkbox card with `data-group-ids`, and a small inline script in [templates/pages/admin/skills/form.php](templates/pages/admin/skills/form.php) hides + unchecks cards that don't belong to the group when the Scope dropdown changes. Selecting "Global — admin-only" restores the full list (global skills are admin-managed and not group-scoped). When a group is selected, the help text updates to "Showing only members of 'GroupName'…" so the filter is obvious. If the group has no members, an inline warning points at the Groups page to add members first. Filtering also runs on initial page load, so editing an existing group-scoped skill opens with the right list pre-filtered. Note: hidden cards are unchecked, so saving after a scope change cleanly removes any legacy memberships the skill picked up before this fix — that's the intended cleanup. The manager-side skill form (managers editing skills their own group owns) is naturally single-group and unchanged.
+
+---
+
+## 2.21.1 — 2026-05-01
+
+### Fixes
+- **Online presence dropped users who minimized their window or switched tabs.** Two compounding bugs from 2.21.0: (1) the heartbeat in [templates/layouts/app.php](templates/layouts/app.php) explicitly stopped its `setInterval` on `visibilitychange → hidden` — meaning a user who tabbed away or minimized Chrome would emit no further pings and fall off the "online" list 60s later; (2) even if the heartbeat had kept running, browsers throttle background-tab `setInterval` callbacks to roughly once per minute, so a single throttled ping could still land outside a 60s online window. Two-part fix: the visibility-change handler no longer stops the timer (it now only fires an *extra* immediate ping when the tab regains focus, to catch up after long throttling gaps), and the server-side online window has been widened from 60s to **120s** in both [_autoAssignFirstAvailable() in src/helpers.php](src/helpers.php) and the [/admin/users/online route](src/routes/admin.php). The 120s window is wide enough to absorb a throttled-to-once-per-minute background tab with one missed-ping margin, so a logged-in agent who minimizes their browser, parks the helpdesk in a background tab, or switches to another window still counts as online — closing the tab is now the only thing that takes them offline (sendBeacon to `/api/presence/leave` on `pagehide` clears the row immediately). Sleep / hibernate / laptop-lid-closed still stops the heartbeat (browsers freeze JS during sleep), but the agent reappears within 30s of waking. Group form description and admin docs ([users.php](templates/pages/admin/docs/users.php), [automations.php](templates/pages/admin/docs/automations.php)) updated to describe the new behaviour explicitly.
+
+---
+
+## 2.21.0 — 2026-05-01
+
+### Features
+- **Global online-presence tracking + admin "Who's Online" page.** Every authenticated user's browser now heartbeats `POST /api/presence` every 30 seconds (paused while the tab is hidden, cleared via `sendBeacon` to `/api/presence/leave` on `pagehide`). The new `user_presence` table — added by migration **028** — stores `(user_id, last_seen, ip_address, user_agent)` with `last_seen` indexed for fast online-window queries. Anyone whose `last_seen` is within the last **60 seconds** (one missed-ping headroom on the 30s cadence) is treated as currently online. New page at `/admin/users/online` (linked from the Users header and reachable as **Admin → Users → Who's Online**) lists everyone online right now with avatar/initials, name, role badge, "X seconds ago" last-seen, IP, and a parsed "Chrome on Windows"-style browser label, with a green pulsing dot indicator and a 15-second auto-refresh. Heartbeat code lives in [templates/layouts/app.php](templates/layouts/app.php) and only runs for authenticated users on the main `app` layout, so login/auth/public pages don't ping. The endpoint deliberately skips CSRF — it's idempotent, takes no body, and a `sendBeacon` from `pagehide` can't easily set custom headers; auth + same-origin cookie is sufficient.
+
+### Changes
+- **First Available auto-assign now reads online presence instead of the manual `is_available` toggle.** `_autoAssignFirstAvailable()` in [src/helpers.php](src/helpers.php) now picks group members whose `user_presence.last_seen` is within the last 60 seconds, then load-balances among them via `_autoAssignLeastLoaded()`. Falls back via the group's existing `assign_fallback` setting (round-robin / load-based / leave unassigned) when nobody is online. The pre-2.21 behaviour required agents to remember to flip an "I'm available for new tickets" switch on their profile and flip it back when they returned — easy to forget in either direction. Closing the tab is now the single source of truth; opening it again re-registers presence on the next heartbeat (≤ 30s).
+- **Removed the manual "I'm available for new tickets" toggle from My Profile** (cards, save handler, and admin docs all updated). The `users.is_available` column is left in place — historical data is harmless and migration 025 still creates it for fresh installs — but nothing reads or writes it anymore.
+- **Admin docs refreshed.** [Admin → Docs → Users](templates/pages/admin/docs/users.php) replaces the old "Agent Availability" card with an "Online Presence" card explaining the heartbeat cadence and pointing at the live page. [Admin → Docs → Automations](templates/pages/admin/docs/automations.php) updates the First Available strategy description and the fallback / skills-and-availability sections accordingly.
+
+### Internal
+- Migration **028** is idempotent (CREATE TABLE IF NOT EXISTS) and adds an index on `last_seen` so the 60s online-window query stays cheap as the table grows. A 24-hour cleanup runs lazily on every load of `/admin/users/online` to keep the table tidy without scheduling a separate job.
+
+---
+
+## 2.20.3 — 2026-05-01
+
+### Fixes
+- **AI skill suggestion still threw "Control character error, possibly incorrectly encoded" after 2.20.2.** The first 200 chars of the failing response were clean JSON, so the offending byte was deeper in. Three layered causes, each fixed:
+  1. **Token-limit truncation.** `suggestSkillsFromSettings()` was capping output at `max(800, ai_max_tokens)` — but a real suggestion JSON (8–15 skills × name + description + group + structure) easily runs 1.5–3K tokens. Anthropic was cutting off mid-string, which often splits a multi-byte UTF-8 character — and `json_decode()` reports a split-multibyte fragment as exactly this control-char error. Raised the floor to 4000 tokens for suggestion calls (classification stays at the user's `ai_max_tokens` setting, default 500, since verdict JSON is tiny).
+  2. **Invalid UTF-8 wasn't tolerated.** `json_decode()` was called without flags, so a single bad byte killed the whole response. Now layered: strict decode → retry with `JSON_INVALID_UTF8_SUBSTITUTE` → retry with sanitizer + flag → retry with `mb_scrub()` + sanitizer + flag. Each fallback is byte-identical for already-valid JSON, so this only kicks in when something is genuinely broken.
+  3. **The sanitizer didn't handle invalid `\`-escapes.** Models occasionally emit Windows paths or stray escapes inside descriptions ("C:\Users\foo", "use \z to..."). `\U`, `\D`, `\z` etc. aren't valid JSON escape characters and `json_decode()` rejects them. The sanitizer now tracks string-literal context and re-escapes any backslash that isn't followed by a valid JSON escape char (`"`, `\`, `/`, `b`, `f`, `n`, `r`, `t`) or a well-formed `\uXXXX`.
+- **Better diagnostics on terminal failure.** When all four decode passes fail, the full raw response (truncated at 8 KB instead of 500 chars) is now written to PHP's error log, and the user-facing exception message points at the log so admins know where to look.
+
+---
+
+## 2.20.2 — 2026-05-01
+
+### Fixes
+- **AI skill suggestion failed with "Control character error, possibly incorrectly encoded" when the model emitted a multi-line description.** Repro from a real Anthropic response: `{"skills": [{"name": "Vega Discover", "description": "Manages and troubleshoots\nthe Vega Discover ...", ...}]}`. JSON forbids raw control bytes (< 0x20) inside string literals — they have to be escaped as `\n` / `\t` / `\uXXXX` — but the model occasionally inlines a literal newline anyway, especially on longer description fields. `json_decode()` blew up before the parser ever saw the rows. Added a single-pass sanitizer that walks the response, tracks whether the cursor is inside a string literal (handling backslash escapes correctly), and re-escapes any raw control byte found there. The parser now tries `json_decode()` first, runs the sanitizer + retries on failure, and only surfaces an error if both passes fail. Already-valid JSON (escapes intact) is left byte-for-byte unchanged. The error_log() snippet on terminal failure was also widened to 1000 chars (was 500) so the offending part of longer responses is captured.
+
+---
+
+## 2.20.1 — 2026-05-01
+
+### Fixes
+- **AI skill suggestion failed with `AI suggestion JSON missing "skills" array` no matter which mode was picked.** The parser in `src/AI.php` required the model's response to be a JSON object with the exact top-level key `"skills"` and rejected everything else — but real model responses don't always honour the requested key name. Anthropic's Messages API has no JSON-mode enforcement at all, so Claude could (and apparently did) return the array under `"suggestions"`, `"agent_skills"`, or as a top-level array `[...]`. OpenAI with `response_format: json_object` was forced to return *some* object but the key name still wasn't constrained. Either way the parser blew up before any of the suggestions could be shown. Two fixes layered together: (1) Hardened the prompt — the system message now says "the top-level key MUST be exactly 'skills' (lowercase plural)" with the schema marked "EXACT key names". (2) Made the parser tolerant — it now accepts the documented `skills` key first, then falls back through `suggestions`, `suggested_skills`, `agent_skills`, `recommendations`, `items`, `results`, `data`, `list`; accepts a top-level array as well; and as a last resort scans every top-level array value for a list-of-objects with a `name`-ish field. Per-row keys are similarly tolerant (`name`/`skill`/`skill_name`/`title`/`label`, `description`/`desc`/`summary`/`details`, `group`/`group_name`/`owning_group`/`team`), and group names now match case-insensitively. When parsing still fails, the SoftAIException message now includes the top-level keys it found and the first 200 chars of the raw response so admins can see what the model actually returned, and the full raw response (truncated to 500 chars) is logged via `error_log()` for diagnosis.
+
+---
+
+## 2.20.0 — 2026-05-01
+
+### Features
+- **Admin → Settings → Agent Skills → "Suggest with AI" — added a "Data-mine past tickets" mode.** The "Suggest with AI" button now opens a launcher modal with two options. *Basic* (the default, unchanged from 2.19.0) feeds the AI only the org profile, ticket types, groups, and existing skills. *Data-mine past tickets* additionally feeds the AI a sample of recent ticket subjects so suggestions reflect the actual issues this install handles day-to-day — useful for established installs where the right skills aren't obvious from the org profile alone (e.g. surfacing "Sierra ILS" or "Polaris" from years of ticket history rather than just "ILS"). The admin picks the sample size from a dropdown — 100, 250, 500 (default), 1,000, 2,500, or 5,000 most recent tickets — so installs with millions of tickets can scope the analysis without dragging down the request. Confidential ticket types are always excluded (same hard rule `classifyTicketWithAI()` enforces — never send confidential bodies to a third-party API), only subjects are read (descriptions stay local), each subject is truncated to 140 chars, and the prompt block is hard-capped at 60 KB so even the 5,000-ticket option can't blow up the request — extra subjects are dropped before being sent. Mining mode also raises the per-call timeout floor to 45 s since larger prompts take longer for the model to digest. The results page surfaces a "Method" panel showing whether basic or mining mode was used and how many subjects were actually included, and the *Regenerate* link preserves the chosen mode + sample size so re-running gives a comparable result.
+
+---
+
+## 2.19.0 — 2026-05-01
+
+### Features
+- **Admin → Settings → Agent Skills → "Suggest with AI".** New button on the skills index page that asks the configured AI provider (Anthropic or OpenAI, whichever is set in `Settings → AI Classification`) to suggest a tailored set of agent skills for this organization. The prompt feeds the model the `organization_type` setting, every defined ticket type, every defined group, and the names of skills already in place — so suggestions are scoped to what the org actually triages and won't duplicate what already exists. The response page renders each suggestion as an editable row (name, description, owning group dropdown) with a checkbox for cherry-picking — admins can rename, retarget, or drop any suggestion before bulk-creating the lot. Group ownership defaults to the AI's recommendation when it matches an existing group name exactly, and falls back to "Global" when it doesn't. The route requires AI to be enabled and a key configured; if either is missing, the admin is bounced back with a flash explaining what to fix. Internals: `BaseAIClassifier` gained a generic `chat()` method (provider-agnostic free-form prompt) plus `skillSuggestionSystemPrompt()` / `skillSuggestionUserPrompt()` / `parseSkillSuggestions()` helpers; `AIClassifierFactory::suggestSkillsFromSettings()` is the one-call public entry point. The org-type slug→label table moved from a closure-scoped `$orgTypeGroups` in `routes/admin.php` into reusable `organizationTypeGroups()` / `organizationTypeLabel()` helpers in `helpers.php` so this and future features can resolve labels without redefining the list.
+
+---
+
+## 2.18.0 — 2026-05-01
+
+### Features
+- **Admin → Settings → Organization Type.** New page at `/admin/settings/organization` with a single dropdown letting admins pick the kind of organization they're running the helpdesk for. Options are grouped by sector (Library, Education, Government, Healthcare, Business, Community, Other) and cover the most common cases — Public Library, Academic Library, K–12 / School District, College / University, Federal / State / Municipal Government, Hospital, Clinic, Corporation, Small Business, Manufacturing, Retail, Financial Services, Legal, Hospitality, Technology, Non-Profit, Religious / Faith-Based, Museum, Association — with an `Other` fallback. Stored as the slug `organization_type` in the `settings` table (default `other`); the human label is kept in route code only so the list can be relabelled without orphaning saved data. Submitted values are validated against the in-route allowlist before being written. The new page is linked from the Organization group in the settings sidebar (alongside Locations, Priorities, Ticket Types, Groups, Agent Skills) and is registered in `config/settings_index.php` with sector keywords so the Chrome-style settings search finds it from queries like "library", "k12", "non-profit", or "industry".
+
+---
+
+## 2.17.4 — 2026-05-01
+
+### Fixes
+- **Resolved-ticket emails told requesters they could "reopen by replying" — replies didn't actually reopen anything.** The default intro for the `ticket_status_resolved` notification (in `src/helpers.php`, both the template registry and the `notifyRequesterStatusChanged()` fallback) said *"If you have further questions, you can reopen it by replying."* But `scripts/process-replies.php` only changes a ticket's status when the sender is an agent/admin AND includes an explicit `#open` hashtag command. A requester replying "thanks" or "actually one more question" got their reply appended as a comment with the ticket still sitting in `resolved` — and on `closed` tickets, the reply was silently dropped at the `status === 'closed'` skip-guard with no acknowledgement at all. Reworded the resolved intro to *"please reply to this email and we'll follow up"* (truthful: replies do become comments that agents see) and the closed intro to *"please submit a new ticket"* (truthful: replies to closed tickets are dropped, so directing users to the portal sets correct expectations). Note: admins who customised either template via the email-templates UI will keep their override; this only changes the default for installs that haven't edited it.
+
+---
+
+## 2.17.3 — 2026-04-30
+
+### Fixes
+- **"Reset to Fresh State" left 12 tables of orphaned data behind, including a working API-auth bypass.** The danger-zone reset in `src/routes/admin.php` truncated a hardcoded 33-table list that hadn't been updated since the early schema. Tables added by later migrations — `api_tokens` (005), `ticket_form_field_type_map` (016), `ticket_escalations` and `ticket_escalation_steps` (021), `login_attempts` (024), `agent_skills` / `user_skill_map` / `ticket_type_skill_map` (025), `ai_classifications` (027) — plus tables that had always been in `schema.sql` but were missed (`ticket_watchers`, `canned_responses`, `holidays`) survived the reset with all their rows intact. Because the route runs with `FOREIGN_KEY_CHECKS=0`, nothing errored; the data just lingered. The `api_tokens` case is the worst: tokens issued to the previous admin (`user_id=1`) stayed valid against the freshly-created admin (also `user_id=1` because AUTO_INCREMENT resets on truncate), so the mobile API would silently authenticate the old token as the new admin. Replaced the hardcoded list with `SHOW TABLES` (excluding `schema_migrations` so the migration tracker doesn't get wiped and re-run), so future migrations can't reintroduce this drift.
+
+---
+
+## 2.17.2 — 2026-04-30
+
+### Fixes
+- **AI Classification doc page returned an empty docs index instead of the doc itself.** The page at `templates/pages/admin/docs/ai.php` shipped in 2.14.x along with the index card, side-nav link, and 11 search-keyword entries — but `/admin/docs/ai` 302'd back to `/admin/docs` because the dynamic doc route in `src/routes/admin.php` validates the URL slug against an explicit allowlist (`$validDocPages`) and `'ai'` was never added. Anyone who clicked the AI Classification card on the docs index, the AI Classification entry in the sidebar, or any of the AI search results landed on the docs index with no error and no doc — looked like the content was missing. Added `'ai'` to the allowlist and `'ai' => 'AI Classification'` to the `$titles` map so the breadcrumb and `<title>` render correctly.
+
+---
+
+## 2.17.1 — 2026-04-30
+
+### Fixes
+- **AI skill-based auto-assignment never fired when group was set by an automation rule.** The `runPostTicketCreateHooks()` chokepoint ran AI classification and auto-assign back-to-back, but `runAutomations(..., 'ticket_created')` was called separately *after* the hook in admin.php and portal.php. So automation rules that set `group_id` (e.g. "Assign IT Tickets to IT Group") fired too late: `autoAssignTicket()` had already short-circuited at the early-return for null `group_id` and never read the AI classification. Folded `runAutomations()` into the hook between classification and auto-assign so the order is `classify → run rules → assign`. Removed the duplicate calls from admin.php and portal.php. Side benefit: tickets created via the API path and via inbound email (`scripts/process-replies.php`) now also evaluate `ticket_created` automations, which the existing function-level comment already promised ("single chokepoint so every creation path gets identical behaviour") but didn't deliver. Repro case was ticket #44973: classified as Sierra ILS at 0.78 confidence, IT group set by automation, but `assigned_to` stayed NULL because routing ran before the group was set.
+
+---
+
+## 2.17.0 — 2026-04-30
+
+### Features
+- **Chrome-style settings search — finds individual settings, not just pages.** Building on 2.16.0's nav-page filter, the sidebar search box now also searches a registry of every individual configurable setting (86 entries across all admin pages). Typing "smtp host" finds the SMTP Host field on the Email / SMTP page; "azure secret" finds both the Graph client secret and the SSO client secret with a breadcrumb showing which is which; "primary color" jumps straight to the Branding color picker. Results appear in a floating Chrome-style dropdown next to the sidebar showing label + breadcrumb (group › page › section) + short description, with the matched query highlighted (`<mark>`). Sorting prioritizes label-prefix matches, then label-contains, then section/page/description matches, then keyword-only matches.
+- **Click a result → land on the field.** Result rows link to the destination page with the field's `id` as the URL hash (e.g. `/admin/settings#smtp_host`). On the destination page, JS scrolls the field into view and flashes a yellow highlight for ~2.4s so it's instantly findable, even on dense pages like Inbound Mail or Branding. Works for any anchor on any settings page (re-triggers on `hashchange` too).
+- **Keyboard-driven.** ArrowUp/ArrowDown to move through results, Enter to navigate, Esc to clear. `/` or Ctrl/Cmd+K to focus from anywhere on the page (already-typing inputs are ignored). Mouse-hover and keyboard selection stay in sync.
+- **Settings registry is declarative and easy to extend.** New file `config/settings_index.php` lists every searchable field as `{label, description, group, page_label, page_url, section, anchor, keywords}`. Adding a new setting means: give the input a stable `id`, then append one row to the registry. No JS or template changes needed for new settings — the search just finds them.
+
+---
+
+## 2.16.0 — 2026-04-30
+
+### Features
+- **Search box on the settings sidebar.** As the list of admin settings has grown (40+ pages across Email, Scheduling, Organization, Security, Customization, Automation, Data, System), finding the right page meant scanning the whole sidebar. Added a live-filter search input pinned to the top of the settings nav. Filters by label, group name, or synonym keywords (e.g. "smtp" / "graph" / "azure" → Email pages, "saml" / "oauth" / "entra" → SSO, "logo" / "favicon" → Branding, "csv" / "migrate" → Import pages, "claude" / "gpt" / "llm" → AI Classification, "macro" / "snippet" → Canned Responses). Group headers auto-hide when no children match; a "No settings match." message shows when nothing does. Query persists across page navigation via `sessionStorage`. Keyboard shortcuts: `/` or `Ctrl/Cmd+K` to focus, `Esc` to clear and unfocus. Available on every page that uses the settings sidebar.
+
+---
+
+## 2.15.4 — 2026-04-30
+
+### Fixes
+- **Description editor missing from new-ticket form (agent + admin).** The CSP added in 2.14.x only allowed scripts/styles from `'self'` and `cdn.jsdelivr.net`, but the new-ticket form loads CKEditor 5 from `cdn.ckeditor.com` (introduced earlier in 2.x). The browser silently blocked the editor's JS and CSS, leaving the "Description *" label visible with empty space below it — looking like the field had been removed. Added `https://cdn.ckeditor.com` to `script-src`, `style-src`, `font-src`, and `connect-src`. Affects every page that uses the WYSIWYG editor (admin/agent new-ticket forms).
+
+---
+
+## 2.15.3 — 2026-04-30
+
+### Documentation
+- **AI Classification doc page expanded** with three new sections capturing real-world setup pain points:
+  - **Testing It Works** — the three-tier validation path (single-ticket Classify-now button → 25-ticket UI backfill → CLI sweep with `--dry-run`).
+  - **Debugging Connection Issues** — explains the new `/admin/settings/ai/debug` page added in 2.15.1 / 2.15.2, with a Models-vs-Message-vs-Both decision and a status-code-to-root-cause cheatsheet (401 / 403 / 400 credit-balance / 404 model-not-found / 429 / 5xx / cURL).
+  - **Workspace Spend Caps** — documents the gotcha where org-level credits look fine but a workspace's $0 default spend cap blocks every billable call. Two fixes: raise the workspace cap, or generate a new key in the Default workspace.
+  - **Cost comparison table** added to the Choosing a Provider section — Haiku / Sonnet / Opus per-ticket and per-1,000-ticket pricing with guidance on when to upgrade. Surfaces the easy-to-make mistake of saving Opus by accident.
+  - 4 new search-keyword entries on the docs index landing on these new sections.
+
+---
+
+## 2.15.2 — 2026-04-30
+
+### Fixes
+- **AI debug page eating its own responses.** The `/admin/settings/ai/debug` header-capture callback was returning `strlen(rtrim($line)) + 2` instead of the original byte count cURL handed it. cURL rejects any return value that doesn't match exactly and aborts with "Failed writing header" — which surfaced on the page as a 200 status with empty headers + empty body, masking the actual successful response from Anthropic. Capture original length before trimming and return it unconditionally. The classifier itself (used in production routing) was never affected — different cURL helper, no header callback.
+
+---
+
+## 2.15.1 — 2026-04-30
+
+### Tooling
+- **AI API debug page** at `Admin → Settings → AI Classification → Debug` (also `/admin/settings/ai/debug`). Bypasses the classifier abstraction and makes raw HTTP calls so admins can see exactly what the provider returns: status code, response headers, full body, latency, cURL error text. Helps diagnose the hard-to-untangle cases where Test Connection comes back with a generic message — workspace spend caps, expired keys, model-not-found, regional 403s, network egress blocks, etc. Lets the admin paste a one-off key/model without saving (so they can test a candidate before committing it to settings) and choose between `models` (free), `messages` (verifies billing), or both. Decision-tree cheatsheet at the bottom of the page maps common HTTP codes to root causes.
+
+---
+
+## 2.15.0 — 2026-04-29
+
+### Features
+- **AI ticket classification (Phase 1).** Each new ticket can now be read by a large language model that infers which agent skills it needs, lets the existing Skill-Based auto-assign machinery route it accordingly, and (optionally) bumps priority when sentiment reads "angry" or "urgent". Pluggable provider — ships with Anthropic Claude (default `claude-haiku-4-5`) and OpenAI (default `gpt-4o-mini`). Settings page at `Admin → Settings → AI Classification`.
+  - **Provider abstraction** in `src/AI.php`: `AIClassifier` interface + `AnthropicClassifier` (Messages API) + `OpenAIClassifier` (Chat Completions with `response_format=json_object`) + `AIClassifierFactory`. Both providers send the same system prompt and emit the same verdict shape: `skill_ids`, `confidence`, `sentiment`, `reasoning`, `latency_ms`, plus prompt/output token counts. `SoftAIException` + a centralised cURL wrapper means the feature degrades cleanly on any failure.
+  - **Auto-populated model dropdowns.** The settings page lists models from each provider's `/v1/models` endpoint and caches them in the `settings` table. Admin clicks **Refresh model list** and new releases appear without a code change. Built-in fallback options are always present so a fresh install isn't empty.
+  - **Test connection** button per-provider sends a 1-skill probe ticket and reports the round-trip latency.
+  - **New `ai_skill_based` group strategy.** Reads `tickets.ai_classification_id` (set eagerly during ticket creation), takes the AI's suggested `skill_ids` if `confidence ≥ ai_confidence_threshold` (default 0.7), and assigns the least-loaded group member who holds all of them. Below threshold or no match → falls through to the group's existing fallback (load-based / round-robin / leave unassigned). An admin override on the ticket wins over the AI suggestion.
+  - **Eager classify-on-create, even for non-AI strategies.** A new `runPostTicketCreateHooks()` chokepoint replaces the direct `autoAssignTicket()` calls in every creation path (portal, admin, agent, API, email-to-ticket). This means sentiment-driven priority bumps fire whether or not the destination group is on `ai_skill_based`.
+  - **Privacy is non-negotiable.** Ticket types marked `is_confidential` are short-circuited *before* any HTTP call — there is no admin override. Subjects are truncated to 200 chars, bodies to 4,000, HTML stripped. API keys live in the `settings` table (same as SMTP password) and are masked after first save.
+  - **Audit + telemetry.** Every classification persists provider, model, latency, prompt/output tokens, raw response, suggested skills, override (if any) — with `overridden_by` / `overridden_at` / `override_reason`. Internal timeline entries on every classification (`ai_classified`), priority bump (`ai_priority_bumped`), and human override (`ai_override`). `logAudit` entries for `ai_settings_saved`, `ai_backfill_run`, `ai_classification_override`. Recent Classifications strip on the settings page surfaces the last 10 verdicts at a glance.
+  - **Sentiment-driven priority bump.** When the AI flags `angry` or `urgent` and the toggle is on, ticket priority moves up one notch (or to the highest priority if it had none). Idempotent — a timeline marker prevents double-bumping. "Frustrated" alone surfaces for reporting but does not bump.
+  - **Override modal on the ticket detail page.** Sidebar gains an **AI Classification** card showing the suggestion, sentiment, confidence, reasoning, and provider/model/latency. Buttons: **Override** (modal with skill checkboxes scoped to the ticket's group + global skills, optional reason field) and **Re-classify** (re-runs the call after a subject/body edit; creates a fresh row, history preserved). When AI is enabled but the ticket has no verdict yet, a **Classify now** button appears.
+  - **Backfill** — `scripts/ai-classify-backfill.php --limit=N --statuses=open,in_progress,pending [--dry-run]` plus a UI button on the settings page (capped at 200 in-request, schedule the script via cron for larger runs).
+
+### Database
+- Migration **027** adds `ai_classifications` (one row per classification, with override columns), `tickets.ai_classification_id`, `tickets.ai_sentiment` (denormalised + indexed for filtering), and widens `groups.assign_strategy` to include `ai_skill_based`. Seeds default settings keys (provider, threshold, max-tokens, timeout, sentiment-bump toggle, inbound-email toggle). Idempotent.
+
+### Documentation
+- New **AI Classification** doc at `/admin/docs/ai` covering setup, privacy, providers, confidence threshold, sentiment bump, override / re-classify, backfill, failure modes, audit/telemetry, and a cost sanity-check. Linked from the docs index, the docs side-nav, and the Group Auto-Assignment strategies table. 7 new search-keyword entries on the docs index landing on the AI page.
+
+---
+
+## 2.14.1 — 2026-04-29
+
+### Fixes
+- **Navbar "Help" link is now role-aware.** The plain-language portal rename in 2.13 / f0e5955 ("Portal" → "Help") was applied globally, so admins and agents who clicked Help got dropped onto the patron-facing portal instead of staff documentation. Help now routes to `/admin/docs` for admins, `/agent/help` for agents and power users, and `/portal` for end users (unchanged — this is the patron support screen by design).
+
+---
+
+## 2.13.0 — 2026-04-29
+
+### Features
+- **Group Managers — delegated agent-skill management.** Lets a regular group member with the new `is_manager` flag maintain agent skills for their own team without going through an admin. Use case: the librarian who runs Reference can decide who's qualified for "Cataloguing" or "French" without filing a ticket with IT. Built in two layers:
+  - **Skill ownership scope** — `agent_skills.group_id` (nullable). NULL = global skill (admin-only, system-wide vocabulary, default for all pre-existing rows). Set = skill owned by one group; managers of that group can edit it. The admin Skill editor at `/admin/skills` now has a Scope dropdown (Global / Owned by group: …); the index gains a Scope column.
+  - **Manager flag on group membership** — `group_user_map.is_manager`. The group editor at `/admin/groups/{id}/edit` now has a per-member sub-checkbox **Manager**. JS auto-disables it when Member is unticked. Admin changes are audit-logged as `group_managers_changed`.
+- **New `/manager` area** for delegated skill management. Surfaces in the user-dropdown menu as **Manage My Team** for any user flagged on at least one membership row (admins always see it).
+  - **`/manager`** — landing page listing the groups the current user manages with member + skill counts.
+  - **`/manager/groups/{id}/team`** — checkbox grid of the group's members (rows) × assignable skills (columns: skills owned by this group plus global skills). Tick to grant, untick to revoke. Skills owned by *other* groups are intentionally hidden — managers never see another team's vocabulary. Server re-derives the allowed skill / member set on POST so a manager can't sneak in IDs they don't own. One bulk save; per-user `manager_skill_assignments_changed` audit entries record what changed.
+  - **`/manager/groups/{id}/skills`** — group's own skill catalogue. List view shows owned skills (editable) and global skills (read-only with an Admin-only lock badge for context). Create / edit / delete routes underneath, all gated by `canEditSkill()` so a manager can't reach across into a sibling group's skills via URL fiddling. `manager_skill_created` / `manager_skill_updated` / `manager_skill_deleted` audit entries.
+- **Permission helpers in `src/helpers.php`** — `userManagedGroupIds()`, `canManageGroupSkills($userId, $groupId)`, `canEditSkill($userId, $skillId)`. Admins always pass; non-admins must hold `is_manager = 1` on the relevant membership row. Global skills (`group_id IS NULL`) never become editable for non-admins regardless of group membership.
+
+### Permission boundaries (intentional)
+Managers can: assign existing skills (their group's + global) to their members, create/edit/delete skills owned by their group. Managers cannot: edit global skills, edit other groups' skills, edit ticket-type required-skills (still admin-only — that's a routing-policy decision), add/remove group members, promote/demote other managers.
+
+### Database
+- Migration **026** adds `group_user_map.is_manager` (default 0 — preserves today's behaviour) and `agent_skills.group_id` (nullable FK to `groups`, ON DELETE SET NULL — orphan-safe). Idempotent.
+
+### Documentation
+- New **Group Managers** section in `/admin/docs/users` (anchor `#group-managers`) covering designation, what managers can/can't do, auto-assign integration, and the audit-log entries to look for. Updated **Agent Skills** card to describe the new Scope concept (Global vs group-owned). Cross-link added from the Group Auto-Assignment doc to the Group Managers section.
+- 4 new search-keyword entries on the docs index landing on `#group-managers`.
+
+---
+
+## 2.12.1 — 2026-04-29
+
+### Documentation
+- **Help docs caught up with the last 19 days of feature work.** Previously the in-app docs at `/admin/docs/*` lagged behind 22 user-facing commits dating back to 2026-04-10. Updated:
+  - **Automations & Escalations** (`automations.php`) — restructured into five clearly-distinct sections (Automation Rules, Group Auto-Assignment, Escalation Rules, Manual Escalation Paths, Stale Ticket Notifications) so admins stop conflating the four time/skill/event/manual systems. New full coverage of the 5 auto-assign strategies (manual / round-robin / load-based / skill-based / first-available) and their fallback behaviour, the per-ticket-type escalation chain that drives the Escalate button (skip-current-assignee logic, watcher exemption, distinction from time-based rules), and the stale-ticket cron with global + per-type thresholds and dedup window. Replaced the misleading "Escalate stale tickets" example that was actually about unassigned tickets.
+  - **User Portal** (`portal.php`) — documented the plain-language vocabulary translation (Help Requests / Submitted / We're working on it), the requester self-escalation button (with owner check), the new Escalated-L# badge on portal list rows + ticket detail, the "What happens next?" callout for newly-submitted requests, and the requester-side submit-ack and assignment-notification emails. Pointed admins at `/admin/settings/labels` for label customisation.
+  - **Tickets** (`tickets.php`) — added Escalating a Ticket card explaining the red Escalate button and where to configure paths, a new card describing the lighter location-visibility opt-out flag with a comparison table against the heavier `is_confidential` flow, and a per-type stale-threshold note linking back to the stale-tickets section.
+  - **Users & Roles** (`users.php`) — new Agent Skills card (catalogue management, mapping to agents, required-skills-per-type, future manager-delegation note), new Agent Availability card explaining the `is_available` toggle and which strategies read it, added auto-assignment cross-link inside the existing Groups section, and added the requester-side "My ticket assigned to an agent" preference to the notification table.
+  - **Docs index search** (`index.php`) — added 24 new keyword entries so search lands on the right anchor for skills, availability, auto-assign strategies, manual escalation paths, stale-ticket settings, requester escalation, and the location-visibility opt-out.
+
+---
+
+## 2.12.0 — 2026-04-29
+
+### Features
+- **Auto-assign tickets to a group's members** — each Group now has an Auto-Assignment Strategy (Settings → Groups → Edit). A new ticket that arrives with a group set but no assignee runs the group's strategy:
+  - **Round Robin** — rotate sequentially through group members. Distribution is even by ticket *count* and remembers the last picked agent on `groups.assign_last_user_id`.
+  - **Load-Based** — pick the member with the fewest open (non-resolved/closed) tickets. Best when work items vary in length.
+  - **Skill-Based** — pick a member whose declared skills cover every skill required by the ticket type. Configure the global skill list under Settings → Agent Skills, attach skills to agents on the same screen, and mark required skills on each Ticket Type form. Falls back to the group's configured fallback (load-based / round-robin / leave unassigned) when nobody qualifies.
+  - **First Available** — pick a member who has flipped the new "I'm available for new tickets" switch on their profile. Useful for shift / follow-the-sun coverage. Same fallback chain as Skill-Based.
+  - **Manual** (default) — preserves today's behaviour: ticket is left unassigned for an agent to claim.
+  
+  Wiring details: portal-created tickets now inherit `group_id` from `ticket_types.group_id` (which already drove confidentiality / which-agents-can-be-assigned, but wasn't being copied to the ticket itself). Auto-assign fires from the portal `POST /portal/tickets/create` path, the API `POST /api/v1/tickets` path, and from the agent / admin "split ticket" paths whenever the assignee is left blank but a group is set. Auto-assignments are recorded as an internal timeline entry ("Auto-assigned to NAME via STRATEGY"), and the standard "ticket assigned" emails go out to the chosen agent and to the requester. Direct manual assignment is unaffected.
+  
+- **Agent Skills** — new `agent_skills` table + admin CRUD at Settings → Agent Skills. Each skill carries a name + description and is mapped to agents (`user_skill_map`) and to ticket types (`ticket_type_skill_map`). Only used by the Skill-Based strategy today; can be repurposed later for routing rules / search filters.
+
+- **Agent availability flag** — new `users.is_available` toggle on the My Profile page (agents / admins / power users only). Defaults to on. Only the First Available strategy reads it; round-robin, load-based, and skill-based ignore it so flipping yourself "away" doesn't break direct assignment from elsewhere.
+
+### Database
+- Migration **025** adds `groups.assign_strategy` / `assign_last_user_id` / `assign_fallback`, `users.is_available`, and the `agent_skills`, `user_skill_map`, `ticket_type_skill_map` tables. Idempotent (guarded column adds + `CREATE TABLE IF NOT EXISTS`).
+
+---
+
+## 2.11.0 — 2026-04-28
+
+### Accessibility (AODA / WCAG 2.0 AA — foundational pass)
+- **Skip-to-main-content link** added as the first focusable element in every layout (`base.php`, `app.php`, `public.php`). Auth layout, which is a single-screen with no nav, gets a `<main>` landmark only. Keyboard and screen-reader users can now bypass the navbar and sidebar on every page.
+- **`<main>` landmark** wraps the primary content region of every layout. The agent/admin layout's icon-only sidebar `<nav>` got `aria-label="Section navigation"`; sidebar links got `aria-label`/`aria-current="page"` so screen readers announce the destination instead of just "link". The shared navbar now carries `aria-label="Primary"` and the public help-center navbar matches.
+- **Navbar icon and decorative-element fixes** — the brand `<img>` alt is now empty (the brand name is rendered in the adjacent `<span>`), all decorative Bootstrap Icons (`<i class="bi …">`) inside nav links, dropdown items, alert blocks, and modal titles got `aria-hidden="true"`, and the avatar circle / hamburger toggle got proper `aria-label`s.
+- **Notification bell announces its count** — replaced `title="Notifications"` with `aria-label="Notifications, N unread"` (or "none unread") on initial render and on every poll, so screen-reader users hear the unread count without visiting the page. The numeric badge is now `aria-hidden` since the count lives in the link's accessible name.
+- **Global search box is now a labelled combobox** — both the in-app navbar search and the public KB search got a visually-hidden `<label>`, `role="combobox"`, `aria-expanded` toggling on open/close, `aria-controls`, `aria-autocomplete="list"`, and `aria-haspopup="listbox"`. The results dropdown is `role="listbox"` and tabs in the in-app search now have `role="tab"` + `aria-selected` wired to clicks.
+- **`/` keyboard shortcut tightened** to comply with WCAG 2.1.4 (Character Key Shortcuts): it no longer fires when a `contenteditable` element (CKEditor toolbar focus) is active, and it now bails when any modifier key is held — both common conflict points with screen-reader virtual cursors. Power-user behaviour is unchanged when no input is focused.
+- **Flash messages get explicit live regions** — `role="status"` + `aria-live="polite"` on success/info, `role="alert"` + `aria-live="assertive"` on error, plus `aria-atomic="true"` everywhere so screen readers re-announce the full message instead of just the diff. Dismiss buttons now have `aria-label="Dismiss"`.
+- **`prefers-reduced-motion` honoured** — the bell-ring, bell-glow, and admin tour-pulse animations are disabled, and the filter-panel slide-in is suppressed, when the user has Reduce Motion enabled in their OS. A general `transition`/`animation` clamp catches any other animated elements in the layout. Addresses WCAG 2.3.3 (animation from interactions) and 2.2.2 (pause, stop, hide).
+- **Login form** — added `autocomplete="email"` and `autocomplete="current-password"` to help password managers, marked alert icons `aria-hidden`, and gave the success/error alerts proper live-region semantics. Form labels were already paired correctly via `<label for>`.
+- **Out of scope for this pass (next iteration if requested)**: per-page heading hierarchy, table-header `scope`/`aria-sort` on the agent ticket list, form-level `aria-invalid`/`aria-describedby` for inline errors, CKEditor reply-composer labelling, mention-autocomplete keyboard navigation, color-contrast review of the admin-configurable branding palette, and KB Markdown image alt enforcement.
+
+---
+
+## 2.10.6 — 2026-04-28
+
+### Security Hardening
+- **Defense-in-depth scrub on the SMTP debug log** — `src/helpers.php` writes a `storage/logs/smtp.log` transcript when an admin enables `smtp_debug`. PHPMailer's own `SMTP::client_send()` already replaces AUTH LOGIN / AUTH PLAIN / XOAUTH2 payloads with the literal "`[credentials hidden]`" at the `DEBUG_SERVER` level we run at, so credentials were not actually being written to disk under the supported configuration. The remaining risk was a future change quietly raising the level to `DEBUG_LOWLEVEL`. Hardened the debug callback to also scrub the configured SMTP password from every log line (in case it ever appears verbatim in a server banner, response trailer, or unexpected echo), and added a load-bearing comment on the `SMTPDebug` line spelling out the trust model and the "do not raise this" rule. SSO debug logging in `src/routes.php` was reviewed at the same time — it already only emits token *lengths*, `expires_in`, `token_type`, and a `secret_set=yes/NO` boolean, so no change was needed there.
+
+---
+
+## 2.10.5 — 2026-04-28
+
+### Security Hardening
+- **API ticket and timeline responses no longer use `SELECT *`** — three JSON-emitting endpoints in `src/routes/api.php` were echoing raw `t.*` / `tl.*` rows back to clients: `POST /api/v1/tickets` (create), `GET /api/v1/tickets/{id}` (detail), and `POST /api/v1/tickets/{id}/replies` (the created timeline row). Today every column in those tables happens to be safe to expose, so this was not an active leak — but the moment someone adds an internal-only column (an admin note, an audit blob, a sensitive flag) it would silently start showing up in API responses with no code change. Replaced `t.*` and `tl.*` with explicit column lists matching the existing `GET /api/v1/tickets` (list) and `GET /api/v1/tickets/{id}/timeline` whitelists; the on-the-wire payload is unchanged for current clients. The remaining two internal `SELECT * FROM tickets` queries inside the update and reply handlers are left in place but commented as "internal — never returned to the client" so a future change can't quietly turn them into responses.
+
+---
+
+## 2.10.4 — 2026-04-28
+
+### Security Hardening
+- **Rate limit on the API login endpoint** — `POST /api/v1/auth/login` was previously unthrottled, so an attacker could grind credentials against it (or against a single account) at full request speed. Added a sliding-window throttle backed by a new `login_attempts` table (migration 024): inside any 15-minute window, an email may have at most 5 failed attempts and a single IP may have at most 10 failed attempts before the endpoint short-circuits with HTTP 429. A successful login from the same email/IP pair clears that pair's failure count, so a legitimate user who fat-fingers the password a couple of times then logs in cleanly is not locked out for the rest of the window. The `login_attempts` rows persist as an audit trail; pruning policy is a TODO. Note: the web `/login` form (`src/Auth.php::attempt`) is still unthrottled — covering it is a separate follow-up.
+
+---
+
+## 2.10.3 — 2026-04-28
+
+### Security Hardening
+- **SSO client secret no longer reaches the browser DOM** — `templates/pages/admin/settings/sso.php` was rendering the saved Microsoft 365 client secret into the `value` attribute of the password input on the SSO settings page. Although the field was `type="password"`, the plaintext secret was visible to anyone with admin access via DevTools, "View source", the eye-toggle button next to the input, browser history, or screenshots. Fixed by always rendering an empty `value`; the existing "Leave blank to keep it unchanged" UX (handled in `src/routes/admin.php:52`) means saving the form without retyping the secret continues to preserve the stored value. Also added `autocomplete="new-password"` so password managers don't auto-fill or memoize the field.
+- **Rescue script removed from project root** — `rescue.php` was committed at the repository root. It is unauthenticated by design (lists all users and resets admin passwords) and only meant to be temporarily dropped into `public/` during emergency recovery. Moved the canonical copy to `scripts/admin/rescue.php` (alongside the other admin CLI scripts, outside the webroot) and updated the file's header to document the copy-into-public/use/delete workflow. `.gitignore` now blocks `/rescue.php` at the project root in addition to the existing `/public/rescue.php` rule, so a working copy can't be re-introduced in either location by accident.
+
+---
+
+## 2.10.2 — 2026-04-28
+
+### Security Hardening
+- **Baseline HTTP security response headers** — `src/bootstrap.php` now emits `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (geolocation/microphone/camera disabled), `Strict-Transport-Security` (when the request is HTTPS), and a baseline `Content-Security-Policy` (`default-src 'self'`, scripts/styles limited to `'self'` + the jsDelivr CDN we already load Bootstrap from, `frame-ancestors 'none'`, `form-action 'self'`, `base-uri 'self'`). The CSP currently permits `'unsafe-inline'` for scripts and styles to accommodate existing inline event handlers and styles in templates; this can be tightened to a nonce-based policy in a follow-up. Closes the clickjacking and MIME-sniffing exposure surfaced by a security review — the rest of the baseline (CSRF, prepared statements, `password_hash`, `session_regenerate_id`, `HttpOnly`/`SameSite=Lax`/`Secure` cookies, `htmlspecialchars`-based output encoding, MIME-whitelisted out-of-webroot uploads, SHA-256-hashed API tokens) was already in place.
+
+---
+
+## 2.10.1 — 2026-04-27
+
+### Bug Fixes
+- **Invisible submit buttons on auth pages** — the `auth` layout (used by login, 2FA, the SSO location picker, surveys, and the setup wizard) was not defining the `--ld-primary` and `--ld-primary-hover` CSS custom properties. Buttons styled with `background: var(--ld-primary)` and `text-white` therefore rendered as white text on a transparent background sitting on a white card, making them effectively invisible. Reported when a brand-new SSO user reached `/sso/pick-location` and saw no Continue button. Fixed by adding the same `:root` declaration the other layouts already use.
+
+---
+
+## 2.10.0 — 2026-04-24
+
+### Portal Vocabulary — Phase 1 of the UI Plain-Language Pass
+- **"Ticket" → "Help Request" on the portal** — all portal-facing copy now reads as a non-technical staff member would expect. "New Ticket" → "New Help Request", "My Tickets" → "My Requests", "Submit Ticket" → "Submit Request", "Edit Ticket" → "Edit request", "Close Ticket" → "Close this request". Agent and admin views are unchanged — "Ticket" is still the internal term for staff who handle the queue. Motivation: the LLM Council surfaced that front-line library staff associate the word "ticket" with patron fines, creating a hesitation point on the portal submit button.
+- **Portal status badges in plain English** — the portal dashboard, ticket list, and ticket detail view now translate the internal status codes to natural phrases: `open` → "Submitted", `in_progress` → "We're working on it", `pending`/`waiting_on_third_party` → "We're waiting on someone else", `waiting_on_customer` → "Waiting on you", `resolved` → "Done", `closed` stays "Closed". Internal codes and agent/admin-facing labels are untouched.
+- **Navbar "Portal" → "Help"** — the top-nav link that points to `/portal` now shows a life-preserver icon and reads **Help**, matching how staff think about the feature ("I need help" vs. "Let me go to the portal").
+- **Portal priority field demoted** — the priority dropdown on the portal submit form now labels as **"How urgent is this?"**, defaults to "— Let our team decide —" when not required, and includes a hint that the team will set it if left blank. Reduces the "everyone picks High" failure mode the council flagged. Required/optional behaviour is unchanged.
+- **"What happens next?" callout on portal ticket view** — when a portal user opens their own help request and it's still in `open` status, a blue info card now explains in plain language what to expect: request is queued, team will reply here, email notifications will follow. Closes the post-submit "did it actually go through?" anxiety and prevents the "I'll call IT to confirm" follow-up call.
+- **Portal onboarding tour rewritten** — Driver.js tour steps for portal users now use the new vocabulary throughout (dashboard, list, submit, edit, close, notifications).
+- **Label system extended** — new `portal.status.*`, `portal.request.*`, `portal.action.*`, `portal.field.priority_label`, `portal.what_next.*`, and `portal.nav.help` keys added to `config/labels.default.json` so admins can further customize the wording without touching templates.
+
+---
+
+## 2.9.0 — 2026-04-23
+
+### Portal Escalation Visibility
+- **"Escalated" Badge on Portal Ticket List** — rows for tickets with `escalation_level > 0` now show a red **"Escalated L#"** pill next to the subject, so requesters can see at a glance which of their tickets have been escalated (whether by themselves or by an automated rule). Previously the ticket list gave no indication at all.
+- **Escalation Indicators on Portal Ticket View** — the ticket header now shows an **"Escalated — Level N"** badge alongside the status pill, and the Details sidebar gains a new **Escalation** row mirroring what agents see. Previously, the only portal-side signal was a buried timeline entry that was easy to miss.
+
+---
+
+## 2.8.4 — 2026-04-23
+
+### Escalations
+- **Escalation Rule Recipients Can Open the Ticket** — when an escalation rule's `notify_user` or `notify_assigned_agent` action fires, the target agent/admin is now auto-added to `ticket_watchers` so they can actually open the ticket from the email link. Previously, if the recipient wasn't in the ticket's group (and wasn't the current assignee), clicking through produced a 403 — a confusing experience for a system-generated alert. Mirrors the behaviour of manual matrix-based escalation, which already added watchers. Portal users are not added (they use a separate access path).
+
+---
+
+## 2.8.3 — 2026-04-23
+
+### Portal Privacy
+- **Per-Type Opt-Out from Location Ticket Visibility** — ticket types now have a **"Visible to Location Ticket Visibility users"** checkbox (checked by default). Uncheck it for routine-but-sensitive categories like *Collections*, *Human Resources*, or *Payroll* so those tickets don't surface to end users who have location visibility enabled, without having to invoke the heavier **Confidential** flag (group-lock + re-auth + access-log). Requesters still see their own ticket regardless of this setting.
+- **Portal Query Alignment** — the portal ticket list, detail view, comment endpoint, and attachment download all now exclude tickets whose type has `show_to_location_visibility = 0` from the location-based access path, alongside the existing `is_confidential = 1` exclusion.
+- **Documentation** — [DOCS.md](DOCS.md) gains a new **Location Ticket Visibility** subsection and a fleshed-out **Ticket Types** field reference, including a side-by-side comparison of when to use *Confidential* versus *Visible to Location Ticket Visibility users*.
+
+---
+
+## 2.8.2 — 2026-04-22
+
+### Portal Privacy
+- **Confidential Tickets Excluded from Location Visibility** — users with `can_view_location_tickets = 1` no longer see confidential-type tickets submitted by others at their location. The portal ticket list, ticket detail view, comment endpoint, and attachment download now all exclude tickets whose `ticket_type.is_confidential = 1` from the location-based access path. Confidential types remain restricted to their assigned group (and the requester still sees their own ticket via `created_by`, regardless of confidentiality).
+- **Attachment Download Alignment** — the portal attachment download previously checked ownership only, so users with location visibility could view a ticket but not download its files. The endpoint now mirrors the view-access rule, allowing downloads for location-visible tickets while still respecting the new confidentiality carve-out and internal-note exclusion.
+
+---
+
+## 2.8.1 — 2026-04-22
+
+### Cron Jobs
+- **Run Status on Cron Jobs Page** — **Admin → Settings → Cron Jobs** now shows live status for every scheduled script. Each card gets a `Running`, `Stale`, or `Not configured` badge and a "Last run: YYYY-MM-DD HH:MM:SS" line, detected by the modified time of the job's log file. A summary row at the top of the page counts how many jobs fall into each bucket, so a misconfigured server is obvious at a glance.
+- **Detection Logic** — a job is "Running" if its log was touched within 2× its expected interval (e.g. SLA cron = 5m interval → 10m window), "Stale" if older, "Not configured" if the log file doesn't exist yet. No new dependencies; the existing log files the scripts already write are the source of truth.
+
+---
+
+## 2.8.0 — 2026-04-21
+
+### Stale Ticket Notifications
+- **Stale-Ticket Cron** — new `scripts/process-stale-tickets.php` runs hourly, finds active tickets (`open`, `in_progress`, `pending`) that have had no activity for longer than a configurable threshold, and emails both the assigned agent (or group if unassigned) and the requester. Tickets in `waiting_on_customer`, `waiting_on_third_party`, `resolved`, or `closed` are skipped — the clock only runs while the ticket is genuinely waiting on the team.
+- **Requester Reassurance** — the requester gets a "we haven't forgotten you" check-in email even when there's no real update, closing the communication gap that silent tickets create.
+- **Per-Type Overrides** — each ticket type can override the global stale threshold (leave blank to inherit). Useful for urgent types (e.g. "Facilities Emergency" at 4h) versus slow-burn types (e.g. "Project Intake" at 14 days).
+- **Configuration UI** — new **Admin → Settings → Stale Tickets** page sets the global threshold, re-notify window, and toggles for agent/requester emails. Includes a one-click "Run Now" button and visibility into the current per-type overrides. A new stale-threshold field also appears on the Ticket Type editor.
+- **Smart Re-Nag** — subsequent runs only re-notify a given ticket after the configured re-check window (default 24h), dedup'd via a `stale_notification_sent` entry in the ticket timeline, so stale tickets don't spam inboxes every hour.
+- **Timeline Entry** — every stale notification writes an internal timeline entry so agents can see when the reminder fired and how stale the ticket was at that moment.
+
+---
+
+## 2.7.3 — 2026-04-21
+
+### Access Control
+- **Assignees and Watchers Bypass the Group Wall** — agents who are the current assignee or an explicit watcher of a ticket can now open it even if the ticket's group sits outside their own group memberships. Previously, escalating (or manually assigning) to someone outside the group emailed them a link that 403'd. The exemption applies everywhere group-based visibility is enforced: the ticket view, all JSON API endpoints, and agent attachment downloads. Group-based filtering on the ticket list is unchanged.
+
+---
+
+## 2.7.2 — 2026-04-21
+
+### Escalation
+- **Skip Current Assignee in Escalation Matrix** — if a ticket is already assigned to someone who appears in the escalation path for its type, escalating now jumps to the step *after* that person instead of routing back to an earlier level. The assignee's position in the matrix is treated as a floor on top of the ticket's `escalation_level`, so escalation always moves the ticket up the chain.
+
+---
+
+## 2.7.1 — 2026-04-21
+
+### Portal Escalation
+- **Requesters Can Escalate** — the red `Escalate` button now also appears on the end-user portal ticket view (`/portal/tickets/{id}`), not just the agent panel. Requesters can escalate their own tickets when they feel a ticket needs more attention, matching the "empowerment with visible backup" theme of the business-continuity report.
+- **Same Modal & Confirmation** — the portal uses the same confirmation pattern as the agent view: it shows the exact person (name + level + label) the ticket will be escalated to, and accepts an optional reason.
+- **Owner-Only** — only the ticket's creator can escalate it from the portal. Users viewing a ticket via the location-view permission see no Escalate button. The API endpoint was opened up to the `user` role but now enforces a `created_by === Auth::id()` check for non-agent callers.
+- **Timeline Icon** — the portal timeline now renders a red arrow-up-circle icon for `escalated` events so requesters can see when they (or anyone) escalated the ticket.
+
+---
+
+## 2.7.0 — 2026-04-21
+
+### Manual Ticket Escalation
+- **Escalation Paths per Ticket Type** — admins can now define an ordered chain of agents per ticket type under Admin → Settings → Escalation Paths. The topmost row is Level 1; drag-to-reorder is supported. Each step accepts an optional label such as "Branch Supervisor" or "Service Manager" so agents know who they're escalating to.
+- **Escalate Button** — agents see a red `Escalate` button in the ticket action bar. Clicking it opens a confirmation modal showing the next person in the path (with level and label) and an optional reason textarea. Confirming reassigns the ticket, increments the escalation level, and notifies the new assignee.
+- **Previous Assignee Kept in the Loop** — when a ticket is escalated, the prior assignee is automatically added as a watcher so they continue to receive updates without having to ask for them.
+- **No-Escalate Guards** — the button is disabled (with a tooltip explanation) on tickets that are closed, merged, have no type set, have no path configured, or are already at the top of their chain. The server enforces the same rules.
+- **Self-Skip** — if the current user appears in the chain at or beyond their current level, the logic skips past themselves to the next step (you can't escalate to yourself).
+- **Escalation History in Ticket View** — the ticket detail page now shows an Escalation History card listing every escalation event, who triggered it, who it went to, any reason, and the timestamp. An Escalation Level badge appears in the Details sidebar when a ticket has been escalated.
+- **"Escalated to Me" Stat Card** — agents see a red stat card on the dashboard counting open tickets that have been escalated to them, linking to a pre-filtered ticket list. A matching checkbox appears in the ticket-list filter panel under "Escalation".
+- **Email Notification** — the new assignee receives a distinct red-themed `ticket-escalated` email that names who escalated it, the level, the previous assignee, and the reason. Template customizable in Admin → Settings → Email Templates via the `ticket_escalated_agent` key.
+- **Audit Trail** — every escalation writes a timeline entry, a row in `ticket_escalations`, and an `audit_log` entry under the action `ticket_escalated`.
+- **Separate from SLA-Driven "Escalation Rules"** — this manual path feature is a distinct settings page from the existing time-driven automated escalation engine. Both coexist; the settings nav now lists them as "Escalation Paths" and "Escalation Rules".
+
+### Database
+- Migration `021_escalation_paths.php` adds `tickets.escalation_level TINYINT UNSIGNED NOT NULL DEFAULT 0`, the `ticket_escalation_steps` table (ordered chain per ticket type), and the `ticket_escalations` table (audit log of every escalation event).
+
+---
+
+## 2.6.0 — 2026-04-21
+
+### Requester Email Notifications — Acknowledgement & Assignment
+- **Ticket Submitted Acknowledgement** — the ticket creator now reliably receives a confirmation email from every creation path (portal form, admin/agent form, email-to-ticket, mobile API). Previously only the portal form and inbound email dispatched an ack, and the portal path bypassed the global toggle.
+- **Ticket Assigned Notification** — when an agent is assigned to a ticket (either at creation or later via the ticket detail page), the requester now receives an email naming the agent who will be handling their ticket. Uses a new `ticket-assigned-requester` email template customizable in Admin → Settings → Email Templates.
+- Assignment email is skipped when the requester is also the assignee (they already receive the agent-side assignment email).
+- **Per-User Opt-Out** — new `Ticket assigned` toggle added to the profile notification preferences for portal users, and `My ticket assigned` added to the "Other Notifications" section for agents/admins who also submit tickets.
+- **Global Default** — new `Ticket Assigned to Agent` switch added to Admin → Settings → Email Notifications under Ticket Requester Notifications, alongside the existing new-ticket/resolved/closed toggles.
+- Both notifications use the project's standard two-level gating: the admin-level switch must be on AND the user's individual preference must be on.
+- Consolidated the previously duplicated inline acknowledgement logic in `portal.php` and `process-replies.php` into a single `notifyRequesterTicketCreated()` helper.
+
+### Database
+- Migration `020_notify_ticket_assigned.php` adds a `notify_ticket_assigned TINYINT(1) NOT NULL DEFAULT 1` column to `users`.
+
+---
+
+## 2.5.0 — 2026-04-21
+
+### Full-Website Backup
+- **Entire Site Snapshot** — the admin backup now archives the complete application directory under a `website/` prefix in the zip, not just attachments and uploads
+- Includes PHP source, templates, `config/`, `.env`, `vendor/`, scripts, ticket attachments, branding assets, avatars, and logs — everything needed to restore the site to a fresh server alongside `database.sql`
+- Only `storage/backups/` itself is excluded, to prevent the in-progress archive from recursing into itself and pulling in prior backups
+- Bumped the backup request time limit from 300 s to 1800 s and raised the memory limit to 512 MB to accommodate larger archives
+- Admin → Settings → Backup page copy, "What's Included" card, and restore instructions updated to reflect the new scope
+
+---
+
+## 2.4.0 — 2026-04-10
+
+### Confidential Tamper Protection
+- **Re-Authentication Required** — removing the confidential flag from a group or ticket type now requires the admin to re-enter their password before the change is applied
+- **Re-Authentication on Delete** — deleting a confidential group or confidential ticket type also requires password re-authentication
+- **Attempt Logging** — every attempt to remove a confidential flag or delete a confidential entity is recorded in the audit log the moment the re-auth page is shown, even if the admin cancels without authenticating
+- **Failed Auth Logging** — incorrect password attempts during re-authentication are separately logged in the audit log
+- **Email Alerts on Flag Removal** — all members of the affected group receive an email alert when the confidential flag is removed from their group or a linked ticket type, including the admin's name, email, IP address, and timestamp
+- **Email Alerts on Deletion** — all members receive an email alert when a confidential group or confidential ticket type is deleted, with the same identity details
+- **Red Security Alert Emails** — new email templates (`confidential-flag-removed`, `confidential-entity-deleted`) with red danger styling, distinct from the amber membership-change alerts
+- **Documentation** — admin help documentation (Admin → Docs → Users & Roles) updated with comprehensive Confidential Groups section covering all security measures: membership alerts, ticket redaction, re-authentication gates, access notifications, audit logging, and the new tamper protection
+
+### Audit Log Actions Added
+- `confidential_flag_removal_attempted` — admin unchecked the confidential flag (re-auth page shown)
+- `confidential_flag_removal_auth_failed` — admin entered wrong password on re-auth
+- `confidential_flag_removed` — admin successfully removed the confidential flag after re-auth
+- `confidential_delete_attempted` — admin attempted to delete a confidential entity (re-auth page shown)
+- `confidential_delete_auth_failed` — admin entered wrong password when deleting
+- `confidential_entity_deleted` — admin successfully deleted a confidential entity after re-auth
+
+---
+
+## 2.3.0 — 2026-04-01
+
+### Confidential Ticket Types
+- **Confidential Flag** — admins can mark ticket types as "Confidential" in Settings → Ticket Types; requires a group to be assigned
+- Tickets of a confidential type are only visible to members of the type's assigned group
+- Agents not in the group cannot see confidential tickets in listings or search results
+- Admins outside the group see confidential tickets in listings with redacted subjects ("[Confidential]")
+- **Admin Re-Authentication** — viewing a confidential ticket requires re-entering the admin's password; a warning explains that access is logged and group members will be notified
+- Access grants a 5-minute session window before re-authentication is required again
+- **Audit Logging** — every admin access to a confidential ticket is recorded in the audit log (`confidential_ticket_viewed`) and as an internal timeline entry on the ticket
+- **Group Email Notification** — all members of the confidential type's group receive an email alert with the admin's name, email, IP address, and timestamp when a confidential ticket is accessed
+- **API Enforcement** — confidential tickets are excluded from API listings for non-group members; individual ticket endpoints return 403 with a message to use the web interface
+- **Edge Case Protection** — bulk actions exclude inaccessible confidential tickets; merge and split operations are blocked; search/typeahead results redact subjects; CSV exports replace sensitive fields with "[Confidential]"
+- Admin and agent help documentation updated with Confidential Ticket Types section
+
+---
+
+## 2.2.0 — 2026-04-01
+
+### CSAT Redesign
+- **Emoji Ratings** — customer satisfaction surveys redesigned with emoji-based ratings and an issue-resolved flow
+- **Send Test Survey** — admins can send a test CSAT survey from the admin settings page
+- Fix: emoji rating section removed from CSAT email (ratings are on the survey page)
+- Fix: missing button key added to `csat_survey` email template default
+
+### Custom Labels
+- **System Field Labels** — admins can customise the display labels for system fields (e.g. rename "Location" to "Branch") and control whether Priority and Tags are required
+
+### Email Templates
+- **Agent Assigned, Group Assigned, and Escalation Alert** email templates added to admin settings for customisation
+
+### UX Improvements
+- **Bootstrap Modals** — all browser `confirm()` dialogs replaced with styled Bootstrap confirmation modals
+- **Auto-Populate Holidays** — button added to admin holidays settings to auto-populate public holidays
+- **Type Field on Update Card** — ticket type can now be changed from the Update Ticket card for agents and admins
+- Browser and OS info hidden from non-admin users on ticket details
+- UI improvements for ticket listing pages (spacing, alignment, responsive)
+- Fix: columns resize correctly after quick-change dropdown selection
+
+---
+
+## 2.1.0 — 2026-03-12
+
+### Ticket Detail Page Redesign
+- **Three-Column Layout** — ticket detail page reorganised into three columns: main content, ticket actions, and a metadata/SLA sidebar
+- **SLA Card** — SLA status card moved to the third column, below the Update Ticket panel
+- **Inline Attachments** — file attachments are now displayed inline within their parent timeline entry rather than in a separate section
+- System-generated timeline events (e.g. SLA state changes) hidden from portal users and non-admin views
+
+### WYSIWYG Editing (CKEditor 5)
+- **New Ticket Forms** — description field on the portal, admin, and agent ticket creation forms replaced with a full CKEditor 5 rich-text editor
+- **Reply / Comment Area** — reply and comment textarea on admin and agent ticket views replaced with CKEditor 5
+- **KB Article Editor** — knowledge base article editor upgraded from Quill to CKEditor 5 with font color, background color, image upload, and table support
+- Ticket descriptions created with the WYSIWYG editor now render as HTML throughout the UI
+- Fix: CKEditor data correctly populated in the hidden field when using Send & Set Status
+
+### Ticket Management
+- **Group-Scoped Assignee Dropdown** — when a ticket belongs to a group, the assignee dropdown is filtered to members of that group only
+- **Ticket Type Color Picker** — color picker added to ticket type create and edit forms
+- **Ticket Type Deletion Safety** — attempting to delete a ticket type that has tickets now prompts to either reassign affected tickets to another type or delete them
+- **Clickable URLs** — URLs in ticket descriptions and timeline entries are automatically rendered as clickable links
+
+### Custom Form Fields
+- **CC Field Type** — new CC field type added to the ticket form builder, allowing tickets to include a list of CC'd users
+- CC field rendered with user autocomplete on the ticket create form
+- Fix: image field configuration preserved correctly when saving field properties in the form builder
+
+### Portal
+- **Requester Self-Close** — portal users can close their own open tickets directly from the ticket detail page
+- **Requester Self-Edit** — portal users can edit the subject and description of their own open tickets
+- Both self-service actions write internal-only timeline entries (visible to agents and admins only) recording what changed
+- Portal users can now change their location assignment when creating a ticket
+- Open tickets and Resolved Today stat cards removed from the portal dashboard for a cleaner view
+
+### Groups & Notifications
+- Group new-ticket email notification toggle moved from the admin groups list to the individual group edit form
+
+### Email Templates
+- **Rich Text Intro Messages** — the Intro Message field on all email templates now uses a CKEditor 5 rich-text editor (bold, italic, lists, links); formatted HTML renders directly in outgoing emails
+- **Group Alerts Template** — new tab for customising the subject, intro message, and button label of the group alert email sent when a new ticket is assigned to a group with alerts enabled
+- **Shared Footer Tab** — dedicated tab for customising the shared footer text that appears on all outgoing ticket emails
+
+### Agent Help Documentation
+- Built-in help pages for agents at `/agent/help`, covering the dashboard, ticket list & filters, working on tickets, and canned responses
+- Accessible from a **Help** link in the agent sidebar (question-circle icon)
+- Includes a search widget on the overview page
+
+### Knowledge Base
+- Edit Article button added to KB article pages for admins and agents (no longer requires navigating back to the article list)
+- Fix: agents can now access the KB article preview route
+
+### Dashboard & Ticket List
+- Agent dashboard stat cards now link directly to the filtered ticket list for that stat
+- Ticket list displays a filtered count vs total (e.g. "Showing 12 of 47") when filters are active
+- **Inline Ticket List Actions** — hovering the Agent, Type, or Group column on any ticket row reveals a chevron; clicking it opens a dropdown to reassign the agent, change the type, or change the group without opening the ticket
+- Agent quick-assign dropdown is filtered to members of the ticket's group when a group is set
+- **Column Picker on Agent Dashboard** — the Recent Tickets widget on the agent dashboard includes the column picker and the same inline Agent/Type/Group chevron actions
+
+### Tags
+- Tags feature can now be toggled on or off from Admin → Settings
+
+### Location Management
+- **Bulk Reassign on Location Delete** — deleting a location that has tickets now prompts to reassign those tickets to another location before deletion
+
+### Bug Fixes
+- Fix: profile page now correctly saves notification preferences
+- Fix: password change and notification preferences separated into independent form submissions to prevent conflicts
+- Fix: "View All" link on the dashboard Recent Tickets card correctly clears filters and shows all permitted tickets
+- Fix: ticket detail header action buttons wrap correctly on mobile screens instead of causing horizontal scroll
+- Fix: tickets without a type assigned display "Not Set" rather than a blank value
+- Fix: "Knowledge Base Articles" label corrected in the global search box
+
+---
+
+## 2.0.0 — 2026-03-03
+
+### Mobile REST API
+- Full REST API with Bearer token authentication for mobile and third-party integrations
+- Endpoints covering tickets, comments, users, groups, knowledge base articles, and notifications
+- OpenAPI 3.0.3 specification at `openapi.json`
+- API tokens stored as hashes at rest with configurable expiry and rotation support
+- CSRF protection on all session-authenticated JSON API endpoints
+- Group-based ticket access enforced on all individual-ticket API endpoints
+
+### Power User Role
+- New `power_user` role — full agent access plus access to Reports & Analytics
+- Selectable on user create, edit, and import flows
+- Fully supported throughout the API and all role-guarded routes
+
+### Portal Improvements
+- Portal ticket list defaults to own tickets and open status on first load
+- **My Location** toggle for users eligible to view tickets from their location
+- Portal users without a location assignment are prompted to choose one when creating a ticket
+- Portal onboarding tour (Driver.js) covering key pages; extended to include the profile page
+
+### Ticket List Enhancements
+- **Multi-Select Filter Checkboxes** — filter by multiple statuses, priorities, types, groups, and agents simultaneously on the admin and agent ticket lists
+- **Multi-Select Filters on Admin Users Page** — filter users by multiple roles and locations at once
+- **Per-Page Selector** — choose how many tickets appear per page (25 / 50 / 100)
+- **Watched Tickets Filter** — filter the ticket list to tickets you are watching
+- **Search by Ticket ID** — enter a ticket number in the global search box to jump directly to that ticket
+- Saved filters moved to the top of the filter panel for quicker access
+- Filter state persisted across navigation within the same browser session
+
+### Ticket Actions & Workflow
+- **Auto-Assign on First Reply** — ticket automatically assigned to the agent or admin who posts the first public reply if previously unassigned
+- **Choose Primary Ticket on Merge** — modal prompts the user to designate which ticket is primary; primary ticket inherits the highest priority of either ticket
+- **Linkify Merged Ticket Numbers** — merged ticket reference numbers in the timeline are rendered as clickable links
+- **Ticket Filter Panel on User Profile** — admin user profile pages include a filterable ticket list showing all tickets created by that user
+
+### User Management
+- **Delete User with Data** — option to delete a user along with all their tickets, comments, and attachments in a single operation
+- **Admin User Merge** — merge duplicate user accounts, reassigning all tickets and comments to the surviving account
+- **Ticket Transfer on Deletion** — when deleting a user, choose to reassign their open tickets to another agent before the account is removed
+- Group membership shown on agent and admin edit pages
+
+### Email & Notifications
+- **Email Notifications Settings Page** — dedicated page at Admin → Settings → Email Notifications to manage all outgoing notification hooks
+- **Group Email Notifications** — optional email alert to all group members when a new ticket is assigned to that group
+- **Microsoft Graph App Secret Expiry Reminders** — warning banner and scheduled reminder emails when the configured Graph API client secret is nearing expiry
+
+### Location & Timezone
+- **Per-Location Timezone** — each location can have its own timezone used for SLA business-hours calculations; falls back to the global app timezone if not set
+- **Location Ticket Visibility Flag** — optionally restrict a user's ticket view to tickets from their assigned location only
+
+### Branding & Settings
+- Configurable navbar fallback icon selectable from the Branding settings page
+- CSAT survey email template added to the customisable email templates list
+
+---
+
+## 1.1.1 — 2026-03-02
+
+### Microsoft 365 SSO
+- Single sign-on via OAuth 2.0 Authorization Code flow using Microsoft Entra ID (Azure AD)
+- Configure client ID, tenant ID, and client secret under Settings → Microsoft 365 SSO
+- "Sign in with Microsoft" button on the login page; HTTPS scheme auto-detected for redirect URI
+- SSO debug logging available for troubleshooting login failures
+
+### Email-to-Ticket
+- Inbound emails to a monitored Microsoft Graph mailbox are automatically converted to new tickets
+- Sender looked up by email address; new portal user account created if no match found
+- Subject becomes the ticket subject; plain-text body becomes the description
+- Runs as part of `scripts/process-replies.php`
+
+### Ticket Watching
+- Agents and admins can watch any ticket to receive notifications on all updates
+- Watch/unwatch toggle on the ticket detail view
+- Watched tickets appear in the **Watched** filter on the ticket list
+
+### Ticket Splitting
+- Split a single ticket into two separate tickets from the ticket detail view (admin and agent panels)
+- Choose which timeline entries to move to the new ticket
+- Both tickets retain the original metadata; a system note links them
+
+### Canned Responses
+- Admins and agents can create personal canned response snippets for common replies
+- Insert into the reply box from a dropdown picker on the ticket detail view
+- Token substitution: `{{ticket_id}}`, `{{ticket_subject}}`, `{{user_name}}`, `{{agent_name}}`
+
+### Reply / Forward / Note Panel
+- Ticket detail reply area replaced with a tabbed panel supporting **Reply**, **Forward**, and **Note** modes
+- Forward mode sends the ticket content to an external email address
+- Note mode creates an internal note (hidden from portal users)
+
+### User Import from CSV
+- Bulk import user accounts from a CSV file at Admin → Settings → Import Users
+- Flexible column-mapping step to match CSV headers to OpenHelpDesk fields
+- Dry-run preview shows row count, role breakdown, and detected duplicates before committing
+- Skipped rows downloadable as a CSV after import
+- Sample CSV available for download from the import page
+
+### Holidays / Closed Days Management
+- Configure public holidays and custom closed days at Admin → Settings → Holidays
+- Per-holiday toggle to exclude the day from SLA business-hours calculations
+- Integrated into the business-hours-aware SLA timer
+
+### Waiting-on-Customer Reminder Email
+- Escalation rule action that sends an automated reminder to the ticket submitter when a ticket has been in **Waiting on Customer** status for a configurable period
+
+### Automatic Database Migration System
+- Schema changes applied automatically on each request if new migration files are present
+- Migrations tracked in the `migrations` table; idempotent and safe to re-run
+- New migrations added via numbered PHP files in `database/migrations/`
+
+### Versioning System
+- `APP_VERSION` constant defined in `config/version.php` following Semantic Versioning
+- Current version displayed in the user dropdown menu
+
+### Timeline Improvements
+- Timeline entries shown in reverse chronological order (most recent first)
+- Long timelines collapsed to the 10 most recent entries with an **Expand** button to show all
+
+### Agent Onboarding Tour
+- Spotlight-style step-by-step tour for new agent accounts covering the dashboard, ticket list, and ticket detail view
+- Replayable from the user dropdown
+
+### Automations — Nested Boolean Logic
+- Automation conditions now support nested AND / OR groups for complex rule matching
+
+### SMTP Debug Logging
+- SMTP session log written to `storage/logs/smtp.log` with a toggle in Settings → Email
+- Useful for diagnosing delivery issues without exposing credentials
+
+### Label Customisation
+- The word "Location" throughout the UI is driven by a configurable label, allowing sites to substitute their preferred term (e.g. "Branch", "Site")
+
+### Scheduled Reports — Schedule Button
+- "Schedule" button added to each individual report page as a shortcut to create a scheduled report for that report type
+
+### Users Filter Slide-Out Panel
+- Admin users list filter bar replaced with a slide-out panel matching the ticket list panel style
+
+### Admin Tools
+- **Admin Password Rescue Script** — command-line script to reset an admin password or change a user's role when locked out of the UI
+- **Danger Zone Full Reset** — settings page option to wipe all application data and re-run the setup wizard
+- Post-install success page now shows next-steps checklist including cron job setup instructions
+
+---
+
+## 1.1.0 — 2026-03-02
+
+### Bulk Ticket Actions
+- Checkbox column on admin and agent ticket list pages for multi-select
+- Bulk action bar appears when one or more tickets are selected
+- Supported actions: **Assign** (opens agent picker modal), **Close**, **Merge** (lowest-numbered ticket becomes primary), **Delete** (admin only)
+- Select-all checkbox in the table header with indeterminate state
+- Sticky table header so column names stay visible while scrolling long lists
+- Backend route handlers at `POST /admin/tickets/bulk` and `POST /agent/tickets/bulk`
+
+### Reports Navigation Improvement
+- Removed tab-strip nav from all report pages; navigation is now exclusively through the clickable report tiles on the Reports Overview page
+
+### PHPUnit Integration Test Suite
+- 314 automated tests covering authentication, admin and agent ticket flows, portal features, reports, KB, settings, and more
+- Live HTTP tests using Guzzle against a PHP built-in server
+- `DatabaseSeeder` creates and tears down isolated test fixtures
+- Run with `./vendor/bin/phpunit`
+
+### Slide-Out Filter Panel
+- Ticket list filters moved from inline to a collapsible slide-out panel on the right
+- Panel state (open/closed) persists in `sessionStorage` across navigation
+- Applies to both admin (`/admin/tickets`) and agent (`/agent/tickets`) ticket lists
+
+### Ticket Templates
+- Reusable templates with name, description, subject, body, type, and priority fields
+- Admins and agents can create, edit, and delete templates; agents can only edit/delete their own
+- Mark a template as **shared** to make it available to portal users as a "Start from a Template" picker on the ticket create form
+- JS auto-fills subject, body, type, and priority fields when a template is selected — no AJAX needed
+- Managed at `/admin/ticket-templates`
+
+### Staff Ticket Creation
+- Admins and agents can create tickets directly at `/admin/tickets/create` and `/agent/tickets/create`
+- Full field control: subject, description, type, priority, location, status, assigned agent, group, due date, tags
+- Admins can create a ticket **on behalf of** another portal user (sets `created_by` to that user)
+- Template picker with JS auto-fill available on the creation form
+
+### Two-Factor Authentication (TOTP)
+- Optional TOTP-based 2FA for admin and agent accounts
+- Setup at `/profile/2fa/setup` using any authenticator app (Google Authenticator, Authy, etc.)
+- QR code and manual entry key displayed on setup page
+- Admins can reset a user's 2FA from the user management page (`POST /admin/users/{id}/reset-2fa`)
+- Portal users do not have access to 2FA (not required for end-user accounts)
+
+### Admin Audit Log
+- Comprehensive trail of all admin actions: user creation/deletion, role changes, settings updates, and more
+- Displayed at `/admin/audit-log` with actor, action, target, and timestamp
+- Records stored in the `audit_log` table
+
+### Per-User Email Notification Preferences
+- Users can opt in or out of specific email notification types from the My Profile page
+- Preference categories: ticket created, ticket updated, @mention
+- Preferences stored per-user and checked before every outgoing notification email
+
+### User Profile View (Admin)
+- Admins can view any user's profile page at `/admin/users/{id}`
+- Shows user details, role, and a list of open tickets created by that user
+
+### KB Article Feedback, Version History, and Public KB
+- **Feedback** — portal users can rate KB articles as helpful or not helpful; ratings stored in `kb_article_ratings`
+- **Version History** — every article save creates a revision record in `kb_article_revisions`; admins can view the revision list and restore any prior version
+- **Public KB** — KB categories and articles can be marked public; accessible at `/kb` without login; full-text article search available at `/kb/search`
+
+### Five New Reports (Batch 2)
+- **Agent Workload** (`/admin/reports/workload`) — heatmap of open ticket counts per agent, broken down by status and SLA state
+- **Ticket Trends** (`/admin/reports/trends`) — multi-line volume trend over time, drillable by ticket type or location
+- **FCR Rate** (`/admin/reports/fcr`) — first-contact resolution rate with agent breakdown
+- **Custom Builder** (`/admin/reports/custom`) — pick any metric, group-by field, and date range to build an ad-hoc report
+- **Scheduled Reports** — configure any report to run automatically on a schedule and email the results; managed at `/admin/settings/scheduled-reports`
+
+### Five New Reports (Batch 1)
+- **Response Times** (`/admin/reports/response-times`) — average first-response and resolution times by priority
+- **Ticket Lifecycle** (`/admin/reports/lifecycle`) — average time tickets spend in each status stage
+- **By Location** (`/admin/reports/location`) — ticket volume and resolution rates per location
+- **SLA Compliance** (`/admin/reports/sla`) — SLA met vs breached rates with breached ticket list
+- **Unresolved Tickets** (`/admin/reports/unresolved`) — all unresolved tickets with aging breakdown
+
+### CSAT Surveys
+- Satisfaction survey email sent automatically after a ticket is resolved
+- Configurable under Admin → Settings → CSAT (enable/disable, survey message, rating scale)
+- Survey responses stored in `csat_surveys` table
+- Results shown in the Satisfaction report (`/admin/reports/csat`)
+
+### Concurrent Viewer Warning
+- Presence detection on ticket detail views using the `ticket_presence` table
+- If another user opens the same ticket, a dismissible warning modal is shown
+- Presence records updated on page load and cleared on navigation away
+
+### Additional Ticket Statuses
+- **Waiting on Customer** — ticket is pending a response from the submitter
+- **Waiting on Third Party** — ticket is pending an external vendor or party
+- Both statuses are selectable from the status dropdown and appear in filters and reports
+
+### Escalation Rules
+- Time-based escalation policies configurable at Admin → Settings → Escalation Rules
+- Define an inactivity threshold (e.g. 24 hours without a response) and one or more actions (reassign agent, change priority, change status, add tag)
+- Can be scoped to specific ticket types, priorities, or groups
+- Escalation actions logged as internal timeline entries in `escalation_log`
+- Rules can be run immediately via the "Run Now" button
+
+### Custom Ticket Form Fields (Workflows)
+- Drag-and-drop form builder at `/admin/workflows/ticket-fields`
+- Supported field types: short text, long text, dropdown, multi-select, checkbox
+- Fields appear on the ticket create and detail views for all roles
+- Fields soft-deleted (hidden, not purged) to preserve historical data
+
+### Ticket Merge
+- Merge a duplicate ticket into a primary ticket from the ticket detail view
+- Timeline entries, CC users, and tags copied from source to target
+- Source ticket is closed and marked with a `merged_into_ticket_id` reference
+- Merge badge displayed in the ticket list for merged tickets
+
+### Saved & Default Ticket Filters
+- Save the current filter set as a named preset on the ticket list
+- Set any saved filter as the personal default (applied automatically on page load)
+- Share saved filters with the team; shared filters shown with a team icon
+- Filters stored in the `saved_filters` table per user
+
+### Persist Filters on Back Navigation
+- Ticket list URL (including all active filters and sort) stored in `sessionStorage`
+- Breadcrumb "Tickets" link on the ticket detail view restores the previous list URL
+
+### Knowledge Base Article CSV Import
+- Bulk import KB articles from a CSV file at Admin → Settings → Import KB
+- Required columns: `title`, `body_markdown`; optional: `category`, `status`, `tags`
+- Preview page shows article count, category breakdown, and draft/published split before committing
+- Auto-creates categories and "General" folders as needed
+- Transaction-based: all-or-nothing import for safety
+
+### Customizable Email Templates
+- Admins can edit the HTML body of outgoing email templates at Admin → Settings → Email Templates
+- Supported templates: ticket created, ticket updated, ticket merged
+- Placeholder variables: `{{ticket_id}}`, `{{ticket_subject}}`, `{{user_name}}`, `{{first_name}}`, `{{last_name}}`, `{{agent_name}}`, `{{ticket_url}}`
+
+### Microsoft Graph API (Email Reply Integration)
+- Alternative to IMAP for inbound email processing, using Microsoft 365 / Exchange Online via OAuth2
+- Configure client ID, tenant ID, and client secret in Settings → Email → Graph API tab
+- "Run Now" button in Settings to process the inbox immediately without waiting for cron
+- Replaces the earlier IMAP implementation while keeping the same `process-replies.php` interface
+
+### Email Reply Integration (IMAP)
+- Inbound email parsing to add replies to tickets automatically as comments
+- Match incoming messages to tickets via `Message-ID` / `In-Reply-To` headers and `X-Ticket-ID` header
+- Strip email signatures and quoted text to extract only the new reply content
+- Respect role permissions: portal user replies become public comments; agent/admin replies follow their default visibility
+- Reject replies from unknown senders
+
+### Dark Mode / Light Mode
+- Per-user theme preference (light or dark) selectable from My Profile
+- Leverages Bootstrap 5.3 native `data-bs-theme` attribute for automatic component theming
+- Custom dark mode overrides for sidebar, search dropdown, stat cards, and table headers
+- Theme preference stored in the `settings` table and applied on every page load
+
+### User Profile (Name & Password)
+- "My Profile" page at `/profile` for all authenticated users
+- Update first name and last name; session refreshed immediately so the navbar reflects changes
+- Password change with current-password verification, minimum-length enforcement, and confirmation matching
+
+### Ticket Export (CSV)
+- Export the current filtered ticket list as a CSV file from the admin ticket list
+- Respects all active filters: status, priority, type, location, agent, group, search query, date range
+- Exported columns: ID, subject, status, priority, type, location, group, assigned agent, creator, tags, created date, due date, SLA state
+- UTF-8 BOM for seamless Excel compatibility
+
+### Branding Settings
+- Admin-configurable branding page at Admin → Settings → Branding
+- Custom logo upload (JPG, PNG, GIF, WEBP, SVG) displayed in the navbar
+- Configurable application name shown in navbar, page titles, login page, and emails
+- Color scheme: primary color, primary hover, navbar gradient start/end, timeline entry colors (internal notes, system events)
+- Live preview panel showing navbar, button, badge, and login page appearance
+- Reset to defaults button; all colors implemented as CSS variables
+
+### Automations
+- Rule-based ticket automation at Admin → Settings → Automations
+- Triggers: ticket created, ticket updated
+- Condition operators: equals, not equals, is empty, is not empty
+- Actions: set group, assign agent, set priority, set status, add tag
+- Multiple conditions (AND logic) and multiple actions per rule
+- Enable/disable toggle and sort-order control per rule
+
+### Database Backup
+- One-click backup from Admin → Settings → Backup
+- Produces a `.zip` containing a full `mysqldump` of all tables plus uploaded attachments, branding assets, and avatars
+- Backups stored in `storage/backups/` (outside webroot)
+- Download and delete existing backups from the same page
+
+### Onboarding Tour & Admin Docs
+- Six-step walkthrough shown automatically on first admin login
+- Replayable from the user dropdown → "Take the Tour"
+- Built-in admin documentation at `/admin/docs` with sections on tickets, users, SLA, automations, branding, portal, import, and the knowledge base
+
+### Agent Group Scoping
+- Agents who belong to one or more groups see only tickets assigned to those groups in their ticket queue and dashboard stats
+- Admins always see all tickets regardless of group membership
+- Group restriction banner shown in the agent ticket list when scoping is active
+
+---
+
+## 1.0.0 — 2026-02-13
+
+Initial release.
+
+### Ticket Management
+- Create, view, and comment on tickets through the portal
+- Ticket statuses: open, in progress, pending, resolved, closed
+- Priority levels with color-coded badges (Low, Medium, High, Critical)
+- Ticket types for categorization (IT, Marketing, Facilities, Collections, Lifelong Learning, Circulation)
+- Location tagging for multi-branch support
+- Tag/hashtag system for ticket classification
+- File attachments on tickets and comments (PDF, JPEG, PNG; max 20 MB)
+- Browser and OS auto-detection on ticket creation
+- Due date tracking with overdue highlighting
+
+### Agent Workflow
+- Agent dashboard with real-time stats (unassigned, my tickets, pending, resolved today)
+- Full ticket queue with SLA state indicators
+- Update ticket status, priority, and assignment from the ticket detail view
+- Public comments and internal notes (internal notes hidden from portal users)
+- @mention system to notify colleagues in comments
+- First response time tracking for SLA compliance
+
+### SLA System
+- Business hours configuration with timezone support and per-day scheduling
+- SLA policies per priority level (first response and resolution targets in business minutes)
+- Automatic SLA state computation: on track, warning (80% elapsed), breached
+- Pause/resume on pending status with deadline extension
+- Recalculation on priority changes
+- Cron script for periodic SLA state updates
+- Admin recalculate button for immediate refresh
+
+### Knowledge Base
+- Three-tier hierarchy: categories, folders, articles
+- Markdown article editor with CommonMark rendering
+- Draft and published article statuses
+- Full-text search from the portal
+- KB article suggestions when creating a ticket (subject autocomplete)
+
+### User Management
+- Three roles: admin, agent, end user
+- User CRUD with avatar upload (JPG, PNG, GIF, WEBP; max 2 MB)
+- Location assignment per user
+- Work phone field
+
+### Groups
+- Organizational groups for agents and admins
+- Multi-group membership
+- Seeded groups: IT, Collections, Facilities, Lifelong Learning, Marketing, Circulation
+
+### Notifications
+- In-app notifications from @mentions in ticket comments
+- Unread count badge with 15-second polling
+- Mark read individually or all at once
+
+### Email
+- SMTP configuration through admin settings UI
+- Ticket creation confirmation email to the submitter
+- Ticket update email when agents add public comments
+- Message-ID threading for email client grouping
+- Test email button to verify SMTP configuration
+
+### Settings
+- Email / SMTP configuration
+- Business hours and timezone
+- SLA policies per priority
+- Location management
+- Priority management with color picker
+- Ticket type management
+- Group management with member assignment
+
+### Security
+- CSRF protection on all forms
+- Bcrypt password hashing
+- Prepared statements for all database queries
+- HTML output escaping
+- Role-based access control on every route
+- File upload MIME type and size validation
+- Attachments stored outside the web root
+- Internal notes restricted to agents and admins

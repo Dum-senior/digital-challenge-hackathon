@@ -1,0 +1,11350 @@
+<?php
+
+declare(strict_types=1);
+
+// Functions in this file use these classes (AI routing/classification, Teams
+// posts, Auth::id() in the notify helpers), and cron scripts load helpers.php
+// without the web bootstrap. Without them, inbound email died after inserting
+// each ticket and never marked the message read, so one email became a new
+// ticket every minute. Auth::id() is simply null outside a web session.
+require_once __DIR__ . '/AI.php';
+require_once __DIR__ . '/Auth.php';
+require_once __DIR__ . '/Teams.php';
+
+/**
+ * Load environment variables from a .env file.
+ */
+function loadEnv(string $path): void
+{
+    if (!file_exists($path)) {
+        return;
+    }
+
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+        if (!str_contains($line, '=')) {
+            continue;
+        }
+
+        [$key, $value] = explode('=', $line, 2);
+        $key   = trim($key);
+        $value = trim($value);
+
+        if (preg_match('/^"(.*)"$/s', $value, $m)) {
+            $value = $m[1];
+        } elseif (preg_match("/^'(.*)'$/s", $value, $m)) {
+            $value = $m[1];
+        }
+
+        $_ENV[$key] = $value;
+        putenv("{$key}={$value}");
+    }
+}
+
+function env(string $key, string $default = ''): string
+{
+    return $_ENV[$key] ?? (getenv($key) ?: $default);
+}
+
+/**
+ * Prompt for a password on the CLI (used by the database seeders).
+ *
+ * There are deliberately NO generic/default passwords anywhere in this project:
+ * whoever runs a seeder chooses the account passwords here. For unattended /
+ * scripted installs the value can be supplied via an environment variable
+ * ($envVar) instead of being typed.
+ *
+ * Input echo is suppressed on POSIX shells via `stty`; on Windows (no stty) the
+ * password is read normally — keystrokes may be visible, which is acceptable for
+ * a one-off local install step.
+ *
+ * @param string      $label   Human description of the account, e.g. "the Admin account".
+ * @param string|null $envVar  Optional env var to read a non-interactive value from.
+ * @param int         $minLen  Minimum acceptable length.
+ */
+function promptForPassword(string $label, ?string $envVar = null, int $minLen = 8): string
+{
+    if ($envVar !== null) {
+        $fromEnv = getenv($envVar);
+        if ($fromEnv !== false && $fromEnv !== '') {
+            if (strlen($fromEnv) < $minLen) {
+                fwrite(STDERR, "[ERROR] {$envVar} must be at least {$minLen} characters.\n");
+                exit(1);
+            }
+            fwrite(STDOUT, "Using password for {$label} from \${$envVar}.\n");
+            return $fromEnv;
+        }
+    }
+
+    $canHide = DIRECTORY_SEPARATOR !== '\\' && @shell_exec('command -v stty 2>/dev/null');
+
+    $read = static function () use ($canHide): string {
+        if ($canHide) {
+            shell_exec('stty -echo');
+        }
+        $line = fgets(STDIN);
+        if ($canHide) {
+            shell_exec('stty echo');
+            fwrite(STDOUT, "\n");
+        }
+        return rtrim($line === false ? '' : $line, "\r\n");
+    };
+
+    while (true) {
+        fwrite(STDOUT, "Choose a password for {$label}: ");
+        $pw = $read();
+        if (strlen($pw) < $minLen) {
+            fwrite(STDOUT, "  Password must be at least {$minLen} characters. Try again.\n");
+            continue;
+        }
+        fwrite(STDOUT, "Confirm password for {$label}: ");
+        if ($pw !== $read()) {
+            fwrite(STDOUT, "  Passwords did not match. Try again.\n");
+            continue;
+        }
+        return $pw;
+    }
+}
+
+/**
+ * Return the application base URL with the correct scheme.
+ * Detects HTTPS from the live request (including reverse-proxy headers)
+ * so the value is accurate even when APP_URL still says http://.
+ */
+function appUrl(): string
+{
+    // Detect scheme from the current request
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ($_SERVER['SERVER_PORT'] ?? 80) == 443
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        || (($_SERVER['HTTP_X_FORWARDED_SSL']   ?? '') === 'on');
+
+    $scheme = $isHttps ? 'https' : 'http';
+
+    // If APP_URL is configured, just fix its scheme and return it
+    $appUrl = env('APP_URL', '');
+    if ($appUrl !== '') {
+        return preg_replace('#^https?://#', $scheme . '://', rtrim($appUrl, '/'));
+    }
+
+    // Fall back to building the URL from server variables. Prefer SERVER_NAME
+    // (pinned by the web server's ServerName / server_name) over the client-
+    // supplied Host header, so a "Host: evil.com" request can't poison absolute
+    // links baked into emails (e.g. password-reset URLs). Set APP_URL in .env to
+    // make this deterministic — the installer always writes it.
+    $host = $_SERVER['SERVER_NAME'] ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return $scheme . '://' . $host;
+}
+
+function redirect(string $url, int $status = 302): never
+{
+    header("Location: {$url}", true, $status);
+    exit;
+}
+
+/**
+ * Pop and validate the post-login return URL stashed by Auth::requireAuth()
+ * (or the /login?next= GET handler). Returns "/" when nothing is stashed or
+ * when the stashed value fails the safe-relative-URL check — prevents an
+ * attacker from crafting an open-redirect via the session.
+ *
+ * Accepts only paths beginning with a single forward slash. Rejects:
+ *   - empty or non-string values
+ *   - absolute URLs ("http://..." / "https://...")
+ *   - protocol-relative URLs ("//evil.com/x")
+ *   - backslash variants ("/\evil.com/x") that some user-agents normalise
+ *   - values longer than 2000 chars (defensive against odd cookie/state)
+ */
+function consumeIntendedUrl(string $fallback = '/'): string
+{
+    $intended = $_SESSION['intended_url'] ?? null;
+    unset($_SESSION['intended_url']);
+
+    if (!is_string($intended) || $intended === '' || strlen($intended) > 2000) {
+        return $fallback;
+    }
+    if ($intended[0] !== '/') {
+        return $fallback;
+    }
+    if (isset($intended[1]) && ($intended[1] === '/' || $intended[1] === '\\')) {
+        return $fallback;
+    }
+    return $intended;
+}
+
+/**
+ * Validate a caller-supplied redirect target, returning it only when it is a
+ * safe same-site relative path (leading single "/", no "//" or "/\" that would
+ * become a protocol-relative off-site URL). Anything else returns $fallback.
+ * Use for any redirect built from request input (e.g. a `_redirect` form field).
+ */
+function safeRedirectPath(?string $url, string $fallback = '/'): string
+{
+    if (!is_string($url) || $url === '' || strlen($url) > 2000) {
+        return $fallback;
+    }
+    if ($url[0] !== '/') {
+        return $fallback;
+    }
+    if (isset($url[1]) && ($url[1] === '/' || $url[1] === '\\')) {
+        return $fallback;
+    }
+    return $url;
+}
+
+/**
+ * Read a query-string parameter that must be a single scalar, never an array.
+ *
+ * PHP turns `?sort[]=x` into an array, and using an array as an array offset is
+ * a fatal `TypeError: Illegal offset type` in PHP 8 — including inside `isset()`
+ * and on the left of `??`, neither of which suppresses it. So the usual
+ * whitelist idioms
+ *
+ *     $orderCol = $sortableColumns[$_GET['sort'] ?? 'created_at'] ?? 'default';
+ *     $sort     = isset($sortableColumns[$_GET['sort'] ?? '']) ? ... : ...;
+ *
+ * both 500 on `?sort[]=x` rather than falling back. The whitelist still makes
+ * them injection-safe; they just crash before they get there.
+ *
+ * Returns $default for a missing value, an array, or anything else non-scalar.
+ */
+function requestScalar(string $key, string $default = ''): string
+{
+    $value = $_GET[$key] ?? null;
+
+    if (is_string($value)) {
+        return $value;
+    }
+    // Numeric/bool values arrive as strings from a query string, but be explicit
+    // so a caller passing a non-GET array through this cannot surprise us.
+    if (is_int($value) || is_float($value) || is_bool($value)) {
+        return (string) $value;
+    }
+
+    return $default;
+}
+
+function render(string $view, array $data = []): never
+{
+    // Defaults
+    $layout       = 'base';
+    $pageTitle    = 'OpenHelpDesk';
+    $breadcrumbs  = [];
+    $sidebarItems = [];
+    $error        = '';
+    $email        = '';
+
+    // Caller overrides
+    extract($data);
+
+    // Always available
+    $user = Auth::user();
+
+    // Capture the page content
+    ob_start();
+    require ROOT_DIR . '/templates/pages/' . $view . '.php';
+    $content = ob_get_clean();
+
+    // Clear old-input after template has consumed it
+    unset($_SESSION['_old_input']);
+
+    // Render within layout
+    require ROOT_DIR . '/templates/layouts/' . $layout . '.php';
+    exit;
+}
+
+/* ── CSRF ─────────────────────────────────────────────────────── */
+
+function csrfToken(): string
+{
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrfField(): string
+{
+    return '<input type="hidden" name="_token" value="' . e(csrfToken()) . '">';
+}
+
+function verifyCsrf(?string $token): bool
+{
+    if ($token === null || $token === '') {
+        return false;
+    }
+    // Fail closed when this session has never been issued a token. Without this,
+    // hash_equals('', '') is TRUE, so a request supplying no token at all passed
+    // the check on any session where csrfToken() had not run yet. That never
+    // mattered for the authenticated forms (rendering them issues a token), but
+    // it silently neutered the guard on guest endpoints, where a fresh visitor's
+    // session is empty by definition.
+    $expected = $_SESSION['csrf_token'] ?? '';
+    if ($expected === '') {
+        return false;
+    }
+    return hash_equals($expected, $token);
+}
+
+/**
+ * Persist a custom sort_order for a list, given the desired row order.
+ * Backs the drag-to-reorder + Save Order UI in templates/partials/sortable-list.php.
+ *
+ * Reads the POST body (JSON { ids: [...] }) and the X-CSRF-Token header,
+ * writes sort_order = position * 10 for each matching row, and emits the
+ * JSON response. Always exits after responding.
+ */
+function handleSortableReorder(string $table, string $idColumn = 'id'): void
+{
+    header('Content-Type: application/json');
+    if (!verifyCsrf($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
+        exit;
+    }
+    $body = json_decode(file_get_contents('php://input'), true);
+    $ids  = $body['ids'] ?? null;
+    if (!is_array($ids)) {
+        echo json_encode(['success' => false, 'error' => 'Missing ids.']);
+        exit;
+    }
+    // Whitelist table + column names against literal allow-list — these are
+    // hardcoded in admin routes, never user-supplied, but defence in depth.
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table) || !preg_match('/^[a-zA-Z0-9_]+$/', $idColumn)) {
+        echo json_encode(['success' => false, 'error' => 'Bad table.']);
+        exit;
+    }
+
+    $db   = Database::connect();
+    $stmt = $db->prepare("UPDATE `{$table}` SET sort_order = ? WHERE `{$idColumn}` = ?");
+    $db->beginTransaction();
+    try {
+        foreach ($ids as $i => $id) {
+            $stmt->execute([$i * 10, (int) $id]);
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        echo json_encode(['success' => false, 'error' => 'Could not save order.']);
+        exit;
+    }
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+/**
+ * Enforce CSRF on a JSON/fetch endpoint that reads its body from php://input.
+ * The browser sends the token in the X-CSRF-Token header (see the postJson
+ * helper + <meta name="csrf-token"> in the app layout). Emits a 403 JSON error
+ * and exits on failure. Call right after the Auth:: gate, before reading input.
+ */
+function requireJsonCsrf(): void
+{
+    if (!verifyCsrf($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
+        exit;
+    }
+}
+
+/**
+ * Delete a saved ticket draft once its form has actually been submitted.
+ * Called from the create/comment POST handlers so a successful submit always
+ * clears the autosaved draft, even if the client-side JS never ran.
+ */
+function ticketDraftDelete(PDO $db, int $userId, string $context, int $ticketId = 0): void
+{
+    try {
+        $db->prepare('DELETE FROM ticket_drafts WHERE user_id = ? AND context = ? AND ticket_id = ?')
+           ->execute([$userId, $context, $ticketId]);
+    } catch (Throwable $e) {
+        // Draft cleanup must never break a successful submit.
+    }
+}
+
+/**
+ * Neutralise CSV / DDE formula injection. Spreadsheet apps (Excel, LibreOffice)
+ * execute a cell whose text begins with = + - @ (or a leading tab / CR). Prefix
+ * any such value with a single quote so it is treated as literal text. Run every
+ * user-influenced cell through this before writing it with fputcsv().
+ */
+function csvCell(mixed $value): string
+{
+    $s = (string) ($value ?? '');
+    if ($s !== '' && in_array($s[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+        return "'" . $s;
+    }
+    return $s;
+}
+
+/** fputcsv() that sanitises every cell against formula injection (see csvCell). */
+function fputcsvSafe($handle, array $row): void
+{
+    fputcsv($handle, array_map('csvCell', $row));
+}
+
+/**
+ * Stream an already-materialised table as a CSV download and stop the request.
+ *
+ * The report pages all end in a render() call with their rows already in memory,
+ * so there is nothing to stream lazily — the win here is that every report gets
+ * byte-identical headers, the Excel BOM, and formula-injection escaping without
+ * each route re-deriving them. Callers must apply their own permission gate
+ * first; this helper deliberately knows nothing about auth.
+ *
+ * Terminates the request, so it must be the last thing a route does.
+ */
+function reportCsvOut(string $filename, array $headers, array $rows): never
+{
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    $out = fopen('php://output', 'w');
+
+    // BOM for Excel UTF-8 compatibility
+    fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+    if (!empty($headers)) {
+        fputcsv($out, $headers);
+    }
+    foreach ($rows as $row) {
+        fputcsvSafe($out, array_values((array) $row));
+    }
+
+    fclose($out);
+    exit;
+}
+
+/**
+ * Rebuild the current report URL with `export=csv` appended.
+ *
+ * Reports export exactly what the filters on screen resolve to, so the button
+ * just re-requests the same querystring. Pagination and the AJAX flag are
+ * dropped: a spreadsheet of "page 3 of 12" is useless, and the export ignores
+ * LIMIT anyway.
+ */
+function reportExportCsvUrl(): string
+{
+    $params = $_GET;
+    unset($params['page'], $params['per_page'], $params['ajax'], $params['export']);
+    $params['export'] = 'csv';
+    return currentPath() . '?' . http_build_query($params);
+}
+
+/* ── Output helpers ───────────────────────────────────────────── */
+
+function e(?string $value): string
+{
+    return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
+function linkify(?string $value): string
+{
+    $escaped = htmlspecialchars($value ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    return preg_replace(
+        '/(https?:\/\/[^\s\'"<>]+)/i',
+        '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
+        $escaped
+    );
+}
+
+function currentPath(): string
+{
+    return parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+}
+
+function isActive(string $path): bool
+{
+    $current = currentPath();
+    return $current === $path || str_starts_with($current, $path . '/');
+}
+
+/* ── Form builder: per-ticket-type layout ──────────────────────── */
+
+/**
+ * Stable list of system-field keys (in default order). The form layout
+ * table allows admins to reorder them per ticket type, but these are the
+ * only known keys — anything else is treated as a custom field id.
+ */
+const SYSTEM_FIELD_KEYS = ['subject','description','ticket_type','location','priority','sla_notice','tags','attachments'];
+
+/**
+ * Default presentation for a system field — the seed an admin gets the
+ * first time they look at a new ticket type's form.
+ */
+function systemFieldDefaults(): array
+{
+    return [
+        'subject'     => ['sort_order' => 0,   'visibility' => 'required', 'lockedVisibility' => true,  'lockedOrder' => true],
+        'description' => ['sort_order' => 50,  'visibility' => 'required', 'lockedVisibility' => true,  'lockedOrder' => true],
+        'ticket_type' => ['sort_order' => 100, 'visibility' => 'required', 'lockedVisibility' => true,  'lockedOrder' => false],
+        'location'    => ['sort_order' => 200, 'visibility' => 'optional', 'lockedVisibility' => false, 'lockedOrder' => false],
+        'priority'    => ['sort_order' => 300, 'visibility' => 'optional', 'lockedVisibility' => false, 'lockedOrder' => false],
+        'sla_notice'  => ['sort_order' => 350, 'visibility' => 'optional', 'lockedVisibility' => false, 'lockedOrder' => false],
+        'tags'        => ['sort_order' => 400, 'visibility' => 'optional', 'lockedVisibility' => false, 'lockedOrder' => false],
+        'attachments' => ['sort_order' => 900, 'visibility' => 'optional', 'lockedVisibility' => false, 'lockedOrder' => false],
+    ];
+}
+
+/**
+ * Seed default layout rows for a newly-created ticket type. Idempotent —
+ * skips any row that already exists.
+ */
+function seedDefaultLayoutForType(PDO $db, int $typeId): void
+{
+    $insert = $db->prepare(
+        'INSERT IGNORE INTO ticket_type_form_layout
+            (type_id, field_kind, field_key, sort_order, visibility, label_override)
+         VALUES (?, ?, ?, ?, ?, NULL)'
+    );
+    foreach (systemFieldDefaults() as $key => $cfg) {
+        $insert->execute([$typeId, 'system', $key, $cfg['sort_order'], $cfg['visibility']]);
+    }
+}
+
+/**
+ * Return the full form layout for a single ticket type, in display order.
+ *
+ * Each row: [
+ *   'kind'           => 'system'|'custom',
+ *   'key'            => string                  (e.g. 'priority' or '42'),
+ *   'sort_order'     => int,
+ *   'visibility'     => 'required'|'optional'|'hidden',
+ *   'label_override' => ?string,
+ *   'label'          => string                  (resolved — override OR default),
+ *   'field'          => ?array                  (ticket_form_fields row for custom; null for system),
+ *   'condition_json' => ?string                 (raw stored condition, or null),
+ *   'condition'      => ?array                  (parsed condition; null = always show),
+ * ]
+ *
+ * Note that $visibleOnly filters on the stored `visibility` only — it does NOT
+ * evaluate conditions, which depend on who is asking and what they have typed
+ * so far. Callers rendering or validating a real submission should pass the
+ * layout through resolveLayoutVisibility().
+ *
+ * If $visibleOnly is true, rows with visibility = 'hidden' are dropped — use
+ * this when rendering the actual ticket-create form. Pass false for the
+ * builder UI.
+ */
+function getFormLayoutForType(PDO $db, ?int $typeId, bool $visibleOnly = false): array
+{
+    if (!$typeId) {
+        return [];
+    }
+    $stmt = $db->prepare(
+        'SELECT l.type_id, l.field_kind, l.field_key, l.sort_order, l.visibility, l.label_override,
+                l.condition_json,
+                f.id AS field_id, f.field_type, f.label AS field_label, f.placeholder, f.config
+         FROM ticket_type_form_layout l
+         LEFT JOIN ticket_form_fields f
+            ON l.field_kind = "custom" AND f.id = CAST(l.field_key AS UNSIGNED) AND f.deleted_at IS NULL
+         WHERE l.type_id = ?
+            AND (l.field_kind = "system" OR f.id IS NOT NULL)
+         ORDER BY l.sort_order, l.field_kind'
+    );
+    $stmt->execute([$typeId]);
+    $rows = $stmt->fetchAll();
+
+    $out = [];
+    foreach ($rows as $r) {
+        if ($visibleOnly && $r['visibility'] === 'hidden') continue;
+        $kind = $r['field_kind'];
+        $key  = $r['field_key'];
+
+        if ($kind === 'system') {
+            // Default label for a system field. getSetting() caches the first default it sees for a key, so this is THE default — the create forms inherit it.
+            $defaultLabel = (string) getSetting('sys_field_label_' . $key, $key === 'sla_notice' ? 'Service level targets' : ucfirst(str_replace('_', ' ', $key)));
+        } else {
+            $defaultLabel = (string) $r['field_label'];
+        }
+
+        $field = null;
+        if ($kind === 'custom' && $r['field_id'] !== null) {
+            $field = [
+                'id'          => (int) $r['field_id'],
+                'field_type'  => $r['field_type'],
+                'label'       => $r['field_label'],
+                'placeholder' => $r['placeholder'],
+                'config'      => $r['config'],
+            ];
+        }
+
+        $out[] = [
+            'kind'           => $kind,
+            'key'            => $key,
+            'sort_order'     => (int) $r['sort_order'],
+            'visibility'     => $r['visibility'],
+            'label_override' => $r['label_override'],
+            'label'          => $r['label_override'] ?: $defaultLabel,
+            'field'          => $field,
+            'condition_json' => $r['condition_json'],
+            'condition'      => parseFieldCondition($r['condition_json']),
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Resolve the visibility of a single field on a single ticket type's form.
+ * Returns 'required' | 'optional' | 'hidden'. If no layout row exists for
+ * this type/field, returns 'hidden' (defensive — caller should generally
+ * see the layout it just rendered).
+ */
+function resolveFieldVisibility(PDO $db, ?int $typeId, string $kind, string $key): string
+{
+    if (!$typeId) return 'hidden';
+    static $cache = [];
+    $ck = "{$typeId}|{$kind}|{$key}";
+    if (!array_key_exists($ck, $cache)) {
+        $stmt = $db->prepare(
+            'SELECT visibility FROM ticket_type_form_layout
+             WHERE type_id = ? AND field_kind = ? AND field_key = ?'
+        );
+        $stmt->execute([$typeId, $kind, $key]);
+        $cache[$ck] = $stmt->fetchColumn() ?: 'hidden';
+    }
+    return $cache[$ck];
+}
+
+/* ── Form builder: conditional fields ──────────────────────────── */
+
+/**
+ * Operators a 'field' condition may use. `filled` and `empty` ignore the
+ * condition's `value`.
+ */
+const FIELD_CONDITION_OPS = ['equals', 'not_equals', 'filled', 'empty'];
+
+/**
+ * Whether a user account is flagged as shared — a login used by more than one
+ * person, where the session may well not belong to whoever is at the keyboard.
+ *
+ * Read from the database rather than the session on purpose: the session array
+ * is built at login and would not reflect an admin flagging the account until
+ * the user signed out and back in, which for a permanently-signed-in shared
+ * workstation could be never.
+ */
+function userIsSharedAccount(PDO $db, ?int $userId): bool
+{
+    if (!$userId) {
+        return false;
+    }
+    static $cache = [];
+    if (!array_key_exists($userId, $cache)) {
+        $stmt = $db->prepare('SELECT is_shared_account FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $cache[$userId] = (int) $stmt->fetchColumn() === 1;
+    }
+    return $cache[$userId];
+}
+
+/**
+ * Validate a submitted `user_picker` value. Returns the user id, or null if it
+ * isn't one that the picker could legitimately have offered.
+ *
+ * The browser only ever posts an id it got from /api/user-search, so this is
+ * the guard against a hand-crafted POST naming somebody the picker excludes —
+ * an external requester, or another shared account, neither of which is a
+ * person you can attribute a ticket to.
+ */
+function validUserPickerId(PDO $db, $raw): ?int
+{
+    $raw = (string) ($raw ?? '');
+    if ($raw === '' || !ctype_digit($raw)) {
+        return null;
+    }
+    $stmt = $db->prepare(
+        'SELECT id FROM users WHERE id = ? AND is_external = 0 AND is_shared_account = 0'
+    );
+    $stmt->execute([(int) $raw]);
+    $id = $stmt->fetchColumn();
+    return $id ? (int) $id : null;
+}
+
+/**
+ * Resolve a stored `user_picker` value for display. Returns null when the value
+ * is empty or points at a user who no longer exists.
+ *
+ * The name and address are read live rather than copied into the ticket at
+ * submission, so a ticket raised by someone who has since married, changed
+ * department or changed address still shows how to reach them today. The
+ * trade-off is that a deleted user leaves the field blank — see the caller,
+ * which renders that the same as an unanswered field.
+ *
+ * @return array{id:int, name:string, email:string}|null
+ */
+function userPickerDisplay(PDO $db, $value): ?array
+{
+    $value = (string) ($value ?? '');
+    if ($value === '' || !ctype_digit($value)) {
+        return null;
+    }
+    static $cache = [];
+    $id = (int) $value;
+    if (!array_key_exists($id, $cache)) {
+        $stmt = $db->prepare('SELECT id, first_name, last_name, email FROM users WHERE id = ?');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        $cache[$id] = $row ? [
+            'id'    => (int) $row['id'],
+            'name'  => trim($row['first_name'] . ' ' . $row['last_name']),
+            'email' => (string) $row['email'],
+        ] : null;
+    }
+    return $cache[$id];
+}
+
+/**
+ * Parse and validate a layout row's stored condition. Returns null for "no
+ * condition — always show", which is also what anything malformed produces:
+ * a field with an unreadable condition should appear on the form rather than
+ * silently disappear from it.
+ *
+ * @return array{type:string, field?:string, op?:string, value?:string}|null
+ */
+function parseFieldCondition(?string $json): ?array
+{
+    if ($json === null || trim($json) === '') {
+        return null;
+    }
+    $c = json_decode($json, true);
+    if (!is_array($c) || empty($c['type'])) {
+        return null;
+    }
+
+    if ($c['type'] === 'shared_account') {
+        return ['type' => 'shared_account'];
+    }
+
+    if ($c['type'] === 'field') {
+        $field = (string) ($c['field'] ?? '');
+        $op    = (string) ($c['op'] ?? 'equals');
+        if ($field === '' || !in_array($op, FIELD_CONDITION_OPS, true)) {
+            return null;
+        }
+        return [
+            'type'  => 'field',
+            'field' => $field,
+            'op'    => $op,
+            'value' => (string) ($c['value'] ?? ''),
+        ];
+    }
+
+    return null;
+}
+
+/**
+ * Reduce a submitted custom field to the single scalar its conditions compare
+ * against. Multi-input field types collapse to the part that decides whether
+ * the field counts as answered.
+ */
+function customFieldPostedValue(array $field, array $post): string
+{
+    $key  = 'field_' . $field['id'];
+    $type = $field['field_type'];
+
+    if ($type === 'checkbox') {
+        return isset($post[$key]) ? '1' : '0';
+    }
+    if ($type === 'dependent') {
+        return trim((string) ($post[$key . '_l1'] ?? ''));
+    }
+    if ($type === 'date_range') {
+        return trim((string) ($post[$key . '_from'] ?? ''));
+    }
+    if ($type === 'cc') {
+        $ids = array_filter(array_map('intval', (array) ($post['cc_field_' . $field['id']] ?? [])));
+        return $ids ? (string) reset($ids) : '';
+    }
+    return trim((string) ($post[$key] ?? ''));
+}
+
+/**
+ * Evaluate one parsed condition.
+ *
+ * $postedByFieldId is [custom field id => scalar submitted value], built with
+ * customFieldPostedValue(). A condition pointing at a field that isn't on this
+ * form reads as an empty value, so `equals` fails and `empty` passes — the
+ * field it guards stays hidden unless something explicitly matched.
+ *
+ * This is a single non-recursive pass: it compares stored/submitted values and
+ * never re-evaluates the source field's own condition. That is what makes a
+ * cycle (A shows B, B shows A) harmless rather than something needing detection.
+ *
+ * $actorId is whoever is filling in the form — the session user, not the
+ * ticket's requester. For a shared login the two differ by design: an agent
+ * raising a ticket on someone else's behalf is not on a shared workstation
+ * just because the person they are helping is.
+ */
+function evaluateFieldCondition(PDO $db, ?array $cond, array $postedByFieldId, ?int $actorId): bool
+{
+    if ($cond === null) {
+        return true;
+    }
+
+    if ($cond['type'] === 'shared_account') {
+        return userIsSharedAccount($db, $actorId);
+    }
+
+    if ($cond['type'] === 'field') {
+        $actual = (string) ($postedByFieldId[(int) $cond['field']] ?? '');
+        switch ($cond['op']) {
+            case 'filled':     return $actual !== '' && $actual !== '0';
+            case 'empty':      return $actual === '' || $actual === '0';
+            case 'not_equals': return $actual !== $cond['value'];
+            case 'equals':
+            default:           return $actual === $cond['value'];
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Resolve a whole ticket-type layout against a submitted payload, returning
+ * ['kind|key' => 'required'|'optional'|'hidden'] where any row whose condition
+ * did not pass has been forced to 'hidden'.
+ *
+ * Conditions narrow, never widen: a row already set to hidden stays hidden
+ * whatever its condition says.
+ */
+function resolveLayoutVisibility(PDO $db, array $layout, array $post, ?int $actorId): array
+{
+    // Submitted values first, so field-to-field conditions have something to
+    // compare against regardless of the order rows appear in.
+    $postedByFieldId = [];
+    foreach ($layout as $row) {
+        if ($row['kind'] === 'custom' && $row['field'] !== null) {
+            $postedByFieldId[(int) $row['field']['id']] = customFieldPostedValue($row['field'], $post);
+        }
+    }
+
+    $out = [];
+    foreach ($layout as $row) {
+        $vis = $row['visibility'];
+        if ($vis !== 'hidden') {
+            $cond = parseFieldCondition($row['condition_json'] ?? null);
+            if (!evaluateFieldCondition($db, $cond, $postedByFieldId, $actorId)) {
+                $vis = 'hidden';
+            }
+        }
+        $out[$row['kind'] . '|' . $row['key']] = $vis;
+    }
+    return $out;
+}
+
+/**
+ * Look up the system "default" priority — the priority with the lowest
+ * sort_order (tiebroken by id). Used to backfill when priority is hidden
+ * for the chosen ticket type. Returns null only if no priorities exist.
+ */
+function getDefaultPriorityId(PDO $db): ?int
+{
+    static $cached = null;
+    if ($cached === null) {
+        $id = $db->query('SELECT id FROM ticket_priorities ORDER BY sort_order, id LIMIT 1')->fetchColumn();
+        $cached = $id ? (int) $id : 0;
+    }
+    return $cached ?: null;
+}
+
+/**
+ * Priority ids a ticket type is restricted to. An empty array means the type
+ * is UNRESTRICTED — every priority is available (this is the default; a type
+ * with no rows in ticket_type_priorities offers all priorities). A non-empty
+ * array is the exact set of allowed priority ids.
+ *
+ * @return int[]
+ */
+function typePriorityIds(PDO $db, ?int $typeId): array
+{
+    if ($typeId === null) {
+        return [];
+    }
+    static $cache = [];
+    if (!array_key_exists($typeId, $cache)) {
+        $stmt = $db->prepare(
+            'SELECT priority_id FROM ticket_type_priorities WHERE type_id = ?'
+        );
+        $stmt->execute([$typeId]);
+        $cache[$typeId] = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+    return $cache[$typeId];
+}
+
+/**
+ * Whether $priorityId may be used on a ticket of $typeId. A null priority is
+ * always allowed (it means "unset — let the team decide"), and a type with no
+ * restriction allows every priority.
+ */
+function priorityAllowedForType(PDO $db, ?int $typeId, ?int $priorityId): bool
+{
+    if ($priorityId === null) {
+        return true;
+    }
+    $allowed = typePriorityIds($db, $typeId);
+    return $allowed === [] || in_array($priorityId, $allowed, true);
+}
+
+/**
+ * Map of [type_id => [priority_id, ...]] for every type that RESTRICTS its
+ * priorities. Types with no restriction are omitted. Emitted to the New Ticket
+ * and ticket-detail forms so the priority picker can be filtered client-side
+ * when the type changes.
+ *
+ * @return array<int, int[]>
+ */
+function typePriorityMap(PDO $db): array
+{
+    $rows = $db->query(
+        'SELECT type_id, priority_id FROM ticket_type_priorities'
+    )->fetchAll(PDO::FETCH_ASSOC);
+    $map = [];
+    foreach ($rows as $r) {
+        $map[(int) $r['type_id']][] = (int) $r['priority_id'];
+    }
+    return $map;
+}
+
+/**
+ * Parse a submitted priorities[] payload into the effective restricted set for
+ * a ticket type. Returns [] when the type should be UNRESTRICTED — i.e. nothing
+ * was submitted, or every existing priority was checked (so priorities added
+ * later are offered automatically too). Otherwise returns the submitted
+ * priority ids that actually exist, in canonical (sort_order) order.
+ *
+ * @param mixed $posted Raw $_POST['priorities'] (array of ids or null)
+ * @return int[]
+ */
+function normalizeTypePriorityIds(PDO $db, $posted): array
+{
+    $all = array_map(
+        'intval',
+        $db->query('SELECT id FROM ticket_priorities ORDER BY sort_order, id')->fetchAll(PDO::FETCH_COLUMN)
+    );
+    if ($all === []) {
+        return [];
+    }
+    $submitted = array_map('intval', (array) ($posted ?? []));
+    $chosen = array_values(array_filter(
+        $all,
+        static fn(int $id): bool => in_array($id, $submitted, true)
+    ));
+    // Empty selection or all-of-them → unrestricted (offer every priority).
+    if ($chosen === [] || count($chosen) === count($all)) {
+        return [];
+    }
+    return $chosen;
+}
+
+/**
+ * Split a set of ticket ids into those whose ticket type permits $priorityId
+ * and a count of those it doesn't. A null priority (clearing) is allowed on
+ * every ticket. Used by bulk priority changes, where the selected tickets may
+ * span types with different available-priority sets.
+ *
+ * @param int[] $ticketIds
+ * @return array{0: int[], 1: int} [allowed ticket ids, skipped count]
+ */
+function filterTicketIdsForPriority(PDO $db, array $ticketIds, ?int $priorityId): array
+{
+    $ticketIds = array_values(array_map('intval', $ticketIds));
+    if ($priorityId === null || $ticketIds === []) {
+        return [$ticketIds, 0];
+    }
+    $ph = implode(',', array_fill(0, count($ticketIds), '?'));
+    $stmt = $db->prepare("SELECT id, type_id FROM tickets WHERE id IN ($ph)");
+    $stmt->execute($ticketIds);
+    $allowed = [];
+    $skipped = 0;
+    while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $tid = $r['type_id'] !== null ? (int) $r['type_id'] : null;
+        if (priorityAllowedForType($db, $tid, $priorityId)) {
+            $allowed[] = (int) $r['id'];
+        } else {
+            $skipped++;
+        }
+    }
+    return [$allowed, $skipped];
+}
+
+/**
+ * Persist a ticket type's available-priorities restriction from a submitted
+ * priorities[] payload. An unrestricted result clears the join rows so the
+ * type offers every priority.
+ */
+function saveTypeAvailablePriorities(PDO $db, int $typeId, $posted): void
+{
+    $chosen = normalizeTypePriorityIds($db, $posted);
+    $db->prepare('DELETE FROM ticket_type_priorities WHERE type_id = ?')->execute([$typeId]);
+    if ($chosen !== []) {
+        $ins = $db->prepare('INSERT INTO ticket_type_priorities (type_id, priority_id) VALUES (?, ?)');
+        foreach ($chosen as $pid) {
+            $ins->execute([$typeId, $pid]);
+        }
+    }
+}
+
+/**
+ * Custom field ids that appear on each ticket type — used to filter
+ * options/etc. queries. Returns [type_id => [field_id, ...]].
+ */
+function getCustomFieldIdsByType(PDO $db): array
+{
+    $rows = $db->query(
+        'SELECT type_id, field_key FROM ticket_type_form_layout
+         WHERE field_kind = "custom" AND visibility != "hidden"'
+    )->fetchAll();
+    $map = [];
+    foreach ($rows as $r) {
+        $map[(int) $r['type_id']][] = (int) $r['field_key'];
+    }
+    return $map;
+}
+
+/**
+ * For every ticket type, the list of custom-field ids whose visibility is
+ * 'required' for that type. Used server-side to know which custom fields
+ * must be present in a submitted payload.
+ */
+function getRequiredCustomFieldIdsForType(PDO $db, int $typeId): array
+{
+    $stmt = $db->prepare(
+        'SELECT field_key FROM ticket_type_form_layout
+         WHERE type_id = ? AND field_kind = "custom" AND visibility = "required"'
+    );
+    $stmt->execute([$typeId]);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Map of [field_id => [type_id, ...]] — used by the ticket-create page JS
+ * to show/hide custom fields as the user changes ticket type. Mirrors the
+ * old getFieldTypeMap() shape so callers can drop in without changes.
+ */
+function getCustomFieldTypeMap(PDO $db): array
+{
+    $rows = $db->query(
+        'SELECT type_id, field_key FROM ticket_type_form_layout
+         WHERE field_kind = "custom" AND visibility != "hidden"'
+    )->fetchAll();
+    $map = [];
+    foreach ($rows as $r) {
+        $map[(int) $r['field_key']][] = (int) $r['type_id'];
+    }
+    return $map;
+}
+
+/**
+ * Whether a stored custom-field value is worth showing on the ticket-view
+ * "Custom Fields" panel — i.e. it would render real data rather than the
+ * bare "&mdash;" placeholder. A checkbox always counts (it renders Yes/No).
+ * Mirrors the per-type rendering in the agent/portal ticket-view templates.
+ */
+function customFieldHasDisplayValue(string $fieldType, $value, array $options = []): bool
+{
+    if ($fieldType === 'checkbox') {
+        return true;
+    }
+    $value = (string) ($value ?? '');
+    if ($value === '') {
+        return false;
+    }
+    if ($fieldType === 'dropdown') {
+        foreach ($options as $o) {
+            if ((int) $o['id'] === (int) $value) return true;
+        }
+        return false;
+    }
+    if ($fieldType === 'user_picker') {
+        return userPickerDisplay(Database::connect(), $value) !== null;
+    }
+    if ($fieldType === 'dependent') {
+        $dep = json_decode($value, true) ?: [];
+        foreach (['l1', 'l2', 'l3'] as $lk) {
+            if (empty($dep[$lk])) continue;
+            foreach ($options as $o) {
+                if ((int) $o['id'] === (int) $dep[$lk]) return true;
+            }
+        }
+        return false;
+    }
+    if ($fieldType === 'date_range') {
+        $dr = json_decode($value, true) ?: [];
+        return !empty($dr['from']) || !empty($dr['to']);
+    }
+    return true;
+}
+
+/* ── Flash messages ───────────────────────────────────────────── */
+
+function flash(string $key, string $message): void
+{
+    $_SESSION['_flash'][$key] = $message;
+}
+
+function getFlash(string $key): ?string
+{
+    $msg = $_SESSION['_flash'][$key] ?? null;
+    unset($_SESSION['_flash'][$key]);
+    return $msg;
+}
+
+function flashInput(array $data): void
+{
+    // Strip password fields for safety
+    unset($data['password'], $data['password_confirmation'], $data['_token']);
+    $_SESSION['_old_input'] = $data;
+}
+
+function old(string $key, string $default = ''): string
+{
+    return (string) ($_SESSION['_old_input'][$key] ?? $default);
+}
+
+/**
+ * old() for checkbox groups (name="foo[]"). Returns the flashed array when the
+ * form bounced back on a validation error, otherwise $default — so multi-select
+ * choices survive the redirect instead of silently reverting to saved state.
+ */
+function oldList(string $key, array $default = []): array
+{
+    $val = $_SESSION['_old_input'][$key] ?? null;
+    return is_array($val) ? array_values($val) : $default;
+}
+
+/* ── Notification helpers ────────────────────────────────────── */
+
+function notificationCount(): int
+{
+    if (!Auth::check()) {
+        return 0;
+    }
+    static $count = null;
+    if ($count === null) {
+        $stmt = Database::connect()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0');
+        $stmt->execute([Auth::id()]);
+        $count = (int) $stmt->fetchColumn();
+    }
+    return $count;
+}
+
+/**
+ * Fetch a user's notification feed rows for both the full page and the AJAX
+ * polling endpoint, so the two never diverge. LEFT JOINs the actor + timeline
+ * (only mentions/comments carry them) and prefers the denormalized body,
+ * falling back to the linked timeline note for legacy mention rows.
+ */
+function notificationsFeedRows(PDO $db, int $userId, int $limit = 50): array
+{
+    // Redact the subject/message of a confidential ticket unless the recipient
+    // may actually see it (creator, or a member of the confidential type's
+    // group). A notification is addressed to the user, but being @-mentioned on
+    // a confidential ticket must not leak its subject/excerpt past the
+    // confidential gate. $conf is the shared "is confidential AND not allowed"
+    // predicate, evaluated in SQL so we never SELECT the sensitive text.
+    $conf = "COALESCE(tt.is_confidential, 0) = 1
+             AND t.created_by <> n.user_id
+             AND (tt.group_id IS NULL
+                  OR tt.group_id NOT IN (SELECT group_id FROM group_user_map WHERE user_id = n.user_id))";
+    $stmt = $db->prepare(
+        "SELECT n.*,
+                CASE WHEN {$conf} THEN '[Confidential ticket]' ELSE t.subject END AS ticket_subject,
+                CONCAT(m.first_name, ' ', m.last_name) AS mentioned_by_name,
+                CASE WHEN {$conf} THEN NULL ELSE COALESCE(NULLIF(n.body, ''), tl.details) END AS message
+         FROM notifications n
+         JOIN tickets t          ON n.ticket_id    = t.id
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         LEFT JOIN users m       ON n.mentioned_by = m.id
+         LEFT JOIN ticket_timeline tl ON n.timeline_id = tl.id
+         WHERE n.user_id = ?
+         ORDER BY n.created_at DESC
+         LIMIT " . (int) $limit
+    );
+    $stmt->execute([$userId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * The ticket-link URL prefix for the current user's area, used by the
+ * notifications feed to point at the role-appropriate ticket view.
+ */
+function notificationsAreaPrefix(): string
+{
+    if (Auth::isAdmin()) {
+        return '/admin';
+    }
+    if (Auth::isStaff()) {
+        return '/agent';
+    }
+    return '/portal';
+}
+
+/**
+ * Create a single in-app notification on the recipient's notifications feed.
+ *
+ * This is the generic entry point behind every notification type (mentions,
+ * assignments, ticket/status updates, SLA warnings & breaches, new tickets,
+ * customer replies, notes). The `notifications` table was generalized in
+ * migration 043 — `type` names the kind, `body` is a denormalized headline so
+ * the feed renders without needing a `ticket_timeline` row, and both
+ * `timeline_id` and `mentioned_by` (the acting user, if any) are optional.
+ *
+ * Self-notifications (recipient === actor) are skipped. Failures are swallowed
+ * with an error_log entry: an in-app notification is never important enough to
+ * break the ticket action that triggered it.
+ */
+function createNotification(
+    PDO $db,
+    int $userId,
+    int $ticketId,
+    string $type,
+    ?string $body = null,
+    ?int $actorId = null,
+    ?int $timelineId = null
+): void {
+    if ($userId <= 0 || $ticketId <= 0) {
+        return;
+    }
+    if ($actorId !== null && $userId === $actorId) {
+        return; // never notify someone of their own action
+    }
+
+    // Trim a denormalized excerpt down to a sane length for the feed line.
+    if ($body !== null) {
+        $body = trim(html_entity_decode(strip_tags($body), ENT_QUOTES, 'UTF-8'));
+        if (function_exists('mb_substr')) {
+            $body = mb_substr($body, 0, 280);
+        } else {
+            $body = substr($body, 0, 280);
+        }
+        if ($body === '') {
+            $body = null;
+        }
+    }
+
+    try {
+        $db->prepare(
+            'INSERT INTO notifications (user_id, ticket_id, type, timeline_id, mentioned_by, body)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        )->execute([$userId, $ticketId, $type, $timelineId, $actorId, $body]);
+    } catch (\Throwable $e) {
+        error_log('createNotification failed: ' . $e->getMessage());
+        return;
+    }
+
+    // Fan the same event out to the user's registered mobile devices as a native
+    // push. Best-effort: a push failure must never break the in-app notification
+    // (or the ticket action that triggered it).
+    try {
+        deliverPushNotification($db, $userId, $type, $ticketId, $body);
+    } catch (\Throwable $e) {
+        error_log('deliverPushNotification failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Register (or refresh) a mobile device's push token for a user.
+ *
+ * `token` is unique across the table, so the same physical device re-registering
+ * — or a token the OS reassigns to a different signed-in user — updates the
+ * existing row in place instead of creating a duplicate.
+ */
+function registerPushToken(PDO $db, int $userId, string $platform, string $token, ?string $deviceName = null): void
+{
+    $platform = in_array($platform, ['ios', 'android', 'web'], true) ? $platform : 'android';
+    $db->prepare(
+        'INSERT INTO push_device_tokens (user_id, platform, token, device_name, last_used_at)
+         VALUES (?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+            user_id     = VALUES(user_id),
+            platform    = VALUES(platform),
+            device_name = VALUES(device_name),
+            last_used_at = NOW()'
+    )->execute([$userId, $platform, $token, $deviceName]);
+}
+
+/**
+ * Remove a device's push token. Scoped to the owning user so a caller can only
+ * unregister their own device, never someone else's.
+ */
+function removePushToken(PDO $db, int $userId, string $token): void
+{
+    $db->prepare('DELETE FROM push_device_tokens WHERE token = ? AND user_id = ?')
+        ->execute([$token, $userId]);
+}
+
+/**
+ * The push tokens registered to a user, as [{platform, token}, ...].
+ */
+function pushTokensForUser(PDO $db, int $userId): array
+{
+    $stmt = $db->prepare('SELECT platform, token FROM push_device_tokens WHERE user_id = ?');
+    $stmt->execute([$userId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Deliver an in-app notification to a user's registered mobile devices as a
+ * native push.
+ *
+ * STUB — the registration endpoints, storage table and this dispatch hook are
+ * fully wired, but the actual APNs (Apple) / FCM (Firebase) send is NOT
+ * implemented yet. Real delivery needs provider credentials (an APNs `.p8` key,
+ * an FCM service account) that only exist once the native apps are registered
+ * with Apple/Google. Until `PUSH_ENABLED=true` and that config is present this
+ * is a no-op (it just records intent to the error log under APP_DEBUG), so the
+ * rest of the notification pipeline ships and is testable today.
+ *
+ * To finish delivery: build the per-platform payload from ($type, $ticketId,
+ * $body) — notificationMeta() gives a title verb — POST to FCM v1 / APNs for
+ * each token from pushTokensForUser(), and prune any token the provider reports
+ * as unregistered (FCM `NotRegistered` / APNs `410 Gone`) via removePushToken().
+ */
+function deliverPushNotification(PDO $db, int $userId, string $type, int $ticketId, ?string $body): void
+{
+    if (env('PUSH_ENABLED', 'false') !== 'true') {
+        return; // no provider configured — see docblock
+    }
+    $tokens = pushTokensForUser($db, $userId);
+    if (empty($tokens)) {
+        return;
+    }
+    // TODO(push-delivery): send to FCM v1 / APNs here, then prune dead tokens.
+    if (env('APP_DEBUG', 'false') === 'true') {
+        error_log(sprintf(
+            'deliverPushNotification: would push type=%s ticket=%d to %d device(s) for user %d',
+            $type,
+            $ticketId,
+            count($tokens),
+            $userId
+        ));
+    }
+}
+
+/**
+ * Per-type display metadata for the notifications feed: Bootstrap icon class,
+ * a Bootstrap text-color class for the icon, and the verb shown next to the
+ * actor / ticket subject. Unknown types fall back to a neutral bell.
+ *
+ * @return array{icon:string,color:string,label:string}
+ */
+function notificationMeta(string $type): array
+{
+    static $map = [
+        'mention'        => ['icon' => 'bi-at',                 'color' => 'text-primary', 'label' => 'mentioned you in'],
+        'assignment'     => ['icon' => 'bi-person-check',       'color' => 'text-success', 'label' => 'assigned to you:'],
+        'ticket_update'  => ['icon' => 'bi-arrow-repeat',       'color' => 'text-info',    'label' => 'updated'],
+        'sla_warning'    => ['icon' => 'bi-clock-history',      'color' => 'text-warning', 'label' => 'SLA deadline approaching on'],
+        'sla_breach'     => ['icon' => 'bi-exclamation-triangle','color' => 'text-danger', 'label' => 'SLA breached on'],
+        'new_ticket'     => ['icon' => 'bi-plus-circle',        'color' => 'text-primary', 'label' => 'new ticket:'],
+        'customer_reply' => ['icon' => 'bi-chat-left-text',     'color' => 'text-info',    'label' => 'customer replied on'],
+        'note_added'     => ['icon' => 'bi-sticky',             'color' => 'text-secondary','label' => 'added a note on'],
+        'followup'       => ['icon' => 'bi-alarm',              'color' => 'text-warning', 'label' => 'follow-up reminder:'],
+    ];
+    return $map[$type] ?? ['icon' => 'bi-bell', 'color' => 'text-muted', 'label' => 'updated'];
+}
+
+/**
+ * Parse @mentions from a message and create notifications.
+ * Matches "@FirstName LastName" against agents/admins in the database.
+ */
+function processAtMentions(PDO $db, string $message, int $ticketId, int $timelineId, int $mentionedBy): void
+{
+    $agents = $db->query("SELECT id, first_name, last_name FROM users WHERE " . staffRoleSqlIn('role') . "")->fetchAll();
+    foreach ($agents as $agent) {
+        $fullName = $agent['first_name'] . ' ' . $agent['last_name'];
+        if (stripos($message, '@' . $fullName) !== false && (int) $agent['id'] !== $mentionedBy) {
+            // body left NULL — the feed falls back to the linked timeline note.
+            createNotification($db, (int) $agent['id'], $ticketId, 'mention', null, $mentionedBy, $timelineId);
+            notifyMentionedUser($db, (int) $agent['id'], $ticketId, $message, $mentionedBy);
+        }
+    }
+}
+
+/**
+ * Email a staff member who was @mentioned in a reply or note. Honors their
+ * notify_mention opt-out. On a confidential ticket they can't see, the subject
+ * and message are withheld — same gate as notificationsFeedRows().
+ */
+function notifyMentionedUser(PDO $db, int $userId, int $ticketId, string $message, int $mentionedBy): void
+{
+    $stmt = $db->prepare(
+        "SELECT u.first_name, u.last_name, u.email, u.role, u.notify_mention, t.subject,
+                CONCAT(a.first_name, ' ', a.last_name) AS actor_name,
+                (COALESCE(tt.is_confidential, 0) = 1
+                 AND NOT (t.created_by <=> u.id)
+                 AND (tt.group_id IS NULL
+                      OR tt.group_id NOT IN (SELECT group_id FROM group_user_map WHERE user_id = u.id))) AS redact
+           FROM users u
+           JOIN tickets t ON t.id = ?
+           LEFT JOIN ticket_types tt ON tt.id = t.type_id
+           LEFT JOIN users a ON a.id = ?
+          WHERE u.id = ?"
+    );
+    $stmt->execute([$ticketId, $mentionedBy, $userId]);
+    $row = $stmt->fetch();
+    if (!$row || empty($row['email']) || !(bool) ($row['notify_mention'] ?? 1)) {
+        return;
+    }
+
+    $actor   = trim((string) $row['actor_name']) ?: 'Someone';
+    $redact  = (bool) $row['redact'];
+    $subject = $redact ? 'Confidential ticket' : $row['subject'];
+    if ($redact) {
+        $message = 'This is a confidential ticket, so the message is not included in this email.';
+    }
+
+    $rolePrefix = $row['role'] === 'admin' ? '/admin' : '/agent';
+    $tpl = getEmailTpl('ticket-updated', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $subject,
+        'message'    => $message,
+        'author'     => $actor,
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ]);
+
+    $emailHtml = renderEmail('ticket-updated', [
+        'ticketId'    => $ticketId,
+        'subject'     => $subject,
+        'message'     => $message,
+        'authorName'  => $actor,
+        'ticketUrl'   => env('APP_URL', 'http://localhost:8000') . $rolePrefix . '/tickets/' . $ticketId,
+        'introText'   => htmlspecialchars($actor, ENT_QUOTES, 'UTF-8') . ' mentioned you on a ticket.',
+        'buttonLabel' => $tpl['button'],
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        '[Ticket #' . $ticketId . '] ' . $actor . ' mentioned you: ' . $subject,
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * In-app notify the assigned agent + staff watchers when a ticket's status
+ * changes. There is no email helper for agent-facing status changes (only the
+ * requester gets resolved/closed mail), so this fans out the in-app
+ * "Ticket Updates" notification directly. Called from every status-change site.
+ */
+function notifyAgentStatusChanged(PDO $db, int $ticketId, string $oldStatus, string $newStatus, int $actorId): void
+{
+    if ($oldStatus === $newStatus) {
+        return;
+    }
+
+    // Teams "status changed" post — central choke point for every status-change
+    // path; carries the old status so the card can show "from → to".
+    Teams::notifyTicketEvent($db, $ticketId, 'status', ['from_status' => $oldStatus]);
+    $oldLabel = function_exists('ticketStatusLabel') ? ticketStatusLabel($oldStatus) : $oldStatus;
+    $newLabel = function_exists('ticketStatusLabel') ? ticketStatusLabel($newStatus) : $newStatus;
+    $body = "Status changed from {$oldLabel} to {$newLabel}";
+
+    // Recipients: the assigned agent plus any staff watchers. Dedupe by id.
+    $recipients = [];
+
+    $aStmt = $db->prepare('SELECT assigned_to FROM tickets WHERE id = ?');
+    $aStmt->execute([$ticketId]);
+    $assignedTo = (int) ($aStmt->fetchColumn() ?: 0);
+    if ($assignedTo > 0) {
+        $recipients[$assignedTo] = true;
+    }
+
+    $wStmt = $db->prepare(
+        "SELECT u.id FROM ticket_watchers tw
+         JOIN users u ON u.id = tw.user_id
+         WHERE tw.ticket_id = ? AND " . staffRoleSqlIn('u.role')
+    );
+    $wStmt->execute([$ticketId]);
+    foreach ($wStmt->fetchAll(PDO::FETCH_COLUMN) as $wid) {
+        $recipients[(int) $wid] = true;
+    }
+
+    foreach (array_keys($recipients) as $uid) {
+        createNotification($db, (int) $uid, $ticketId, 'ticket_update', $body, $actorId);
+    }
+}
+
+/* ── Attachment helpers ───────────────────────────────────────── */
+
+/**
+ * Pick the on-disk extension for an upload from its VALIDATED mime type rather
+ * than the (attacker-controlled) client filename. Known types map to a fixed
+ * safe extension; anything else falls back to a sanitised client extension with
+ * executable extensions denied (defence-in-depth — attachments are stored
+ * outside the webroot with PHP execution disabled, but a misconfigured server
+ * must still never be handed a `.php` on disk).
+ */
+function safeUploadExtension(string $mime, string $clientName): string
+{
+    static $map = [
+        'application/pdf'  => 'pdf',
+        'image/jpeg'       => 'jpg',
+        'image/png'        => 'png',
+        'image/gif'        => 'gif',
+        'image/webp'       => 'webp',
+        // NOTE: image/svg+xml is intentionally NOT mapped. SVG can carry inline
+        // <script>; keeping it out of this map means an SVG upload falls through
+        // to the extension-blocklist path and is stored as .bin, never .svg.
+        'text/plain'       => 'txt',
+        'text/csv'         => 'csv',
+        'application/zip'  => 'zip',
+        'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'   => 'docx',
+        'application/vnd.ms-excel' => 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'         => 'xlsx',
+        'application/vnd.ms-powerpoint' => 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+    ];
+    if (isset($map[$mime])) {
+        return $map[$mime];
+    }
+
+    $ext = strtolower(preg_replace('/[^a-z0-9]/i', '', (string) pathinfo($clientName, PATHINFO_EXTENSION)));
+    $blocked = [
+        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'pht', 'phps',
+        'cgi', 'pl', 'py', 'sh', 'asp', 'aspx', 'jsp', 'jspx', 'exe', 'bat', 'cmd',
+        'com', 'htaccess', 'svg', 'svgz', 'html', 'htm', 'xhtml', 'xml',
+    ];
+    if ($ext === '' || in_array($ext, $blocked, true)) {
+        return 'bin';
+    }
+    return $ext;
+}
+
+function handleAttachmentUploads(string $fieldName = 'attachments'): array
+{
+    if (empty($_FILES[$fieldName]['tmp_name'])) {
+        return [];
+    }
+
+    $attachments = [];
+    $files = $_FILES[$fieldName];
+    $count = is_array($files['tmp_name']) ? count($files['tmp_name']) : 1;
+
+    for ($i = 0; $i < $count; $i++) {
+        $tmpName = is_array($files['tmp_name']) ? $files['tmp_name'][$i] : $files['tmp_name'];
+        $error   = is_array($files['error'])    ? $files['error'][$i]    : $files['error'];
+        $name    = is_array($files['name'])      ? $files['name'][$i]    : $files['name'];
+        $size    = is_array($files['size'])      ? $files['size'][$i]    : $files['size'];
+
+        if (empty($tmpName) || $error === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        if ($error !== UPLOAD_ERR_OK) {
+            flash('error', "Upload error for file: " . e($name));
+            continue;
+        }
+
+        $mime = mime_content_type($tmpName);
+        if (!in_array($mime, UPLOAD_ALLOWED_TYPES, true)) {
+            flash('error', "File type not allowed: " . e($name));
+            continue;
+        }
+        if ($size > UPLOAD_MAX_SIZE) {
+            $maxMB = UPLOAD_MAX_SIZE / 1024 / 1024;
+            flash('error', "File too large (max {$maxMB}MB): " . e($name));
+            continue;
+        }
+
+        // Derive the stored extension from the validated MIME, not the client
+        // filename, so a renamed executable can't land on disk as e.g. .php.
+        $ext = safeUploadExtension($mime, $name);
+        $storedName = uniqid('att_', true) . '.' . $ext;
+
+        if (!is_dir(ATTACHMENT_STORAGE_PATH)) {
+            mkdir(ATTACHMENT_STORAGE_PATH, 0755, true);
+        }
+
+        if (move_uploaded_file($tmpName, ATTACHMENT_STORAGE_PATH . $storedName)) {
+            $attachments[] = [
+                'original_name' => $name,
+                'stored_name'   => $storedName,
+                'mime_type'     => $mime,
+                'file_size'     => $size,
+            ];
+        }
+    }
+
+    return $attachments;
+}
+
+function saveAttachments(PDO $db, int $ticketId, ?int $timelineId, int $uploadedBy, array $attachments): void
+{
+    if (empty($attachments)) {
+        return;
+    }
+    $stmt = $db->prepare(
+        'INSERT INTO ticket_attachments (ticket_id, timeline_id, uploaded_by, original_name, stored_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    foreach ($attachments as $att) {
+        $stmt->execute([$ticketId, $timelineId, $uploadedBy, $att['original_name'], $att['stored_name'], $att['mime_type'], $att['file_size']]);
+    }
+}
+
+/**
+ * May this attachment be shown as an inline <img> preview?
+ *
+ * "image/*" minus SVG. SVG is a *document* format that can carry inline
+ * <script>, and this app's CSP allows script-src 'self' 'unsafe-inline' — so an
+ * SVG served from our own origin would execute. safeUploadExtension() already
+ * refuses to store one as .svg for the same reason, but UPLOAD_ALLOWED_TYPES is
+ * env-configurable, so an operator could still let one in. Excluding it here
+ * keeps the preview path safe no matter how the server is configured.
+ *
+ * Note the previews deliberately do NOT need a Content-Disposition change: the
+ * download routes keep sending `attachment`, and browsers honour that only for
+ * top-level navigation, not for <img> subresources (verified in Chromium).
+ * Switching those routes to `inline` would have re-opened the exact
+ * HTML/SVG-upload XSS hole the attachment disposition exists to close.
+ */
+function attachmentIsImage(?string $mime): bool
+{
+    $mime = strtolower(trim((string) $mime));
+    if (!str_starts_with($mime, 'image/')) {
+        return false;
+    }
+    return !in_array($mime, ['image/svg+xml', 'image/svg'], true);
+}
+
+/**
+ * Should this attachment render as a thumbnail in an attachment list?
+ *
+ * attachmentIsImage() answers "are these bytes safe to put in an <img>", which
+ * the inline-image route depends on and which must stay true regardless of any
+ * display preference. This adds the operator's choice on top, and is what the
+ * ticket templates gate on.
+ *
+ * Defaults to on, matching the behaviour shipped in 2.161.0 — an install that
+ * has never visited the setting sees no change. Turning it off only affects the
+ * attachment *list*; an image pasted into a description or reply is part of the
+ * message body and still renders where the author put it.
+ */
+function attachmentShowsThumb(?string $mime): bool
+{
+    return attachmentIsImage($mime) && getSetting('attachment_image_previews', '1') === '1';
+}
+
+/**
+ * Would this value overflow a MySQL TEXT column?
+ *
+ * TEXT is 65,535 *bytes*, not characters, and production runs with
+ * STRICT_TRANS_TABLES — an over-length value is error 1406, not a silent
+ * truncation, which reaches the user as an uncaught PDOException and a bare
+ * HTTP 500. inlineImagesToAttachments() removes the usual cause (megabytes of
+ * base64), but a merely enormous paste of text can still get there, so callers
+ * check this and flash a real message instead.
+ */
+function textColumnOverflows(?string $value, int $maxBytes = 65535): bool
+{
+    return strlen((string) $value) > $maxBytes;
+}
+
+/**
+ * Filename token for an inline image: dot-free, so the URL carries no extension.
+ *
+ * The URL must not end in `.png`/`.jpg`. PHP's built-in server (used for local
+ * dev and the test harness) intercepts any path with a known static extension
+ * and 404s it before the router script runs, so an extension-bearing URL works
+ * under Apache but is dead everywhere else. A dot-free token sidesteps the whole
+ * class of server-specific static-file handling.
+ *
+ * The extension still goes on the file ON DISK via safeUploadExtension() — that
+ * is a real security control and is untouched. It is only absent from the URL.
+ */
+function inlineImageToken(): string
+{
+    return 'att_' . bin2hex(random_bytes(16));
+}
+
+/**
+ * URL that renders a stored attachment as an image, in any panel.
+ *
+ * Deliberately keyed on the filename token rather than the row id: the rewrite
+ * in inlineImagesToAttachments() has to bake a URL into the HTML *before* the
+ * ticket (and therefore the attachment row) exists, and the token is the one
+ * identifier we generate ourselves up front. It also has to be panel-neutral —
+ * the same description HTML is rendered to admins, agents and portal users, so
+ * a baked-in /admin/... link would 403 for the requester who wrote it.
+ */
+function inlineImageUrl(string $token): string
+{
+    return '/attachments/img/' . rawurlencode($token);
+}
+
+/**
+ * Convert base64 `data:` image URIs in rich-text HTML into real attachments.
+ *
+ * CKEditor's Base64UploadAdapter inlines a pasted or dropped image straight
+ * into the field as `<img src="data:image/png;base64,...">`. `description` and
+ * `details` are TEXT (65,535 bytes) and MySQL runs in STRICT_TRANS_TABLES, so
+ * anything past ~48 KB of original image was not truncated — it was rejected
+ * outright with a 1406, surfacing as an uncaught PDOException and a bare HTTP
+ * 500. Every pasted screenshot hit this; no ticket in production has ever
+ * successfully stored one.
+ *
+ * So the bytes go where bytes belong: each data URI is decoded, validated, and
+ * written to attachment storage exactly like a file-picker upload, and the src
+ * is rewritten to point at it. What lands in the column is a ~40-byte URL.
+ *
+ * Validation deliberately ignores the MIME the data URI *claims* and sniffs the
+ * decoded bytes instead — the claimed type is attacker-controlled text. The
+ * sniffed type must then pass both attachmentIsImage() (so no SVG, which can
+ * carry inline <script>) and the operator's UPLOAD_ALLOWED_TYPES allow-list, and
+ * the decoded size must fit UPLOAD_MAX_SIZE.
+ *
+ * An image that fails any of those checks is *removed* rather than left in
+ * place: leaving it would put the oversized data URI straight back into the
+ * INSERT and reproduce the original 500. The caller is told via $rejected so it
+ * can flash a message instead of silently eating the paste.
+ *
+ * $saved and $rejected are deliberately untyped: they are pure out-parameters,
+ * callers pass fresh undeclared variables, and PHP rejects an undefined variable
+ * against a typed by-reference parameter with "must be of type array, null
+ * given". Both are unconditionally assigned below before anything reads them.
+ *
+ * @param string $html      Rich-text body from the editor.
+ * @param array  $saved     OUT — rows for saveAttachments(), same shape as
+ *                          handleAttachmentUploads() returns.
+ * @param array  $rejected  OUT — human-readable reason per dropped image.
+ * @return string           HTML with every data: image src rewritten.
+ */
+function inlineImagesToAttachments(string $html, &$saved = null, &$rejected = null): string
+{
+    $saved    = [];
+    $rejected = [];
+
+    if (stripos($html, 'data:image/') === false) {
+        return $html;
+    }
+
+    // A single pasted screenshot is megabytes of base64 in one token. The
+    // character class below excludes the quote that terminates it, so the match
+    // is unambiguous and the possessive quantifier stops PCRE from walking back
+    // through it — without that, a large paste blows pcre.backtrack_limit and
+    // preg_replace_callback returns null instead of matching.
+    $pattern = '/(<img\b[^>]*?\bsrc\s*=\s*)(["\'])\s*data:([a-z0-9.+\/-]+)\s*;\s*base64\s*,([A-Za-z0-9+\/=\s]++)\2/i';
+
+    $index  = 0;
+    $result = preg_replace_callback($pattern, function (array $m) use (&$saved, &$rejected, &$index) {
+        $index++;
+        $claimed = strtolower(trim($m[3]));
+        $binary  = base64_decode(preg_replace('/\s+/', '', $m[4]), true);
+
+        $drop = static function (string $why) use (&$rejected, $index): string {
+            $rejected[] = "Image {$index}: {$why}";
+            return '';                       // strips the whole src="..." attribute
+        };
+
+        if ($binary === false || $binary === '') {
+            return $drop('could not be decoded.');
+        }
+        if (strlen($binary) > UPLOAD_MAX_SIZE) {
+            return $drop('is larger than the ' . formatFileSize(UPLOAD_MAX_SIZE) . ' upload limit.');
+        }
+
+        // Sniff the real type; never trust the type the data URI announces.
+        $mime = (string) (new finfo(FILEINFO_MIME_TYPE))->buffer($binary);
+        if ($mime === '' || !attachmentIsImage($mime)) {
+            return $drop('is not a supported image (detected ' . ($mime ?: $claimed) . ').');
+        }
+        if (!in_array($mime, UPLOAD_ALLOWED_TYPES, true)) {
+            return $drop("type {$mime} is not permitted here.");
+        }
+
+        $ext        = safeUploadExtension($mime, '');
+        $token      = inlineImageToken();
+        $storedName = $token . '.' . $ext;
+
+        if (!is_dir(ATTACHMENT_STORAGE_PATH) && !mkdir(ATTACHMENT_STORAGE_PATH, 0755, true)) {
+            return $drop('could not be stored on the server.');
+        }
+        if (file_put_contents(ATTACHMENT_STORAGE_PATH . $storedName, $binary) === false) {
+            return $drop('could not be written to storage.');
+        }
+
+        $saved[] = [
+            'original_name' => 'pasted-image-' . $index . '.' . $ext,
+            'stored_name'   => $storedName,
+            'mime_type'     => $mime,
+            'file_size'     => strlen($binary),
+        ];
+
+        return $m[1] . $m[2] . e(inlineImageUrl($token)) . $m[2];
+    }, $html);
+
+    // preg_replace_callback returns null on PCRE failure. Returning the original
+    // HTML there would hand the caller the very data URIs it asked us to remove,
+    // so fail closed: strip them and report, rather than re-triggering the 500.
+    if ($result === null) {
+        $rejected[] = 'Pasted images could not be processed and were removed.';
+        return (string) preg_replace('/\bsrc\s*=\s*(["\'])\s*data:[^"\']*+\1/i', '', $html);
+    }
+
+    return $result;
+}
+
+function formatFileSize(int $bytes): string
+{
+    if ($bytes >= 1048576) {
+        return round($bytes / 1048576, 2) . ' MB';
+    }
+    if ($bytes >= 1024) {
+        return round($bytes / 1024, 2) . ' KB';
+    }
+    return $bytes . ' bytes';
+}
+
+function getFileIcon(string $mimeType): string
+{
+    if (str_starts_with($mimeType, 'image/'))       return 'bi-file-image text-primary';
+    if ($mimeType === 'application/pdf')             return 'bi-file-pdf text-danger';
+    if (str_contains($mimeType, 'word'))             return 'bi-file-word text-primary';
+    if (str_contains($mimeType, 'excel') || str_contains($mimeType, 'sheet')) return 'bi-file-excel text-success';
+    if (str_starts_with($mimeType, 'text/'))         return 'bi-file-text text-secondary';
+    if (str_contains($mimeType, 'zip'))              return 'bi-file-zip text-warning';
+    return 'bi-file-earmark text-muted';
+}
+
+/* ── Markdown / slug helpers ──────────────────────────────────── */
+
+function renderMarkdown(string $content): string
+{
+    // Content saved by the WYSIWYG editor is already HTML — sanitize and return.
+    // Sanitizing here is a stored-XSS boundary: it neutralises any malicious
+    // markup already in the database, not just freshly-saved content.
+    $trimmed = ltrim($content);
+    if ($trimmed !== '' && $trimmed[0] === '<') {
+        return sanitizeRichHtml($content);
+    }
+
+    // Legacy markdown content — convert to HTML.
+    $config = [
+        'html_input' => 'escape',
+        'allow_unsafe_links' => false,
+    ];
+
+    $environment = new \League\CommonMark\Environment\Environment($config);
+    $environment->addExtension(new \League\CommonMark\Extension\CommonMark\CommonMarkCoreExtension());
+    $environment->addExtension(new \League\CommonMark\Extension\DisallowedRawHtml\DisallowedRawHtmlExtension());
+
+    $converter = new \League\CommonMark\MarkdownConverter($environment);
+
+    return $converter->convert($content)->getContent();
+}
+
+function slugify(string $text): string
+{
+    if (function_exists('transliterator_transliterate')) {
+        $text = transliterator_transliterate('Any-Latin; Latin-ASCII', $text) ?: $text;
+    }
+    $text = strtolower(trim($text));
+    $text = preg_replace('/[^a-z0-9]+/', '-', $text);
+    return trim($text, '-');
+}
+
+/* ── Organization type ───────────────────────────────────────── */
+
+/**
+ * The single source of truth for the `organization_type` setting's
+ * allowed values + sector groupings + display labels. Used by the
+ * organization settings page, the AI skill-suggestion route, and any
+ * future feature that needs to know what kind of org this install is.
+ *
+ * Keep slugs (array keys) stable — they're persisted in the `settings`
+ * table — but labels can be relabelled freely.
+ */
+function organizationTypeGroups(): array
+{
+    return [
+        'Library' => [
+            'public_library'    => 'Public Library',
+            'academic_library'  => 'Academic Library',
+            'special_library'   => 'Special / Research Library',
+        ],
+        'Education' => [
+            'k12_school'        => 'K–12 School / School District',
+            'higher_education'  => 'College / University',
+            'private_school'    => 'Private / Independent School',
+        ],
+        'Government' => [
+            'government_federal'   => 'Government — Federal',
+            'government_state'     => 'Government — State / Provincial',
+            'government_municipal' => 'Government — Municipal / Local',
+        ],
+        'Healthcare' => [
+            'hospital'        => 'Hospital / Health System',
+            'clinic'          => 'Clinic / Medical Practice',
+        ],
+        'Business' => [
+            'corporation'     => 'Corporation / Enterprise',
+            'small_business'  => 'Small Business',
+            'manufacturing'   => 'Manufacturing',
+            'retail'          => 'Retail / E-commerce',
+            'financial'       => 'Financial Services / Banking',
+            'legal'           => 'Legal / Law Firm',
+            'hospitality'     => 'Hospitality / Travel',
+            'technology'      => 'Technology / Software',
+        ],
+        'Community' => [
+            'non_profit'      => 'Non-Profit / Charity',
+            'religious'       => 'Religious / Faith-Based',
+            'museum'          => 'Museum / Cultural Institution',
+            'association'     => 'Association / Membership Group',
+        ],
+        'Other' => [
+            'other'           => 'Other',
+        ],
+    ];
+}
+
+function organizationTypeLabel(string $slug): string
+{
+    foreach (organizationTypeGroups() as $opts) {
+        if (isset($opts[$slug])) {
+            return $opts[$slug];
+        }
+    }
+    return 'Other';
+}
+
+/* ── Settings helpers ─────────────────────────────────────────── */
+
+/**
+ * Per-request memo behind getSetting()/setSetting().
+ *
+ * Returned by reference so both functions share one array — a setting written
+ * during a request must be visible to a later read in that same request, which
+ * a plain function-level static in getSetting() could never be.
+ *
+ * @return array<string, string>
+ */
+function &settingsCache(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
+function getSetting(string $key, string $default = ''): string
+{
+    $cache = &settingsCache();
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+    $stmt = Database::connect()->prepare('SELECT setting_value FROM settings WHERE setting_key = ?');
+    $stmt->execute([$key]);
+    $value = $stmt->fetchColumn();
+    $cache[$key] = $value !== false ? (string) $value : $default;
+    return $cache[$key];
+}
+
+function setSetting(string $key, string $value): void
+{
+    Database::connect()->prepare(
+        'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+    )->execute([$key, $value]);
+
+    // Keep the memo in step with the row we just wrote, so code that saves a
+    // setting and then reads it back doesn't get the pre-save value.
+    $cache = &settingsCache();
+    $cache[$key] = $value;
+}
+
+/**
+ * Canonical form of the branding fallback icon typed on the Branding page.
+ *
+ * Accepts a Bootstrap Icons name ("bi-building", or a bare "building") or a
+ * Font Awesome Free icon ("fa-solid fa-house", "fas fa-house", "fa-house"),
+ * including the <i class="…"></i> snippet fontawesome.com copies. Returns
+ * "bi-<name>" or "fa-<style> fa-<name>", or '' when nothing usable was given.
+ */
+function normalizeBrandIcon(string $raw): string
+{
+    $styles = ['fa' => 'fa-solid', 'fas' => 'fa-solid', 'fa-solid' => 'fa-solid',
+               'far' => 'fa-regular', 'fa-regular' => 'fa-regular',
+               'fab' => 'fa-brands', 'fa-brands' => 'fa-brands'];
+    preg_match_all('/[a-z0-9-]+/', strtolower($raw), $m);
+    $style  = 'fa-solid';
+    $tokens = [];
+    foreach ($m[0] as $t) {
+        if (isset($styles[$t])) {
+            $style = $styles[$t];
+        } else {
+            $tokens[] = $t;
+        }
+    }
+    foreach ($tokens as $t) {
+        if (preg_match('/^bi-[a-z0-9]/', $t)) {
+            return $t;
+        }
+        if (preg_match('/^fa-[a-z0-9]/', $t)) {
+            return "$style $t";
+        }
+    }
+    // A lone bare name keeps the original behaviour: it's a Bootstrap Icon.
+    return count($m[0]) === 1 && $tokens ? 'bi-' . $tokens[0] : '';
+}
+
+/** Full class list for the branding fallback icon — Bootstrap Icons or Font Awesome. */
+function brandIconClass(?string $icon = null): string
+{
+    $icon ??= getSetting('branding_navbar_icon', 'bi-headset');
+    return str_starts_with($icon, 'fa-') ? $icon : 'bi ' . $icon;
+}
+
+/**
+ * The brand mark for the navbar and sign-in pages: the uploaded logo if there
+ * is one, otherwise the fallback icon.
+ */
+function brandMark(string $imgHeight, string $iconExtraClass = ''): string
+{
+    $logo = basename(getSetting('branding_logo', ''));
+    if ($logo !== '' && is_file(ROOT_DIR . '/public/uploads/branding/' . $logo)) {
+        return '<img src="/uploads/branding/' . e($logo) . '" alt="" style="height:' . e($imgHeight) . ';vertical-align:-.125em;">';
+    }
+    return '<i class="' . e(trim(brandIconClass() . ' ' . $iconExtraClass)) . '" aria-hidden="true"></i>';
+}
+
+/**
+ * Clean an uploaded SVG logo; null when it isn't a usable SVG.
+ *
+ * SVG can carry script and logos are served from the public web root, so this
+ * is an allowlist: only drawing elements in the SVG namespace survive (script,
+ * foreignObject, animation, <a>, <image> are dropped), along with any on*
+ * handler and any href that isn't an in-file "#fragment". A DOCTYPE is refused
+ * outright (entity expansion). public/uploads/.htaccess also sandboxes .svg.
+ *
+ * The logo always sits on white-text backgrounds, and an <img> draws unset
+ * fills and currentColor as black, so single-colour icons are made white.
+ */
+function sanitizeSvg(string $svg): ?string
+{
+    if (stripos($svg, '<!DOCTYPE') !== false || stripos($svg, '<!ENTITY') !== false) {
+        return null;
+    }
+    $doc = new DOMDocument();
+    if (!@$doc->loadXML($svg, LIBXML_NONET)) {
+        return null;
+    }
+    $ns   = 'http://www.w3.org/2000/svg';
+    $root = $doc->documentElement;
+    if (!$root || $root->localName !== 'svg' || $root->namespaceURI !== $ns) {
+        return null;
+    }
+    $allowed = ['svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon',
+                'defs', 'symbol', 'use', 'clipPath', 'mask', 'linearGradient', 'radialGradient',
+                'stop', 'title', 'desc', 'style', 'text', 'tspan'];
+    foreach (iterator_to_array((new DOMXPath($doc))->query('//node()'), false) as $node) {
+        if ($node instanceof DOMProcessingInstruction) {
+            $node->parentNode?->removeChild($node);
+        }
+        if (!$node instanceof DOMElement) {
+            continue;
+        }
+        if ($node->namespaceURI !== $ns || !in_array($node->localName, $allowed, true)) {
+            $node->parentNode?->removeChild($node);
+            continue;
+        }
+        // false: href and xlink:href share a key and one would escape the loop.
+        foreach (iterator_to_array($node->attributes, false) as $attr) {
+            $name = strtolower($attr->localName);
+            if (str_starts_with($name, 'on')
+                || ($name === 'href' && !str_starts_with($attr->value, '#'))
+                || stripos(preg_replace('/\s+/', '', $attr->value), 'javascript:') !== false) {
+                $node->removeAttributeNode($attr);
+            } elseif (strcasecmp($attr->value, 'currentColor') === 0) {
+                $attr->value = '#fff';
+            }
+        }
+    }
+    if (!$root->hasAttribute('fill')) {
+        $root->setAttribute('fill', '#fff');
+    }
+    return $doc->saveXML($root);
+}
+
+/** Font Awesome <link>, emitted only when the branding icon is a Font Awesome one. */
+function brandIconStylesheet(): string
+{
+    return str_starts_with(brandIconClass(), 'fa-')
+        ? '<link href="/assets/vendor/fontawesome/css/all.min.css" rel="stylesheet">'
+        : '';
+}
+
+/**
+ * Undo-send grace window in seconds, or 0 when the feature is off.
+ *
+ * When enabled, ticket-create and reply forms hold the submit client-side
+ * behind an "Undo" countdown toast — nothing reaches the server (and no
+ * notification email goes out) until the window elapses.
+ */
+function undoSendSeconds(): int
+{
+    if (getSetting('undo_send_enabled', '0') !== '1') {
+        return 0;
+    }
+    return max(3, min(120, (int) getSetting('undo_send_seconds', '10')));
+}
+
+/**
+ * Whether SLA tracking is enabled site-wide. Defaults to enabled.
+ *
+ * When off, SLA timers are not initialized, recalculated, paused/resumed, or
+ * displayed anywhere (tickets, ticket lists, reports). Existing SLA policies
+ * and historical SLA data are kept, so the feature can be re-enabled freely.
+ */
+function slaEnabled(): bool
+{
+    return getSetting('sla_enabled', '1') === '1';
+}
+
+/**
+ * Whether the manual "Escalate" button should be shown for a ticket, given the
+ * admin-configured visibility mode (`escalate_button_visibility`):
+ *
+ *   'always'   — show whenever an escalation path exists (default / legacy).
+ *   'breached' — only show once the ticket's SLA timer has breached.
+ *
+ * The 'breached' mode is meaningless when SLA tracking is off site-wide (no
+ * timer can ever breach), so we fall back to always-show in that case rather
+ * than hiding the button forever.
+ */
+function escalateButtonVisible(?string $slaState): bool
+{
+    if (getSetting('escalate_button_visibility', 'always') !== 'breached') {
+        return true;
+    }
+    if (!slaEnabled()) {
+        return true;
+    }
+    return $slaState === 'breached';
+}
+
+/**
+ * Whether the current user wants AI-generated system notes shown in ticket
+ * timelines. Stored per-user as `ai_notes_visible:<id>`, defaults to visible.
+ *
+ * Only admins ever see AI notes, so this preference is meaningful for admins
+ * only — but it is safe to call for any authenticated user. The notes are
+ * never deleted; this only controls display.
+ */
+function aiNotesVisible(): bool
+{
+    return getSetting('ai_notes_visible:' . Auth::id(), '1') === '1';
+}
+
+/**
+ * Whether the current user wants automated system notes shown in ticket
+ * timelines. Stored per-user as `system_notes_visible:<id>`, defaults to
+ * visible.
+ *
+ * "System notes" are timeline entries with no human author (SLA timer
+ * events, escalation reminders, automatic group assignment, AI
+ * classifications, ...). AI notes are a subset, so hiding system notes also
+ * hides AI notes; the two preferences are otherwise independent.
+ *
+ * Only admins ever see system notes, so this preference is meaningful for
+ * admins only — but it is safe to call for any authenticated user. The notes
+ * are never deleted; this only controls display.
+ */
+function systemNotesVisible(): bool
+{
+    return getSetting('system_notes_visible:' . Auth::id(), '1') === '1';
+}
+
+/* ── Auto-assignment helpers ──────────────────────────────────── */
+
+/**
+ * Pick an agent for a ticket using the strategy configured on the ticket's group.
+ *
+ * Called from the portal/agent ticket-create paths after the row is inserted.
+ * Returns the chosen user_id and updates `tickets.assigned_to` + writes a
+ * timeline entry; returns null when nothing changes (no group, group set to
+ * 'manual', or the strategy + fallback found no eligible agent).
+ *
+ * Strategies:
+ *   round_robin     — rotate sequentially through group members; remembers the
+ *                     last picked agent on `groups.assign_last_user_id`.
+ *   load_based      — pick the member with the fewest open tickets
+ *                     (status NOT IN resolved/closed). Ties broken by user_id.
+ *   skill_based     — pick a member whose skills cover every skill required by
+ *                     the ticket type. Ties broken by load. Falls back to the
+ *                     group's assign_fallback when no member qualifies.
+ *   first_available — pick a member who currently has the app open in a
+ *                     browser (heartbeat within the last 120s — see
+ *                     user_presence), load-balanced. Falls back to
+ *                     assign_fallback when nobody is online.
+ *
+ * Only agent / admin / power_user group members are considered — portal-role
+ * users in a group are ignored. The eligible pool intentionally ignores the
+ * online status for round_robin and load_based; presence only affects the
+ * "first_available" strategy. Skill-based requires the skill match but does
+ * NOT also require online status — a configurable combination is a follow-up.
+ */
+function autoAssignTicket(PDO $db, int $ticketId): ?int
+{
+    $tStmt = $db->prepare(
+        'SELECT t.id, t.group_id, t.assigned_to, t.type_id,
+                g.assign_strategy, g.assign_last_user_id, g.assign_fallback
+         FROM tickets t
+         LEFT JOIN `groups` g ON t.group_id = g.id
+         WHERE t.id = ?'
+    );
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket || $ticket['group_id'] === null || $ticket['assigned_to'] !== null) {
+        return null;
+    }
+
+    $strategy = $ticket['assign_strategy'] ?? 'manual';
+    if ($strategy === 'manual') {
+        return null;
+    }
+
+    $groupId = (int) $ticket['group_id'];
+    $typeId  = $ticket['type_id'] !== null ? (int) $ticket['type_id'] : null;
+
+    $members = _autoAssignGroupMembers($db, $groupId);
+    if (empty($members)) {
+        return null;
+    }
+
+    $picked = null;
+    if ($strategy === 'round_robin') {
+        $picked = _autoAssignRoundRobin($members, $ticket['assign_last_user_id'] !== null ? (int) $ticket['assign_last_user_id'] : null);
+    } elseif ($strategy === 'load_based') {
+        $picked = _autoAssignLeastLoaded($db, $members);
+    } elseif ($strategy === 'skill_based') {
+        $picked = _autoAssignBySkill($db, $members, $typeId);
+    } elseif ($strategy === 'ai_skill_based') {
+        $picked = _autoAssignByAiSkill($db, $members, $ticketId);
+    } elseif ($strategy === 'first_available') {
+        $picked = _autoAssignFirstAvailable($db, $members);
+    }
+
+    if ($picked === null) {
+        $fallback = $ticket['assign_fallback'] ?? 'load_based';
+        if ($fallback === 'round_robin') {
+            $picked = _autoAssignRoundRobin($members, $ticket['assign_last_user_id'] !== null ? (int) $ticket['assign_last_user_id'] : null);
+        } elseif ($fallback === 'load_based') {
+            $picked = _autoAssignLeastLoaded($db, $members);
+        }
+    }
+
+    if ($picked === null) {
+        return null;
+    }
+
+    $db->prepare('UPDATE tickets SET assigned_to = ? WHERE id = ?')->execute([$picked, $ticketId]);
+    $db->prepare('UPDATE `groups` SET assign_last_user_id = ? WHERE id = ?')->execute([$picked, $groupId]);
+
+    $nameStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    $nameStmt->execute([$picked]);
+    $u = $nameStmt->fetch();
+    $agentName = $u ? trim($u['first_name'] . ' ' . $u['last_name']) : "User #{$picked}";
+    $strategyLabel = [
+        'round_robin'     => 'round-robin',
+        'load_based'      => 'least-loaded',
+        'skill_based'     => 'skill match',
+        'ai_skill_based'  => 'AI skill match',
+        'first_available' => 'first available',
+    ][$strategy] ?? $strategy;
+
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+    )->execute([
+        $ticketId,
+        'auto_assigned',
+        "Auto-assigned to {$agentName} via {$strategyLabel}.",
+    ]);
+
+    return (int) $picked;
+}
+
+/**
+ * Internal: returns sorted list of [id => int] for agent/admin/power_user
+ * group members, ordered by user_id so round-robin picks are deterministic.
+ */
+function _autoAssignGroupMembers(PDO $db, int $groupId): array
+{
+    $stmt = $db->prepare(
+        "SELECT u.id
+         FROM group_user_map gum
+         JOIN users u ON gum.user_id = u.id
+         WHERE gum.group_id = ? AND " . staffRoleSqlIn('u.role') . "
+         ORDER BY u.id"
+    );
+    $stmt->execute([$groupId]);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+function _autoAssignRoundRobin(array $members, ?int $lastUserId): ?int
+{
+    if (empty($members)) {
+        return null;
+    }
+    if ($lastUserId === null) {
+        return $members[0];
+    }
+    $idx = array_search($lastUserId, $members, true);
+    if ($idx === false) {
+        return $members[0];
+    }
+    return $members[($idx + 1) % count($members)];
+}
+
+function _autoAssignLeastLoaded(PDO $db, array $members): ?int
+{
+    if (empty($members)) {
+        return null;
+    }
+    $placeholders = implode(',', array_fill(0, count($members), '?'));
+    $notClosed    = ticketStatusSqlIn(ticketClosedBucketSlugs(), 'status', true);
+    $stmt = $db->prepare(
+        "SELECT u.id, COALESCE(c.cnt, 0) AS open_count
+         FROM users u
+         LEFT JOIN (
+             SELECT assigned_to, COUNT(*) AS cnt
+             FROM tickets
+             WHERE assigned_to IN ($placeholders)
+               AND $notClosed
+             GROUP BY assigned_to
+         ) c ON c.assigned_to = u.id
+         WHERE u.id IN ($placeholders)
+         ORDER BY open_count ASC, u.id ASC
+         LIMIT 1"
+    );
+    $stmt->execute(array_merge($members, $members));
+    $row = $stmt->fetch();
+    return $row ? (int) $row['id'] : null;
+}
+
+function _autoAssignBySkill(PDO $db, array $members, ?int $typeId): ?int
+{
+    if (empty($members) || $typeId === null) {
+        return null;
+    }
+    $reqStmt = $db->prepare('SELECT skill_id FROM ticket_type_skill_map WHERE ticket_type_id = ?');
+    $reqStmt->execute([$typeId]);
+    $required = array_map('intval', $reqStmt->fetchAll(PDO::FETCH_COLUMN));
+    if (empty($required)) {
+        return null;
+    }
+    $mPlace = implode(',', array_fill(0, count($members), '?'));
+    $sPlace = implode(',', array_fill(0, count($required), '?'));
+    $stmt = $db->prepare(
+        "SELECT user_id
+         FROM user_skill_map
+         WHERE user_id IN ($mPlace) AND skill_id IN ($sPlace)
+         GROUP BY user_id
+         HAVING COUNT(DISTINCT skill_id) = ?"
+    );
+    $stmt->execute(array_merge($members, $required, [count($required)]));
+    $eligible = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    if (empty($eligible)) {
+        return null;
+    }
+    return _autoAssignLeastLoaded($db, $eligible);
+}
+
+/**
+ * AI-Skill-Based: read the classification persisted by classifyTicketWithAI()
+ * (called eagerly via runPostTicketCreateHooks before auto-assign runs).
+ * If the stored confidence ≥ threshold and at least one suggested skill
+ * matches a group member, pick the least-loaded among them. Otherwise
+ * return null and let the caller fall back to the group's fallback
+ * strategy. AI failures / low confidence / disabled-feature all degrade
+ * cleanly through the same null path.
+ */
+function _autoAssignByAiSkill(PDO $db, array $members, int $ticketId): ?int
+{
+    if (empty($members)) {
+        return null;
+    }
+    $stmt = $db->prepare(
+        "SELECT c.suggested_skill_ids, c.overridden_skill_ids, c.confidence
+         FROM ai_classifications c
+         JOIN tickets t ON t.ai_classification_id = c.id
+         WHERE t.id = ?"
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    $threshold = (float) getSetting('ai_confidence_threshold', '0.7');
+    if ((float) $row['confidence'] < $threshold) {
+        return null;
+    }
+    // Admin override (if any) wins over the AI's original suggestion
+    $overridden = $row['overridden_skill_ids'] !== null && $row['overridden_skill_ids'] !== ''
+        ? json_decode((string) $row['overridden_skill_ids'], true)
+        : null;
+    $skillIds = is_array($overridden) ? $overridden : json_decode((string) $row['suggested_skill_ids'], true);
+    if (!is_array($skillIds) || empty($skillIds)) {
+        return null;
+    }
+    $required = array_values(array_filter(array_map('intval', $skillIds)));
+    if (empty($required)) {
+        return null;
+    }
+    $mPlace = implode(',', array_fill(0, count($members), '?'));
+    $sPlace = implode(',', array_fill(0, count($required), '?'));
+    $matchStmt = $db->prepare(
+        "SELECT user_id
+         FROM user_skill_map
+         WHERE user_id IN ($mPlace) AND skill_id IN ($sPlace)
+         GROUP BY user_id
+         HAVING COUNT(DISTINCT skill_id) = ?"
+    );
+    $matchStmt->execute(array_merge($members, $required, [count($required)]));
+    $eligible = array_map('intval', $matchStmt->fetchAll(PDO::FETCH_COLUMN));
+    if (empty($eligible)) {
+        return null;
+    }
+    return _autoAssignLeastLoaded($db, $eligible);
+}
+
+/**
+ * Run all post-create hooks on a freshly-created ticket. Order matters:
+ *
+ *   1. AI group routing ("No Wrong Door") — for ticket types with
+ *      ai_route_group=1, AI picks the best group from all non-confidential
+ *      groups and updates ticket.group_id BEFORE skill classification, so
+ *      the skill candidate list is filtered against the chosen group.
+ *   2. AI skill classification — writes suggested_skill_ids/sentiment so
+ *      ai_skill_based routing has data to work with.
+ *   3. Automations (ticket_created) — may set group_id, type_id, etc.
+ *      based on subject/description rules.
+ *   4. Auto-assign — needs group_id (set by steps 1/3) and may consult
+ *      the classification (set by step 2).
+ *
+ * Single chokepoint so every creation path (portal, admin, API,
+ * email-to-ticket, agent split) gets identical behaviour.
+ *
+ * Returns the auto-assigned user_id (if any) so callers can fire
+ * notification emails. Classification side-effects (timeline entry,
+ * sentiment, priority bump) happen as part of classifyTicketWithAI();
+ * automation side-effects (timeline entries per action) happen inside
+ * runAutomations().
+ */
+function runPostTicketCreateHooks(PDO $db, int $ticketId): ?int
+{
+    aiRouteTicketToGroup($ticketId);
+    classifyTicketWithAI($ticketId);
+    runAutomations($db, $ticketId, 'ticket_created');
+    backfillTicketGroupFromDefault($db, $ticketId);
+    return autoAssignTicket($db, $ticketId);
+}
+
+/**
+ * Resolve which group a brand-new ticket should land in. Layered so
+ * every creation path (portal, agent, admin, email, API, splits) can
+ * call the same helper and never end up with a NULL group:
+ *
+ *   1. Caller's explicit choice (form field, API param) — wins outright.
+ *   2. The ticket type's default group, if one is configured.
+ *   3. The system-wide `default_group_id` setting (Admin → Settings →
+ *      Ticket Routing Defaults). This is the "no ticket gets stuck"
+ *      safety net.
+ *   4. Last-ditch fallback: lowest-id existing group. Only fires if
+ *      `default_group_id` is unset or points at a deleted group AND a
+ *      group exists at all. Returns null only on a pristine install
+ *      with zero groups.
+ *
+ * The returned id is verified to reference a real, currently-existing
+ * group — a stale type.group_id or a stale setting pointing at a
+ * deleted group falls through to the next layer instead of poisoning
+ * the ticket with a dangling FK.
+ */
+function resolveTicketGroup(PDO $db, ?int $explicit, ?int $typeId): ?int
+{
+    $groupExists = static function (PDO $db, ?int $id): bool {
+        if (!$id) return false;
+        $stmt = $db->prepare('SELECT 1 FROM `groups` WHERE id = ?');
+        $stmt->execute([$id]);
+        return (bool) $stmt->fetchColumn();
+    };
+
+    if ($groupExists($db, $explicit)) {
+        return $explicit;
+    }
+
+    if ($typeId !== null) {
+        $stmt = $db->prepare('SELECT group_id FROM ticket_types WHERE id = ?');
+        $stmt->execute([$typeId]);
+        $typeGroup = $stmt->fetchColumn();
+        if ($typeGroup !== false && $typeGroup !== null && $typeGroup !== '') {
+            $tg = (int) $typeGroup;
+            if ($groupExists($db, $tg)) {
+                return $tg;
+            }
+        }
+    }
+
+    $configured = getSetting('default_group_id', '');
+    if ($configured !== '' && $configured !== null) {
+        $cg = (int) $configured;
+        if ($groupExists($db, $cg)) {
+            return $cg;
+        }
+    }
+
+    // Last-ditch fallback: pick the lowest-id existing group. Better
+    // than NULL, and self-heals an install where the admin deleted
+    // every group the default_group_id setting could have pointed at.
+    $first = $db->query('SELECT id FROM `groups` ORDER BY id ASC LIMIT 1')->fetchColumn();
+    return $first ? (int) $first : null;
+}
+
+/**
+ * Keep a ticket's type in sync with its group after a group change.
+ *
+ * A ticket type maps 1:1 to a default group, so once an agent moves a ticket
+ * into a group that is NOT the type's default group, the type no longer
+ * describes where the ticket lives. Rather than silently carry a mismatched
+ * type, clear it to "Not Set" (NULL). Writes a timeline entry and recalculates
+ * SLA when it clears, and returns true so callers can refresh their UI.
+ *
+ * No-ops when: the ticket has no type, the type has no default group (so it can
+ * coexist with any group), or the new group still matches the type's default.
+ * Call this AFTER the ticket's group_id has been persisted, and — where the same
+ * request may also set the type explicitly — AFTER that type change, so an
+ * intentional type+group pairing is never clobbered.
+ */
+function clearTicketTypeIfGroupMismatch(PDO $db, int $ticketId, ?int $newGroupId, ?int $actorId): bool
+{
+    $stmt = $db->prepare(
+        'SELECT tt.name AS type_name, tt.group_id AS type_group_id
+         FROM tickets t
+         JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return false; // ticket has no type (or the type row is gone) — nothing to reconcile
+    }
+
+    $typeGroupId = $row['type_group_id'] !== null ? (int) $row['type_group_id'] : null;
+    if ($typeGroupId === null || $typeGroupId === $newGroupId) {
+        return false; // type isn't pinned to a group, or the group still matches it
+    }
+
+    $db->prepare('UPDATE tickets SET type_id = NULL WHERE id = ?')->execute([$ticketId]);
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 0)'
+    )->execute([
+        $ticketId,
+        $actorId,
+        'type_changed',
+        'Type cleared (was ' . $row['type_name'] . ") — the new group does not match the type's default group",
+    ]);
+    Sla::onTypeChanged($db, $ticketId, null);
+    return true;
+}
+
+/**
+ * Keep a ticket's group in sync with its type after a type change — the
+ * mirror image of clearTicketTypeIfGroupMismatch(). A type maps 1:1 to a
+ * default group, so when an agent re-types a ticket, the ticket should move
+ * into the new type's group; otherwise it stays visible to the old group's
+ * agents even though it no longer belongs to them. Writes a timeline entry,
+ * notifies the new group, and returns true when it moves the ticket.
+ *
+ * No-ops when: the new type is NULL, the type has no default group (it can
+ * coexist with any group), the type's group no longer exists, or the ticket
+ * is already in that group. Call this AFTER the type change is persisted, and
+ * NOT when the same request also sets the group explicitly — an intentional
+ * type+group pairing wins.
+ */
+function syncTicketGroupToType(PDO $db, int $ticketId, ?int $newTypeId, ?int $actorId): bool
+{
+    if ($newTypeId === null) {
+        return false;
+    }
+    $stmt = $db->prepare(
+        'SELECT t.group_id AS ticket_group_id, tt.name AS type_name,
+                tg.id AS type_group_id, tg.name AS type_group_name
+         FROM tickets t
+         JOIN ticket_types tt ON tt.id = ?
+         LEFT JOIN `groups` tg ON tg.id = tt.group_id
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$newTypeId, $ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || $row['type_group_id'] === null) {
+        return false; // type isn't pinned to a (still-existing) group
+    }
+
+    $typeGroupId = (int) $row['type_group_id'];
+    $oldGroupId  = $row['ticket_group_id'] !== null ? (int) $row['ticket_group_id'] : null;
+    if ($typeGroupId === $oldGroupId) {
+        return false; // already where the type says it belongs
+    }
+
+    $oldGroupName = 'None';
+    if ($oldGroupId) {
+        $g = $db->prepare('SELECT name FROM `groups` WHERE id = ?');
+        $g->execute([$oldGroupId]);
+        $oldGroupName = $g->fetchColumn() ?: 'None';
+    }
+
+    $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?')->execute([$typeGroupId, $ticketId]);
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 0)'
+    )->execute([
+        $ticketId,
+        $actorId,
+        'group_changed',
+        'Group changed from ' . $oldGroupName . ' to ' . $row['type_group_name']
+            . " to match the new type's default group",
+    ]);
+    notifyAssignedGroup($db, $ticketId, $typeGroupId);
+    return true;
+}
+
+/**
+ * Final NULL-group safety net inside runPostTicketCreateHooks(). AI
+ * classification and "set group" automations run BEFORE this — so by
+ * the time we get here, anything that's still NULL has slipped past
+ * every other rule. Drop it into the configured default group so
+ * autoAssignTicket() can route it instead of returning null.
+ *
+ * No-op if the ticket already has a group, or if no default group can
+ * be resolved (zero-group install).
+ */
+function backfillTicketGroupFromDefault(PDO $db, int $ticketId): void
+{
+    $stmt = $db->prepare('SELECT group_id, type_id FROM tickets WHERE id = ?');
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || $row['group_id'] !== null) {
+        return;
+    }
+    $typeId = $row['type_id'] !== null ? (int) $row['type_id'] : null;
+    $resolved = resolveTicketGroup($db, null, $typeId);
+    if ($resolved === null) {
+        return;
+    }
+    $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?')->execute([$resolved, $ticketId]);
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+    )->execute([
+        $ticketId,
+        'group_set_from_default',
+        'No group was matched by ticket type, AI, or automations — routed to the system default group so the ticket does not sit in the no-group queue.',
+    ]);
+}
+
+/**
+ * First-Available routing: pick a group member who currently has the app
+ * open in a browser. "Currently online" = a row in user_presence whose
+ * last_seen is within the last 120 seconds — generous enough to cover
+ * background-tab throttling (browsers slow setInterval to ~once per
+ * minute when the tab isn't focused) so a minimized window or tabbed-away
+ * agent still counts as online. Replaces the pre-2.21 is_available
+ * toggle, which required agents to manually flip themselves available;
+ * now availability is inferred from real activity.
+ */
+function _autoAssignFirstAvailable(PDO $db, array $members): ?int
+{
+    if (empty($members)) {
+        return null;
+    }
+    $placeholders = implode(',', array_fill(0, count($members), '?'));
+    $stmt = $db->prepare(
+        "SELECT u.id
+           FROM users u
+           JOIN user_presence p ON p.user_id = u.id
+          WHERE u.id IN ($placeholders)
+            AND p.last_seen >= DATE_SUB(NOW(), INTERVAL 120 SECOND)
+          ORDER BY u.id"
+    );
+    $stmt->execute($members);
+    $available = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    if (empty($available)) {
+        return null;
+    }
+    return _autoAssignLeastLoaded($db, $available);
+}
+
+/* ── AI ticket classification ─────────────────────────────────── */
+
+/**
+ * Anthropic list price in USD per million tokens as [input, output], or null
+ * when there's no price on file (OpenAI models, anything newer than this
+ * table). Dated snapshot ids (claude-haiku-4-5-20251001) resolve to their alias.
+ * Source: platform.claude.com/docs/en/about-claude/pricing, 2026-10-13. The app
+ * sends no cache_control, so every logged input token bills at the base rate.
+ *
+ * @return array{0: float, 1: float}|null
+ */
+function aiModelPriceUsd(string $model): ?array
+{
+    // ponytail: hand-maintained; add a row when AI settings offers a new model.
+    $prices = [
+        'claude-fable-5-1'  => [10.00, 50.00],
+        'claude-fable-5'    => [10.00, 50.00],
+        'claude-opus-5-5'   => [4.00, 20.00],
+        'claude-opus-5'     => [5.00, 25.00],
+        'claude-opus-4-8'   => [5.00, 25.00],
+        'claude-opus-4-7'   => [5.00, 25.00],
+        'claude-opus-4-6'   => [5.00, 25.00],
+        'claude-opus-4-5'   => [5.00, 25.00],
+        'claude-opus-4-1'   => [15.00, 75.00],
+        'claude-opus-4-0'   => [15.00, 75.00],
+        'claude-opus-4'     => [15.00, 75.00],
+        'claude-sonnet-5-5' => [2.00, 10.00],
+        'claude-sonnet-5'   => [2.00, 10.00],
+        'claude-sonnet-4-6' => [3.00, 15.00],
+        'claude-sonnet-4-5' => [3.00, 15.00],
+        'claude-sonnet-4-0' => [3.00, 15.00],
+        'claude-sonnet-4'   => [3.00, 15.00],
+        // ponytail: Haiku 5.5 bills $0.50/$2.50 once a prompt passes 100K tokens;
+        // helpdesk prompts run a few thousand, so only the base tier is modelled.
+        'claude-haiku-5-5'  => [0.10, 0.50],
+        'claude-haiku-4-5'  => [1.00, 5.00],
+        'claude-3-5-haiku'  => [0.80, 4.00],
+    ];
+    return $prices[preg_replace('/-\d{8}$/', '', $model)] ?? null;
+}
+
+/**
+ * USD→CAD: the Bank of Canada's daily average rate (Valet API, no key needed),
+ * cached in settings and re-checked at most twice a day. A failed fetch keeps
+ * the last good rate.
+ *
+ * @return array{rate: float, date: string}
+ */
+function usdCadRate(): array
+{
+    if (time() - (int) getSetting('fx_usdcad_checked_at', '0') > 43200) {
+        // Stamp before fetching so an unreachable BoC costs one slow page, not every page.
+        setSetting('fx_usdcad_checked_at', (string) time());
+        $ch = curl_init('https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5]);
+        $obs = json_decode((string) curl_exec($ch), true)['observations'][0] ?? null;
+        $rate = (float) ($obs['FXUSDCAD']['v'] ?? 0);
+        if ($rate > 0) {
+            setSetting('fx_usdcad_rate', (string) $rate);
+            setSetting('fx_usdcad_date', (string) $obs['d']);
+        }
+    }
+    // Defaults are the BoC rate when this shipped, used until the first good fetch.
+    return [
+        'rate' => (float) getSetting('fx_usdcad_rate', '1.4271'),
+        'date' => getSetting('fx_usdcad_date', '2026-10-09'),
+    ];
+}
+
+/**
+ * Classify a ticket via the configured AI provider.
+ *
+ * Persists the result in `ai_classifications`, points
+ * `tickets.ai_classification_id` and `tickets.ai_sentiment` at it,
+ * applies the optional sentiment-driven priority bump, and posts an
+ * internal timeline entry. Returns the verdict array on success or
+ * null when AI is disabled / the ticket type is confidential / the
+ * provider call fails — callers always proceed with the fallback flow
+ * regardless.
+ *
+ * Idempotent for the same ticket: re-running classification creates a
+ * new row and re-points the ticket; the previous row stays in place so
+ * we have history.
+ *
+ * @return array|null Verdict on success, null on skip/failure.
+ */
+function classifyTicketWithAI(int $ticketId): ?array
+{
+    $classifier = AIClassifierFactory::fromSettings();
+    if ($classifier === null) {
+        return null;
+    }
+
+    $db = Database::connect();
+    $stmt = $db->prepare(
+        "SELECT t.id, t.subject, t.description, t.type_id, t.group_id, t.priority_id,
+                tt.is_confidential AS type_is_confidential,
+                COALESCE(tt.group_id, t.group_id) AS effective_group_id
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE t.id = ?"
+    );
+    $stmt->execute([$ticketId]);
+    $ticket = $stmt->fetch();
+    if (!$ticket) {
+        return null;
+    }
+    if ((int) ($ticket['type_is_confidential'] ?? 0) === 1) {
+        // Hard rule: never send confidential ticket bodies to a third party.
+        return null;
+    }
+
+    // Candidate skill list = global skills + skills owned by the ticket's
+    // destination group (same set the manager UI exposes).
+    $groupId = $ticket['effective_group_id'] !== null ? (int) $ticket['effective_group_id'] : null;
+    if ($groupId !== null) {
+        $sStmt = $db->prepare(
+            "SELECT id, name, description FROM agent_skills
+             WHERE group_id IS NULL OR group_id = ?
+             ORDER BY (group_id IS NULL) DESC, sort_order, name"
+        );
+        $sStmt->execute([$groupId]);
+    } else {
+        $sStmt = $db->query(
+            "SELECT id, name, description FROM agent_skills WHERE group_id IS NULL ORDER BY sort_order, name"
+        );
+    }
+    $skills = $sStmt->fetchAll();
+
+    $maxTokens  = (int) getSetting('ai_max_tokens', '500');
+    $timeoutSec = (int) getSetting('ai_timeout_seconds', '5');
+
+    try {
+        $verdict = $classifier->classify(
+            (string) $ticket['subject'],
+            (string) $ticket['description'],
+            $skills,
+            $maxTokens,
+            $timeoutSec
+        );
+    } catch (\Throwable $e) {
+        // Soft-fail: log but never break ticket creation.
+        error_log('[AI classify] ticket #' . $ticketId . ' failed: ' . $e->getMessage());
+        return null;
+    }
+
+    $providerKey = getSetting('ai_provider', 'anthropic');
+    $modelKey    = $providerKey === 'anthropic'
+        ? (string) getSetting('ai_anthropic_model', 'claude-haiku-4-5')
+        : (string) getSetting('ai_openai_model',    'gpt-4o-mini');
+
+    $insertStmt = $db->prepare(
+        'INSERT INTO ai_classifications
+            (ticket_id, provider, model, suggested_skill_ids, confidence,
+             sentiment, reasoning, raw_output, latency_ms, prompt_tokens, output_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $insertStmt->execute([
+        $ticketId,
+        (string) $providerKey,
+        $modelKey,
+        json_encode($verdict['skill_ids'] ?? [], JSON_UNESCAPED_SLASHES),
+        (float) ($verdict['confidence'] ?? 0),
+        (string) ($verdict['sentiment'] ?? 'neutral'),
+        (string) ($verdict['reasoning'] ?? ''),
+        json_encode($verdict['raw'] ?? null, JSON_UNESCAPED_SLASHES),
+        (int) ($verdict['latency_ms']    ?? 0),
+        (int) ($verdict['prompt_tokens'] ?? 0),
+        (int) ($verdict['output_tokens'] ?? 0),
+    ]);
+    $classificationId = (int) $db->lastInsertId();
+
+    $db->prepare(
+        'UPDATE tickets SET ai_classification_id = ?, ai_sentiment = ? WHERE id = ?'
+    )->execute([$classificationId, (string) ($verdict['sentiment'] ?? 'neutral'), $ticketId]);
+
+    // Sentiment-driven priority bump (configurable). Only fires when:
+    //   - the toggle is on, AND
+    //   - sentiment is angry or urgent, AND
+    //   - the current priority is below the highest-sort_order priority
+    if (getSetting('ai_sentiment_priority_bump', '1') === '1'
+        && in_array($verdict['sentiment'] ?? 'neutral', ['angry', 'urgent'], true)) {
+        _maybeBumpPriorityFromSentiment($db, $ticketId, (string) $verdict['sentiment']);
+    }
+
+    // Internal timeline entry — never visible to portal users.
+    $skillNames = [];
+    if (!empty($verdict['skill_ids']) && !empty($skills)) {
+        $byId = [];
+        foreach ($skills as $s) { $byId[(int) $s['id']] = $s['name']; }
+        foreach ($verdict['skill_ids'] as $sid) {
+            $sid = (int) $sid;
+            if (isset($byId[$sid])) { $skillNames[] = $byId[$sid]; }
+        }
+    }
+    $confPct = (int) round(((float) ($verdict['confidence'] ?? 0)) * 100);
+    $details = 'AI ('
+        . $providerKey . '/' . $modelKey . ') classified as: '
+        . (empty($skillNames) ? '(no skill match)' : implode(', ', $skillNames))
+        . ' — ' . $confPct . '% confidence, sentiment ' . ($verdict['sentiment'] ?? 'neutral')
+        . '. ' . ($verdict['latency_ms'] ?? 0) . 'ms.';
+    $db->prepare(
+        "INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+         VALUES (?, NULL, 'ai_classified', ?, 1)"
+    )->execute([$ticketId, $details]);
+
+    return $verdict;
+}
+
+/**
+ * Check whether a not-yet-saved ticket looks like a duplicate of an
+ * existing OPEN ticket at the same branch. Used by portal, agent, and
+ * floor-quick-create flows so people don't open the same ticket twice
+ * (different staff, different shifts, didn't scroll the open queue).
+ *
+ * Hard rules:
+ *   - Confidential ticket types are NEVER scanned and NEVER appear as
+ *     candidates — regardless of the new ticket's type. We don't send
+ *     those bodies to a third-party AI under any circumstance.
+ *   - Returns [] if the feature is off for this type, AI is disabled,
+ *     no candidates exist, or the provider errors. Never throws.
+ *
+ * Result shape:
+ *   [
+ *     'matches' => [
+ *       [
+ *         'ticket_id'   => int,
+ *         'subject'     => string,
+ *         'status'      => string,
+ *         'created_at'  => string,
+ *         'requester'   => string,   // first name + last initial (privacy)
+ *         'type_name'   => string,
+ *         'confidence'  => float,
+ *         'reasoning'   => string,
+ *       ],
+ *       ...
+ *     ],
+ *     'threshold' => float,
+ *   ]
+ *
+ * @param int    $userId     Auth::id() of the user about to file
+ * @param int    $typeId     Selected ticket type
+ * @param ?int   $locationId Selected branch (NULL = scan all branches)
+ * @param string $subject    Subject the user typed
+ * @param string $body       Description the user typed
+ */
+function checkTicketDuplicates(int $userId, int $typeId, ?int $locationId, string $subject, string $body): array
+{
+    $empty = ['matches' => [], 'threshold' => 0.0];
+    if ($subject === '' || mb_strlen(trim($subject)) < 3) { return $empty; }
+    if ($typeId <= 0) { return $empty; }
+
+    $db = Database::connect();
+
+    $tStmt = $db->prepare(
+        'SELECT id, name, ai_dup_check_enabled, ai_dup_threshold, is_confidential
+         FROM ticket_types WHERE id = ?'
+    );
+    $tStmt->execute([$typeId]);
+    $type = $tStmt->fetch();
+    if (!$type)                                            { return $empty; }
+    if ((int) $type['is_confidential'] === 1)              { return $empty; } // safety belt
+    if ((int) $type['ai_dup_check_enabled'] !== 1)         { return $empty; }
+
+    $threshold = (float) ($type['ai_dup_threshold'] ?? 0.75);
+    if ($threshold < 0.0) { $threshold = 0.0; }
+    if ($threshold > 1.0) { $threshold = 1.0; }
+
+    $classifier = AIClassifierFactory::fromSettings();
+    if (!$classifier instanceof AIClassifier) { return ['matches' => [], 'threshold' => $threshold]; }
+
+    // Candidates: open tickets at the same branch, NOT a confidential type,
+    // opened in the last 14 days, capped at 30. Same branch = same location_id;
+    // when the user has no location set we fall back to "any branch" so we
+    // still catch duplicates rather than silently skipping the check.
+    $params = [];
+    $where  = [
+        ticketStatusSqlIn(ticketClosedBucketSlugs(), 't.status', true),
+        "t.merged_into_ticket_id IS NULL",
+        "COALESCE(tt.is_confidential, 0) = 0",
+        "t.created_at >= NOW() - INTERVAL 14 DAY",
+    ];
+
+    // Scope candidates to what the requesting user may actually see so the
+    // returned match list (subjects, requester names) can't leak tickets they
+    // have no access to. Staff: full role visibility (groups / assignment /
+    // view_all). Portal: own tickets, plus same-branch tickets only when the
+    // user holds the can_view_location_tickets flag — mirrors /portal/tickets.
+    $scopeStmt = $db->prepare('SELECT role, can_view_location_tickets, location_id FROM users WHERE id = ?');
+    $scopeStmt->execute([$userId]);
+    $viewer = $scopeStmt->fetch() ?: [];
+    if (roleIsStaff($viewer['role'] ?? null)) {
+        $vis = ticketStaffVisibilitySql($db, $userId, $viewer['role'] ?? null, 't');
+        $where[] = $vis['sql'];
+        foreach ($vis['params'] as $p) { $params[] = $p; }
+    } else {
+        $scope = ['t.created_by = ?'];
+        $params[] = $userId;
+        if (!empty($viewer['can_view_location_tickets']) && !empty($viewer['location_id'])) {
+            $scope[]  = 't.location_id = ?';
+            $params[] = (int) $viewer['location_id'];
+        }
+        $where[] = '(' . implode(' OR ', $scope) . ')';
+    }
+
+    $whereSql = implode(' AND ', $where);
+
+    $cStmt = $db->prepare(
+        "SELECT t.id, t.subject, t.description, t.status, t.created_at,
+                tt.name AS type_name,
+                u.first_name, u.last_name
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         LEFT JOIN users u         ON u.id  = t.created_by
+         WHERE {$whereSql}
+         ORDER BY t.created_at DESC
+         LIMIT 30"
+    );
+    $cStmt->execute($params);
+    $candidates = $cStmt->fetchAll();
+    if (empty($candidates)) { return ['matches' => [], 'threshold' => $threshold]; }
+
+    $maxTokens  = max(600, (int) getSetting('ai_max_tokens', '500'));
+    $timeoutSec = (int) getSetting('ai_timeout_seconds', '5');
+
+    try {
+        $verdict = $classifier->findDuplicates(
+            $subject,
+            $body,
+            array_map(static fn($c) => [
+                'id'          => (int) $c['id'],
+                'subject'     => (string) $c['subject'],
+                'description' => (string) ($c['description'] ?? ''),
+                'created_at'  => (string) ($c['created_at'] ?? ''),
+            ], $candidates),
+            $maxTokens,
+            $timeoutSec
+        );
+    } catch (\Throwable $e) {
+        error_log('[AI dup-check] type ' . $typeId . ' user ' . $userId . ' failed: ' . $e->getMessage());
+        return ['matches' => [], 'threshold' => $threshold];
+    }
+
+    $byId = [];
+    foreach ($candidates as $c) {
+        $byId[(int) $c['id']] = $c;
+    }
+
+    $hits = [];
+    foreach (($verdict['matches'] ?? []) as $m) {
+        if ($m['confidence'] < $threshold)        { continue; }
+        if (!isset($byId[$m['ticket_id']]))       { continue; }
+        $row = $byId[$m['ticket_id']];
+        $first = trim((string) ($row['first_name'] ?? ''));
+        $last  = trim((string) ($row['last_name']  ?? ''));
+        $requester = $first;
+        if ($last !== '') { $requester .= ' ' . mb_substr($last, 0, 1) . '.'; }
+        $hits[] = [
+            'ticket_id'  => (int) $m['ticket_id'],
+            'subject'    => (string) $row['subject'],
+            'status'     => (string) $row['status'],
+            'created_at' => (string) $row['created_at'],
+            'requester'  => trim($requester),
+            'type_name'  => (string) ($row['type_name'] ?? ''),
+            'confidence' => (float) $m['confidence'],
+            'reasoning'  => (string) ($m['reasoning'] ?? ''),
+        ];
+    }
+
+    // Audit log — even no-match calls go in the table for tuning.
+    $providerKey = (string) getSetting('ai_provider', 'anthropic');
+    $modelKey    = $providerKey === 'anthropic'
+        ? (string) getSetting('ai_anthropic_model', 'claude-haiku-4-5')
+        : (string) getSetting('ai_openai_model',    'gpt-4o-mini');
+    $candidateIds = array_map(static fn($c) => (int) $c['id'], $candidates);
+
+    try {
+        $db->prepare(
+            'INSERT INTO ai_duplicate_classifications
+                (user_id, type_id, location_id, provider, model, subject,
+                 candidate_ticket_ids, matches, threshold, decision,
+                 raw_output, latency_ms, prompt_tokens, output_tokens)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $userId,
+            $typeId,
+            $locationId,
+            $providerKey,
+            $modelKey,
+            mb_substr($subject, 0, 255),
+            json_encode($candidateIds, JSON_UNESCAPED_SLASHES),
+            json_encode($hits, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            $threshold,
+            empty($hits) ? 'no_match' : 'suggested',
+            json_encode($verdict['raw'] ?? null, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            (int) ($verdict['latency_ms']    ?? 0),
+            (int) ($verdict['prompt_tokens'] ?? 0),
+            (int) ($verdict['output_tokens'] ?? 0),
+        ]);
+    } catch (\Throwable $e) {
+        error_log('[AI dup-check] audit insert failed: ' . $e->getMessage());
+    }
+
+    return ['matches' => $hits, 'threshold' => $threshold];
+}
+
+/**
+ * Whether the "similar past tickets" panel should be offered for a ticket of a
+ * given type. The single source of truth for the render-time decision on both
+ * the agent and admin ticket views — the async endpoint that actually fetches
+ * matches re-checks the same rules inside findSimilarPastTickets().
+ *
+ * Gate: master AI switch, the global feature switch, then the per-type
+ * ai_similar_check_enabled column (confidential types are always off). A ticket
+ * with no type honours the global switch (there's no per-type row to disable).
+ */
+function similarTicketsEnabledForType(PDO $db, ?int $typeId): bool
+{
+    if (getSetting('ai_enabled', '0') !== '1')         { return false; }
+    if (getSetting('ai_similar_enabled', '0') !== '1') { return false; }
+    if ($typeId === null)                              { return true; }
+
+    $stmt = $db->prepare(
+        'SELECT is_confidential, ai_similar_check_enabled FROM ticket_types WHERE id = ?'
+    );
+    $stmt->execute([$typeId]);
+    $row = $stmt->fetch();
+    if (!$row)                                    { return true; }  // orphaned id → honour global
+    if ((int) $row['is_confidential'] === 1)      { return false; }
+    return (int) $row['ai_similar_check_enabled'] === 1;
+}
+
+/**
+ * "Similar past tickets" agent assist. Given a ticket an agent is working,
+ * search the WHOLE ticket archive (open, resolved, closed) for tickets that
+ * describe the same or a closely related problem, then let the LLM rank the
+ * lexical candidates by how useful each is. Returns display-ready rows.
+ *
+ * Two-stage RAG-style pipeline:
+ *   1. Retrieval — a MySQL FULLTEXT MATCH...AGAINST query narrows the archive
+ *      to the ~20 most lexically-similar tickets (cheap, no API call).
+ *   2. Rerank — those candidates go to the LLM, which scores relevance and
+ *      explains how each relates.
+ *
+ * Gated behind `ai_enabled` + `ai_similar_enabled`. Confidential ticket types
+ * are never sent to the provider. The newest ai_similarity_classifications row
+ * for the ticket is reused as a cache so the LLM runs once per ticket, not once
+ * per page view — pass $forceRefresh to recompute.
+ *
+ * Result shape:
+ *   [
+ *     'enabled' => bool,          // feature on AND this ticket is eligible
+ *     'matches' => [
+ *       ['ticket_id' => int, 'subject' => string, 'status' => string,
+ *        'created_at' => string, 'type_name' => string,
+ *        'relevance' => float, 'reasoning' => string],
+ *       ...
+ *     ],
+ *   ]
+ *
+ * @param int  $ticketId     The ticket the agent is working
+ * @param int  $viewerId     Auth::id() of the viewing agent (scopes visibility)
+ * @param bool $forceRefresh Skip the cache and re-run the LLM
+ */
+function findSimilarPastTickets(int $ticketId, int $viewerId, bool $forceRefresh = false): array
+{
+    $off = ['enabled' => false, 'matches' => []];
+
+    if (getSetting('ai_enabled', '0') !== '1')          { return $off; }
+    if (getSetting('ai_similar_enabled', '0') !== '1')  { return $off; }
+    if ($ticketId <= 0)                                 { return $off; }
+
+    $db = Database::connect();
+
+    // Load the current ticket. Skip confidential types entirely — their bodies
+    // must never reach the provider (same rule as duplicate detection) — and
+    // skip types the admin has switched the feature off for. A ticket with no
+    // type (LEFT JOIN → NULL) defaults to enabled, honouring the global switch.
+    $tStmt = $db->prepare(
+        "SELECT t.id, t.subject, t.description,
+                COALESCE(tt.is_confidential, 0) AS type_is_confidential,
+                COALESCE(tt.ai_similar_check_enabled, 1) AS type_similar_enabled
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE t.id = ?"
+    );
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket)                                        { return $off; }
+    if ((int) $ticket['type_is_confidential'] === 1)     { return $off; }
+    if ((int) $ticket['type_similar_enabled'] !== 1)     { return $off; }
+
+    // Visibility scope for the viewing agent, so matches can't leak tickets
+    // they have no access to. This feature is agent-facing (staff only).
+    $scopeStmt = $db->prepare('SELECT role FROM users WHERE id = ?');
+    $scopeStmt->execute([$viewerId]);
+    $viewer = $scopeStmt->fetch() ?: [];
+    if (!roleIsStaff($viewer['role'] ?? null))           { return $off; }
+    $vis = ticketStaffVisibilitySql($db, $viewerId, $viewer['role'] ?? null, 't');
+
+    // Admin-set floor in whole percent (0 = show everything). Applied here, not
+    // at LLM time, so changing it also filters cached runs. Rounded the same way
+    // the panel rounds its % badge, so a match shown as "80%" passes an 80 floor.
+    $minPct = max(0, min(100, (int) getSetting('ai_similar_min_relevance', '0')));
+
+    // Re-hydrate a list of {ticket_id, relevance, reasoning} into display rows,
+    // re-checking visibility + confidentiality against the CURRENT viewer so a
+    // cached result can never surface a ticket this agent may not see.
+    $hydrate = function (array $ranked) use ($db, $vis, $ticketId, $minPct): array {
+        $ranked = array_values(array_filter($ranked, static fn($r) => (int) ($r['ticket_id'] ?? 0) > 0
+            && round((float) ($r['relevance'] ?? 0) * 100) >= $minPct));
+        if (empty($ranked)) { return []; }
+        $ids   = array_map(static fn($r) => (int) $r['ticket_id'], $ranked);
+        $place = implode(',', array_fill(0, count($ids), '?'));
+
+        $params = $ids;
+        foreach ($vis['params'] as $p) { $params[] = $p; }
+        $params[] = $ticketId;
+
+        $rowStmt = $db->prepare(
+            "SELECT t.id, t.subject, t.status, t.created_at, tt.name AS type_name
+             FROM tickets t
+             LEFT JOIN ticket_types tt ON tt.id = t.type_id
+             WHERE t.id IN ({$place})
+               AND t.merged_into_ticket_id IS NULL
+               AND COALESCE(tt.is_confidential, 0) = 0
+               AND ({$vis['sql']})
+               AND t.id != ?"
+        );
+        $rowStmt->execute($params);
+        $byId = [];
+        foreach ($rowStmt->fetchAll() as $row) { $byId[(int) $row['id']] = $row; }
+
+        $out = [];
+        foreach ($ranked as $r) {
+            $tid = (int) $r['ticket_id'];
+            if (!isset($byId[$tid])) { continue; } // gone / merged / not visible now
+            $row = $byId[$tid];
+            $out[] = [
+                'ticket_id'  => $tid,
+                'subject'    => (string) $row['subject'],
+                'status'     => (string) $row['status'],
+                'created_at' => (string) $row['created_at'],
+                'type_name'  => (string) ($row['type_name'] ?? ''),
+                'relevance'  => (float) ($r['relevance'] ?? 0.0),
+                'reasoning'  => (string) ($r['reasoning'] ?? ''),
+            ];
+        }
+        return $out;
+    };
+
+    // Cache: reuse the newest run for this ticket unless a refresh is forced.
+    if (!$forceRefresh) {
+        $cStmt = $db->prepare(
+            'SELECT matches FROM ai_similarity_classifications
+             WHERE ticket_id = ? ORDER BY created_at DESC, id DESC LIMIT 1'
+        );
+        $cStmt->execute([$ticketId]);
+        $cached = $cStmt->fetchColumn();
+        if ($cached !== false) {
+            $ranked = json_decode((string) $cached, true);
+            return ['enabled' => true, 'matches' => is_array($ranked) ? $hydrate($ranked) : []];
+        }
+    }
+
+    $classifier = AIClassifierFactory::fromSettings();
+    if (!$classifier instanceof AIClassifier) { return ['enabled' => true, 'matches' => []]; }
+
+    // Stage 1 — FULLTEXT retrieval. The query is the current ticket's own
+    // subject + body; NATURAL LANGUAGE MODE ranks archive tickets by term
+    // overlap. Scope to visible, non-confidential, non-merged tickets and
+    // exclude the ticket itself. Cap at 20 candidates for the rerank prompt.
+    $query = trim($ticket['subject'] . ' ' . strip_tags((string) $ticket['description']));
+    $query = mb_substr($query, 0, 4000);
+    if (trim($query) === '') { return ['enabled' => true, 'matches' => []]; }
+
+    $params = [$query];                 // MATCH in SELECT (for the relevance score)
+    $params[] = $query;                 // MATCH in WHERE
+    foreach ($vis['params'] as $p) { $params[] = $p; }
+    $params[] = $ticketId;
+
+    $cStmt = $db->prepare(
+        "SELECT t.id, t.subject, t.description, t.status, t.created_at,
+                tt.name AS type_name,
+                MATCH(t.subject, t.description) AGAINST (? IN NATURAL LANGUAGE MODE) AS relevance
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE MATCH(t.subject, t.description) AGAINST (? IN NATURAL LANGUAGE MODE)
+           AND t.merged_into_ticket_id IS NULL
+           AND COALESCE(tt.is_confidential, 0) = 0
+           AND ({$vis['sql']})
+           AND t.id != ?
+         ORDER BY relevance DESC
+         LIMIT 20"
+    );
+    $cStmt->execute($params);
+    $candidates = $cStmt->fetchAll();
+    if (empty($candidates)) {
+        // Record the empty run so we don't re-query on every page view.
+        _logSimilarityRun($db, $ticketId, [], [], null);
+        return ['enabled' => true, 'matches' => []];
+    }
+
+    $maxTokens  = max(600, (int) getSetting('ai_max_tokens', '500'));
+    $timeoutSec = (int) getSetting('ai_timeout_seconds', '5');
+
+    try {
+        $verdict = $classifier->findSimilarTickets(
+            (string) $ticket['subject'],
+            (string) $ticket['description'],
+            array_map(static fn($c) => [
+                'id'          => (int) $c['id'],
+                'subject'     => (string) $c['subject'],
+                'description' => (string) ($c['description'] ?? ''),
+                'status'      => (string) ($c['status'] ?? ''),
+                'created_at'  => (string) ($c['created_at'] ?? ''),
+            ], $candidates),
+            $maxTokens,
+            $timeoutSec
+        );
+    } catch (\Throwable $e) {
+        error_log('[AI similar] ticket ' . $ticketId . ' failed: ' . $e->getMessage());
+        return ['enabled' => true, 'matches' => []];
+    }
+
+    // The LLM verdict is just {ticket_id, relevance, reasoning}. Persist it as
+    // the cache/audit record, then hydrate into display rows.
+    $ranked = $verdict['matches'] ?? [];
+    $candidateIds = array_map(static fn($c) => (int) $c['id'], $candidates);
+    _logSimilarityRun($db, $ticketId, $candidateIds, $ranked, $verdict);
+
+    return ['enabled' => true, 'matches' => $hydrate($ranked)];
+}
+
+/**
+ * Insert one ai_similarity_classifications audit/cache row. Never throws —
+ * a logging failure must not break the agent's ticket view.
+ */
+function _logSimilarityRun(PDO $db, int $ticketId, array $candidateIds, array $matches, ?array $verdict): void
+{
+    $providerKey = (string) getSetting('ai_provider', 'anthropic');
+    $modelKey    = $providerKey === 'anthropic'
+        ? (string) getSetting('ai_anthropic_model', 'claude-haiku-4-5')
+        : (string) getSetting('ai_openai_model',    'gpt-4o-mini');
+
+    try {
+        $db->prepare(
+            'INSERT INTO ai_similarity_classifications
+                (ticket_id, provider, model, candidate_ticket_ids, matches,
+                 raw_output, latency_ms, prompt_tokens, output_tokens)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $ticketId,
+            $providerKey,
+            $modelKey,
+            json_encode(array_values($candidateIds), JSON_UNESCAPED_SLASHES),
+            json_encode(array_values($matches), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            json_encode($verdict['raw'] ?? null, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            (int) ($verdict['latency_ms']    ?? 0),
+            (int) ($verdict['prompt_tokens'] ?? 0),
+            (int) ($verdict['output_tokens'] ?? 0),
+        ]);
+    } catch (\Throwable $e) {
+        error_log('[AI similar] audit insert failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Fetch a small, presentation-safe view of a candidate-duplicate ticket
+ * for the modal preview shown on the create form. Returns null when the
+ * ticket should NOT be visible to the requesting user under the same
+ * rules used by the dup-check candidate query (non-confidential type,
+ * not-merged, recent, same branch for portal users).
+ *
+ * Result shape:
+ *   [
+ *     'id'              => int,
+ *     'subject'         => string,
+ *     'status'          => string,
+ *     'created_at'      => string,
+ *     'type_name'       => string,
+ *     'requester'       => string,        // first + last initial (portal) or full (agent)
+ *     'description_html'=> string,        // capped at 4 KB
+ *     'comment_count'   => int,
+ *   ]
+ */
+function getDupPreviewTicket(int $userId, int $ticketId, bool $agentScope): ?array
+{
+    if ($ticketId <= 0) { return null; }
+
+    $db = Database::connect();
+
+    $stmt = $db->prepare(
+        "SELECT t.id, t.subject, t.description, t.status, t.created_at,
+                t.location_id, t.created_by, t.merged_into_ticket_id,
+                tt.name AS type_name, COALESCE(tt.is_confidential, 0) AS type_is_confidential,
+                u.first_name, u.last_name
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         LEFT JOIN users u         ON u.id  = t.created_by
+         WHERE t.id = ?"
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row)                                                  { return null; }
+    if ((int) $row['type_is_confidential'] === 1)               { return null; }
+    if ($row['merged_into_ticket_id'] !== null)                 { return null; }
+    if (in_array($row['status'], ticketClosedBucketSlugs(), true)) { return null; }
+
+    if ($agentScope) {
+        // Staff may only preview tickets their role can actually see (group
+        // membership / assignment / view_all), matching the main ticket routes.
+        // Without this, dup-preview is a cross-group ticket-body IDOR: any agent
+        // could read the subject/requester/body of any non-confidential ticket
+        // by iterating ids.
+        $roleStmt = $db->prepare('SELECT role FROM users WHERE id = ?');
+        $roleStmt->execute([$userId]);
+        $roleSlug = $roleStmt->fetchColumn() ?: null;
+        $vis = ticketStaffVisibilitySql($db, $userId, $roleSlug ?: null, 't');
+        $visStmt = $db->prepare("SELECT 1 FROM tickets t WHERE t.id = ? AND {$vis['sql']} LIMIT 1");
+        $visStmt->execute(array_merge([$ticketId], $vis['params']));
+        if (!$visStmt->fetchColumn()) { return null; }
+    } else {
+        // Portal users: only preview a ticket they may actually view — their own,
+        // or (with the can_view_location_tickets flag) another ticket at their
+        // own branch. Mirrors the gate on /portal/tickets/{id}.
+        $permStmt = $db->prepare('SELECT can_view_location_tickets, location_id FROM users WHERE id = ?');
+        $permStmt->execute([$userId]);
+        $perm = $permStmt->fetch() ?: [];
+        $isOwn = (int) ($row['created_by'] ?? 0) === $userId;
+        $canViewLoc = !empty($perm['can_view_location_tickets'])
+            && !empty($perm['location_id'])
+            && (int) ($row['location_id'] ?? 0) === (int) $perm['location_id'];
+        if (!$isOwn && !$canViewLoc) { return null; }
+    }
+
+    $first = trim((string) ($row['first_name'] ?? ''));
+    $last  = trim((string) ($row['last_name']  ?? ''));
+    if ($agentScope) {
+        $requester = trim($first . ' ' . $last);
+    } else {
+        $requester = $first;
+        if ($last !== '') { $requester .= ' ' . mb_substr($last, 0, 1) . '.'; }
+        $requester = trim($requester);
+    }
+
+    $cnt = $db->prepare(
+        "SELECT COUNT(*) FROM ticket_timeline WHERE ticket_id = ? AND action = 'comment' AND is_internal = 0"
+    );
+    $cnt->execute([$ticketId]);
+    $commentCount = (int) $cnt->fetchColumn();
+
+    return [
+        'id'               => (int) $row['id'],
+        'subject'          => (string) $row['subject'],
+        'status'           => (string) $row['status'],
+        'created_at'       => (string) $row['created_at'],
+        'type_name'        => (string) ($row['type_name'] ?? ''),
+        'requester'        => $requester,
+        'description_html' => sanitizeRichHtml(mb_substr((string) ($row['description'] ?? ''), 0, 4000)),
+        'comment_count'    => $commentCount,
+    ];
+}
+
+/**
+ * Record that the requester saw AI duplicate-warning suggestions for this
+ * ticket and chose to file it anyway. Writes a single internal timeline
+ * entry on the new ticket so admins can audit overrides, and links the
+ * matching `ai_duplicate_classifications` row (if found) to the new
+ * ticket id with decision='suppressed'.
+ *
+ * Safe to call with an empty / malformed CSV — does nothing in that case.
+ */
+function recordDupOverrideOnNewTicket(PDO $db, int $newTicketId, int $userId, string $matchedIdsCsv): void
+{
+    $ids = array_values(array_unique(array_filter(array_map(
+        static fn($s) => (int) trim($s),
+        explode(',', $matchedIdsCsv)
+    ), static fn($i) => $i > 0)));
+    if (empty($ids)) { return; }
+
+    // Resolve to subjects so the timeline entry is human-readable, not
+    // just bare numbers. Skip any IDs that don't exist (stale form submit).
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    $sStmt = $db->prepare("SELECT id, subject FROM tickets WHERE id IN ({$place})");
+    $sStmt->execute($ids);
+    $rows = $sStmt->fetchAll();
+    if (empty($rows)) { return; }
+
+    $links = array_map(
+        static fn($r) => '#' . (int) $r['id'] . ' "' . mb_substr((string) $r['subject'], 0, 80) . '"',
+        $rows
+    );
+    $details = 'AI flagged this as a possible duplicate of ' . implode(', ', $links)
+             . ' &mdash; submitter chose to file anyway.';
+
+    $db->prepare(
+        "INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+         VALUES (?, NULL, 'ai_duplicate_warned', ?, 1)"
+    )->execute([$newTicketId, $details]);
+
+    // Link the audit row (most recent 'suggested' for this user, last 5 min)
+    // to the new ticket so admins can correlate the AI verdict with the
+    // ticket that ultimately got created.
+    try {
+        $db->prepare(
+            "UPDATE ai_duplicate_classifications
+             SET chosen_ticket_id = ?, decision = 'suppressed'
+             WHERE user_id = ? AND decision = 'suggested'
+               AND created_at >= NOW() - INTERVAL 5 MINUTE
+             ORDER BY id DESC LIMIT 1"
+        )->execute([$newTicketId, $userId]);
+    } catch (\Throwable $e) {
+        error_log('[AI dup-check] audit link failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Live-check that AI is usable before saving a ticket type whose features
+ * depend on it — "No Wrong Door" group routing (ai_route_group) or duplicate
+ * detection (ai_dup_check_enabled). Actually pings the provider so a bad key
+ * or unreachable endpoint is caught at setup time, not silently at submit time.
+ *
+ * Returns null when the save may proceed: the type uses no AI feature, the
+ * admin explicitly chose "save anyway", or a real connection test succeeded.
+ * Otherwise returns a human-readable reason for the caller's warning modal.
+ */
+function aiTicketTypeUnavailableReason(bool $wantsAI, bool $saveAnyway): ?string
+{
+    if (!$wantsAI || $saveAnyway) {
+        return null;
+    }
+    $classifier = AIClassifierFactory::fromSettings();
+    if ($classifier === null) {
+        return 'AI classification is currently switched off (or no API key is set) under Admin → Settings → AI Classification.';
+    }
+    $result = $classifier->testConnection(10);
+    if (!empty($result['ok'])) {
+        return null;
+    }
+    return 'AI is switched on, but a live connection test just failed: ' . trim((string) ($result['message'] ?? 'unknown error'));
+}
+
+/**
+ * "No Wrong Door" group routing. Run for ticket types flagged with
+ * ai_route_group=1: ask the AI to pick the best group from every
+ * non-confidential group (using the description column to ground the
+ * pick) and move the ticket there if confidence clears the threshold.
+ *
+ * Always writes an `ai_group_classifications` row when AI is reached —
+ * even when AI declines or confidence is too low — so admins have a full
+ * audit trail of why each ticket did or didn't get routed.
+ *
+ * Soft-fail: returns null on any provider error; the ticket stays in its
+ * current group (the type's default — typically the "No Wrong Door"
+ * queue itself) so an agent can route it manually.
+ *
+ * Returns the applied group id on success, null on every other path
+ * (AI off, type not flagged, confidence too low, no candidate groups,
+ * provider error).
+ */
+function aiRouteTicketToGroup(int $ticketId): ?int
+{
+    $classifier = AIClassifierFactory::fromSettings();
+    if ($classifier === null) {
+        return null;
+    }
+
+    $db = Database::connect();
+    $stmt = $db->prepare(
+        "SELECT t.id, t.subject, t.description, t.group_id AS current_group_id,
+                tt.id AS type_id, tt.ai_route_group, tt.is_confidential AS type_is_confidential
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE t.id = ?"
+    );
+    $stmt->execute([$ticketId]);
+    $ticket = $stmt->fetch();
+    if (!$ticket) {
+        return null;
+    }
+    if ((int) ($ticket['ai_route_group'] ?? 0) !== 1) {
+        return null; // Type isn't flagged for AI routing
+    }
+    if ((int) ($ticket['type_is_confidential'] ?? 0) === 1) {
+        // Hard rule: never send confidential ticket bodies to a third party.
+        return null;
+    }
+
+    // Candidate groups: every non-confidential group with a usable
+    // description. We send the description to the AI as the routing
+    // signal — a group with an empty description gives the model
+    // nothing to work with, so skip it instead of polluting the prompt.
+    $groups = $db->query(
+        "SELECT id, name, description
+         FROM `groups`
+         WHERE COALESCE(is_confidential, 0) = 0
+           AND description IS NOT NULL
+           AND TRIM(description) <> ''
+         ORDER BY sort_order, name"
+    )->fetchAll();
+
+    if (empty($groups)) {
+        // Nothing to choose from — log a no-op classification so admins
+        // can see why routing didn't fire (likely: descriptions missing).
+        error_log('[AI route group] ticket #' . $ticketId . ': no candidate groups (none with description)');
+        return null;
+    }
+
+    $maxTokens  = (int) getSetting('ai_max_tokens', '500');
+    $timeoutSec = (int) getSetting('ai_timeout_seconds', '5');
+    $threshold  = (float) getSetting('ai_confidence_threshold', '0.7');
+
+    try {
+        $verdict = $classifier->classifyGroup(
+            (string) $ticket['subject'],
+            (string) $ticket['description'],
+            $groups,
+            $maxTokens,
+            $timeoutSec
+        );
+    } catch (\Throwable $e) {
+        error_log('[AI route group] ticket #' . $ticketId . ' failed: ' . $e->getMessage());
+        return null;
+    }
+
+    $providerKey = (string) getSetting('ai_provider', 'anthropic');
+    $modelKey    = $providerKey === 'anthropic'
+        ? (string) getSetting('ai_anthropic_model', 'claude-haiku-4-5')
+        : (string) getSetting('ai_openai_model',    'gpt-4o-mini');
+
+    $suggestedGroupId = $verdict['group_id'] !== null ? (int) $verdict['group_id'] : null;
+    $confidence       = (float) ($verdict['confidence'] ?? 0);
+    $shouldApply      = $suggestedGroupId !== null
+        && $confidence >= $threshold
+        && $suggestedGroupId !== (int) ($ticket['current_group_id'] ?? 0);
+    $appliedGroupId   = $shouldApply ? $suggestedGroupId : null;
+
+    $candidateIds = array_map(static fn($g) => (int) $g['id'], $groups);
+
+    $db->prepare(
+        'INSERT INTO ai_group_classifications
+            (ticket_id, provider, model, candidate_group_ids, suggested_group_id,
+             applied_group_id, confidence, reasoning, raw_output,
+             latency_ms, prompt_tokens, output_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([
+        $ticketId,
+        $providerKey,
+        $modelKey,
+        json_encode($candidateIds, JSON_UNESCAPED_SLASHES),
+        $suggestedGroupId,
+        $appliedGroupId,
+        $confidence,
+        (string) ($verdict['reasoning'] ?? ''),
+        json_encode($verdict['raw'] ?? null, JSON_UNESCAPED_SLASHES),
+        (int) ($verdict['latency_ms']    ?? 0),
+        (int) ($verdict['prompt_tokens'] ?? 0),
+        (int) ($verdict['output_tokens'] ?? 0),
+    ]);
+    $classificationId = (int) $db->lastInsertId();
+
+    $db->prepare('UPDATE tickets SET ai_group_classification_id = ? WHERE id = ?')
+        ->execute([$classificationId, $ticketId]);
+
+    // Resolve names for the timeline message
+    $groupNameById = [];
+    foreach ($groups as $g) { $groupNameById[(int) $g['id']] = $g['name']; }
+    $confPct = (int) round($confidence * 100);
+
+    if ($shouldApply) {
+        $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?')
+            ->execute([$appliedGroupId, $ticketId]);
+
+        $details = 'AI (' . $providerKey . '/' . $modelKey . ') routed to group "'
+            . ($groupNameById[$appliedGroupId] ?? ('#' . $appliedGroupId)) . '"'
+            . ' — ' . $confPct . '% confidence. '
+            . ($verdict['reasoning'] !== '' ? '"' . $verdict['reasoning'] . '"' : '');
+        $db->prepare(
+            "INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+             VALUES (?, NULL, 'ai_group_routed', ?, 1)"
+        )->execute([$ticketId, $details]);
+
+        return $appliedGroupId;
+    }
+
+    // No-op cases get a different timeline entry so admins can spot the
+    // pattern (low confidence vs. AI returned same group vs. AI declined).
+    if ($suggestedGroupId === null) {
+        $details = 'AI (' . $providerKey . '/' . $modelKey . ') could not confidently match a group'
+            . ' — ' . $confPct . '% confidence; ticket left in its current queue.'
+            . ($verdict['reasoning'] !== '' ? ' "' . $verdict['reasoning'] . '"' : '');
+    } elseif ($suggestedGroupId === (int) ($ticket['current_group_id'] ?? 0)) {
+        $details = 'AI (' . $providerKey . '/' . $modelKey . ') confirmed current group'
+            . ' (' . ($groupNameById[$suggestedGroupId] ?? ('#' . $suggestedGroupId)) . ')'
+            . ' — ' . $confPct . '% confidence.';
+    } else {
+        $details = 'AI (' . $providerKey . '/' . $modelKey . ') suggested "'
+            . ($groupNameById[$suggestedGroupId] ?? ('#' . $suggestedGroupId)) . '"'
+            . ' but ' . $confPct . '% confidence is below the ' . (int) round($threshold * 100) . '% threshold;'
+            . ' ticket left in its current queue.';
+    }
+    $db->prepare(
+        "INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+         VALUES (?, NULL, 'ai_group_routing_skipped', ?, 1)"
+    )->execute([$ticketId, $details]);
+
+    return null;
+}
+
+/**
+ * Bump a ticket's priority up one notch when AI flags angry/urgent
+ * sentiment. Idempotent — never bumps past the highest-sort_order
+ * priority, never re-bumps an already-handled ticket within the
+ * same classification (timeline marker prevents loops).
+ */
+function _maybeBumpPriorityFromSentiment(PDO $db, int $ticketId, string $sentiment): void
+{
+    // Already bumped for this ticket recently? Skip.
+    $dedup = $db->prepare(
+        "SELECT 1 FROM ticket_timeline WHERE ticket_id = ? AND action = 'ai_priority_bumped' LIMIT 1"
+    );
+    $dedup->execute([$ticketId]);
+    if ($dedup->fetchColumn()) {
+        return;
+    }
+
+    $tStmt = $db->prepare('SELECT priority_id FROM tickets WHERE id = ?');
+    $tStmt->execute([$ticketId]);
+    $current = $tStmt->fetchColumn();
+    $current = $current !== false ? (int) $current : 0;
+
+    // Priorities ordered by sort_order — pick the next one above current
+    $allP = $db->query('SELECT id, name, sort_order FROM ticket_priorities ORDER BY sort_order ASC')->fetchAll();
+    if (empty($allP)) {
+        return;
+    }
+
+    $currentSort = -1;
+    foreach ($allP as $p) {
+        if ((int) $p['id'] === $current) { $currentSort = (int) $p['sort_order']; break; }
+    }
+    // If no current priority, jump to the highest-sort priority. Otherwise
+    // pick the immediate-next priority above the current one.
+    $next = null;
+    if ($currentSort === -1) {
+        $next = end($allP) ?: null;
+    } else {
+        foreach ($allP as $p) {
+            if ((int) $p['sort_order'] > $currentSort) {
+                $next = $p; break;
+            }
+        }
+    }
+    if (!$next || (int) $next['id'] === $current) {
+        return;
+    }
+
+    $db->prepare('UPDATE tickets SET priority_id = ? WHERE id = ?')
+       ->execute([(int) $next['id'], $ticketId]);
+    $db->prepare(
+        "INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+         VALUES (?, NULL, 'ai_priority_bumped', ?, 1)"
+    )->execute([
+        $ticketId,
+        'AI sentiment "' . $sentiment . '" bumped priority to "' . $next['name'] . '".'
+    ]);
+}
+
+/* ── Group manager / skill ownership helpers ──────────────────── */
+
+/**
+ * Returns the IDs of every group where $userId is flagged as a manager.
+ * Admins implicitly manage every group, but this helper returns only the
+ * explicit memberships so route-level "did the user actually get
+ * delegated?" checks stay honest. Use canManageGroupSkills() for the
+ * admin-bypass version.
+ */
+function userManagedGroupIds(int $userId): array
+{
+    $stmt = Database::connect()->prepare(
+        'SELECT group_id FROM group_user_map WHERE user_id = ? AND is_manager = 1'
+    );
+    $stmt->execute([$userId]);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Authorisation gate for everything a group manager can do (assign
+ * skills to their members, edit skills they own, etc.).
+ *
+ * Admins always pass. Otherwise the user must hold the is_manager
+ * flag on the membership row for $groupId.
+ */
+function canManageGroupSkills(int $userId, int $groupId): bool
+{
+    if (Auth::isAdmin()) {
+        return true;
+    }
+    $stmt = Database::connect()->prepare(
+        'SELECT is_manager FROM group_user_map WHERE user_id = ? AND group_id = ?'
+    );
+    $stmt->execute([$userId, $groupId]);
+    return (int) ($stmt->fetchColumn() ?: 0) === 1;
+}
+
+/**
+ * Can $userId edit the skill row $skillId?
+ *
+ * Admins always pass. For non-admins, the skill must be group-scoped
+ * (agent_skills.group_id IS NOT NULL) AND the user must manage that
+ * group. Global skills (group_id NULL) are admin-only by design — they
+ * represent the system-wide vocabulary.
+ */
+function canEditSkill(int $userId, int $skillId): bool
+{
+    if (Auth::isAdmin()) {
+        return true;
+    }
+    $stmt = Database::connect()->prepare('SELECT group_id FROM agent_skills WHERE id = ?');
+    $stmt->execute([$skillId]);
+    $gid = $stmt->fetchColumn();
+    if ($gid === false || $gid === null) {
+        return false;
+    }
+    return canManageGroupSkills($userId, (int) $gid);
+}
+
+/* ── Timezone helpers ─────────────────────────────────────────── */
+
+/**
+ * Returns the effective PHP timezone identifier for a given location.
+ *
+ * Respects the location_timezone_mode setting:
+ *   'shared'       — all locations use the location_timezone_shared value
+ *   'per_location' — each location has its own timezone column
+ *
+ * Falls back to UTC when nothing is configured.
+ *
+ * Future: when geo-API auto-detection is added, update this function
+ * to call the API and cache the result in locations.timezone.
+ */
+function getLocationTimezone(?int $locationId): string
+{
+    $mode = getSetting('location_timezone_mode', 'shared');
+    if ($mode === 'shared') {
+        $tz = getSetting('location_timezone_shared', 'UTC');
+        return $tz !== '' ? $tz : 'UTC';
+    }
+    if ($locationId === null) {
+        return 'UTC';
+    }
+    static $cache = [];
+    if (!isset($cache[$locationId])) {
+        $stmt = Database::connect()->prepare('SELECT timezone FROM locations WHERE id = ?');
+        $stmt->execute([$locationId]);
+        $tz = $stmt->fetchColumn();
+        $cache[$locationId] = ($tz && $tz !== '') ? $tz : 'UTC';
+    }
+    return $cache[$locationId];
+}
+
+/**
+ * Format a UTC datetime string in a given PHP timezone.
+ */
+function formatInTimezone(?string $utcDatetime, string $timezone, string $format = 'M j, Y g:i a'): string
+{
+    if ($utcDatetime === null || $utcDatetime === '') {
+        return '';
+    }
+    try {
+        $dt = new DateTime($utcDatetime, new DateTimeZone('UTC'));
+        $dt->setTimezone(new DateTimeZone($timezone));
+        return $dt->format($format);
+    } catch (\Exception $e) {
+        return date($format, strtotime($utcDatetime));
+    }
+}
+
+/**
+ * Parse a timestamp from an imported file into a storable datetime string.
+ *
+ * $sourceTz is the timezone the *exporting* system wrote the value in. The
+ * result is the same instant expressed in **server local time**, which is the
+ * frame every datetime in this database uses: `tickets.created_at` and
+ * `updated_at` are MySQL TIMESTAMP columns, so MySQL reads the literal in its
+ * session timezone, and the DATETIME columns are read back by PHP with a bare
+ * `new DateTimeImmutable()`. Handing either one a UTC value instead shifts every
+ * imported timestamp by the server's UTC offset — four hours in Toronto — with
+ * no error to show for it.
+ *
+ * A $raw that carries its own offset (ISO 8601 such as
+ * "2022-08-22T12:31:35-04:00") wins over $sourceTz, because PHP ignores the
+ * supplied timezone when the string states one. That is the desirable case: an
+ * export with offsets needs no guessing at all.
+ *
+ * Returns null for an empty or unparseable value.
+ */
+function parseImportDateTime(string $raw, string $sourceTz = 'UTC'): ?string
+{
+    if (trim($raw) === '') {
+        return null;
+    }
+    try {
+        $dt = new DateTime($raw, new DateTimeZone($sourceTz));
+        $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+        return $dt->format('Y-m-d H:i:s');
+    } catch (\Exception $e) {
+        // strtotime() resolves against server local time already, so date()
+        // (not gmdate()) keeps the fallback in the same frame as the happy path.
+        $ts = strtotime($raw);
+        return ($ts !== false && $ts > 0) ? date('Y-m-d H:i:s', $ts) : null;
+    }
+}
+
+/**
+ * Decide whether one imported row is inside the SLA scope the admin picked.
+ *
+ * "Start SLA clocks now" and "Apply from the original open date" used to apply
+ * to every row in the file, which is the wrong granularity for a real backlog:
+ * one legacy type is usually years old and worthless to time against, while the
+ * rest of the file is recent and worth tracking. This narrows the chosen
+ * handling with two independent filters, ANDed — an opted-in set of ticket types
+ * and an "opened on or after" cutoff. A row outside either is imported
+ * SLA-exempt instead.
+ *
+ * Both filters are nullable, and null means "no filter". That is what a post
+ * which never rendered the picker sends (a script, or a future API caller), and
+ * it reproduces the pre-2.170 behaviour of applying the handling file-wide
+ * rather than reading a missing field as "exclude everything".
+ *
+ * $allowedTypeKeys is keyed by **lowercased source label**, with '' as the
+ * bucket for rows whose type cell is blank. Matching on the label rather than a
+ * resolved `type_id` is deliberate: the label is what the admin ticked on the
+ * preview screen, and for a type the file is about to create there is no id to
+ * match against yet.
+ *
+ * $createdAt is the row's date **after** parseImportDateTime() has converted it
+ * out of the source timezone, which is the value the ticket is actually stored
+ * with — so the cutoff filters on the same reading the ticket will show. At the
+ * boundary that can differ from the raw CSV text by the source offset: a row
+ * reading 2025-12-31 23:00 in a source timezone behind the server passes a
+ * 2026-01-01 cutoff, because by then it is 2026 in the frame that gets stored.
+ *
+ * @param array<string,mixed>|null $allowedTypeKeys Ticked types, or null for all
+ * @param string|null $startOnOrAfter 'Y-m-d H:i:s' in server local time, or null
+ * @param string|null $createdAt      Row's parsed created_at, same frame
+ */
+function importSlaScopeAllows(
+    ?array $allowedTypeKeys,
+    ?string $startOnOrAfter,
+    string $sourceType,
+    ?string $createdAt
+): bool {
+    if ($allowedTypeKeys !== null
+        && !array_key_exists(strtolower(trim($sourceType)), $allowedTypeKeys)) {
+        return false;
+    }
+
+    if ($startOnOrAfter !== null) {
+        // Both sides are 'Y-m-d H:i:s' in server local time, so a plain string
+        // comparison already orders them correctly — no parsing needed.
+        if ($createdAt === null || $createdAt < $startOnOrAfter) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Returns the list of common timezone identifiers used across the app's
+ * timezone selectors. Centralised here so all selectors stay in sync.
+ */
+function commonTimezones(): array
+{
+    return [
+        'America/New_York',
+        'America/Chicago',
+        'America/Denver',
+        'America/Los_Angeles',
+        'America/Toronto',
+        'America/Vancouver',
+        'America/Winnipeg',
+        'America/Halifax',
+        'America/St_Johns',
+        'America/Edmonton',
+        'America/Regina',
+        'Europe/London',
+        'Europe/Paris',
+        'Europe/Berlin',
+        'Europe/Amsterdam',
+        'Australia/Sydney',
+        'Australia/Melbourne',
+        'Asia/Tokyo',
+        'Asia/Shanghai',
+        'Asia/Kolkata',
+        'Pacific/Auckland',
+        'UTC',
+    ];
+}
+
+/* ── Label helpers ────────────────────────────────────────────── */
+
+function label(string $key, string $default = ''): string
+{
+    static $labels = null;
+    if ($labels === null) {
+        $defaultFile = ROOT_DIR . '/config/labels.default.json';
+        $defaults    = is_file($defaultFile)
+            ? (json_decode(file_get_contents($defaultFile), true) ?: [])
+            : [];
+        $custom      = json_decode(getSetting('custom_labels', '{}'), true) ?: [];
+        $labels      = array_merge($defaults, $custom);
+    }
+    return $labels[$key] ?? ($default !== '' ? $default : $key);
+}
+
+/* ── User column preference helpers ──────────────────────────── */
+
+/**
+ * All toggleable ticket columns (id and subject are always shown).
+ */
+function ticketColumnDefinitions(): array
+{
+    return [
+        'status'       => 'Status',
+        'priority'     => 'Priority',
+        'type'         => 'Type',
+        'agent'        => 'Assigned To',
+        'group'        => 'Group',
+        'creator'      => 'Created By',
+        'location'     => 'Location',
+        'sla'          => 'SLA',
+        'created_at'   => 'Opened',
+        'due_date'     => 'Due',
+        'confidential' => 'Confidential',
+    ];
+}
+
+/** Columns hidden by default — users must opt-in via the Columns picker. */
+function ticketColumnsHiddenByDefault(): array
+{
+    return ['confidential'];
+}
+
+function getUserColumns(int $userId): array
+{
+    $defaults = array_diff(array_keys(ticketColumnDefinitions()), ticketColumnsHiddenByDefault());
+    $json = getSetting("ticket_columns:{$userId}", '');
+    if ($json === '') {
+        $cols = $defaults;
+    } else {
+        $decoded = json_decode($json, true);
+        $cols = is_array($decoded) ? $decoded : $defaults;
+    }
+    // SLA disabled site-wide — never expose the SLA column.
+    if (!slaEnabled()) {
+        $cols = array_values(array_filter($cols, static fn ($c) => $c !== 'sla'));
+    }
+    return $cols;
+}
+
+function setUserColumns(int $userId, array $columns): void
+{
+    $valid = array_keys(ticketColumnDefinitions());
+    $columns = array_values(array_intersect($columns, $valid));
+    setSetting("ticket_columns:{$userId}", json_encode($columns));
+}
+
+/* ── Ticket list view-style preference ───────────────────────── */
+
+/**
+ * Available ticket-list layouts. 'table' is the classic resizable grid;
+ * 'inbox' is the "Compact" email-style two-column (From / Subject) list with
+ * a hover detail card. The stored value stays 'inbox' for backwards
+ * compatibility; only the label was renamed to "Compact".
+ * Keyed by the value stored in `ticket_view:{userId}`.
+ */
+function ticketViewModes(): array
+{
+    return [
+        'table' => 'Table',
+        'inbox' => 'Compact',
+        'card'  => 'Card',
+    ];
+}
+
+/**
+ * Human-friendly relative time, e.g. "3 hours ago" (past) or "in 7 days"
+ * (future). Accepts a unix timestamp or a date string. Empty input → ''.
+ */
+function humanRelativeTime($when): string
+{
+    if ($when === null || $when === '') {
+        return '';
+    }
+    $ts = is_numeric($when) ? (int) $when : strtotime((string) $when);
+    if (!$ts) {
+        return '';
+    }
+    $diff   = $ts - time();
+    $future = $diff > 0;
+    $s      = abs($diff);
+    foreach ([[31536000, 'year'], [2592000, 'month'], [604800, 'week'], [86400, 'day'], [3600, 'hour'], [60, 'minute']] as [$secs, $label]) {
+        if ($s >= $secs) {
+            $n   = (int) floor($s / $secs);
+            $txt = $n . ' ' . $label . ($n === 1 ? '' : 's');
+            return $future ? 'in ' . $txt : $txt . ' ago';
+        }
+    }
+    return $future ? 'in a few seconds' : 'just now';
+}
+
+/** Up-to-two-letter initials from a person's display name (e.g. "Kim Sachs" → "KS"). */
+function nameInitials(string $name): string
+{
+    $parts = preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    if (!$parts) {
+        return '?';
+    }
+    $first = mb_substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? mb_substr($parts[count($parts) - 1], 0, 1) : '';
+    return mb_strtoupper($first . $last);
+}
+
+/** A user's chosen ticket-list layout; defaults to the classic table. */
+function getUserTicketView(int $userId): string
+{
+    $view = getSetting("ticket_view:{$userId}", 'table');
+    return array_key_exists($view, ticketViewModes()) ? $view : 'table';
+}
+
+function setUserTicketView(int $userId, string $view): void
+{
+    if (!array_key_exists($view, ticketViewModes())) {
+        $view = 'table';
+    }
+    setSetting("ticket_view:{$userId}", $view);
+}
+
+/** Page sizes offered on the agent and admin ticket lists. */
+function ticketPerPageOptions(): array
+{
+    return [10, 15, 20, 50];
+}
+
+/**
+ * Tickets per page for the list. A valid ?per_page= wins and is remembered
+ * as the user's choice (`ticket_per_page:{userId}`), so page links don't
+ * need to carry it; otherwise their saved choice, else 15.
+ */
+function ticketListPerPage(int $userId): int
+{
+    return rememberedPerPage("ticket_per_page:{$userId}", ticketPerPageOptions(), 15);
+}
+
+/** Page sizes offered on the Inventory list. */
+function inventoryPerPageOptions(): array
+{
+    return [10, 25, 50, 100];
+}
+
+/** Assets per page on the Inventory list — same remember-the-choice rule as tickets, default 50. */
+function inventoryListPerPage(int $userId): int
+{
+    return rememberedPerPage("inventory_per_page:{$userId}", inventoryPerPageOptions(), 50);
+}
+
+/** A valid ?per_page= wins and is saved under $settingKey; otherwise the saved choice, else $default. */
+function rememberedPerPage(string $settingKey, array $opts, int $default): int
+{
+    $saved = (int) getSetting($settingKey, (string) $default);
+    $req   = (int) ($_GET['per_page'] ?? 0);
+    if (in_array($req, $opts, true)) {
+        if ($req !== $saved) {
+            setSetting($settingKey, (string) $req);
+        }
+        return $req;
+    }
+    return in_array($saved, $opts, true) ? $saved : $default;
+}
+
+/* ── Kanban boards ────────────────────────────────────────────────
+ * The Kanban board is a separate ticket view (its own page, not one of the
+ * table/inbox/card list layouts). Two kinds of board exist:
+ *
+ *   Built-in boards group tickets by a single ticket field (status / priority /
+ *   assignee). Their columns are derived live and dragging a card reuses the
+ *   existing /api/tickets/{id}/set-status|set-priority|assign endpoints, so all
+ *   the usual side effects (timeline, SLA, automations, notifications) fire.
+ *
+ *   Custom boards are a personal organizer: the agent defines their own buckets
+ *   and drags tickets into them. Placement is stored (kanban_card_placements);
+ *   the ticket's own fields are never touched. A board is private to its owner
+ *   unless is_shared = 1.
+ * ----------------------------------------------------------------- */
+
+/**
+ * The built-in (virtual) boards, keyed by the id used in the ?board= param.
+ * 'field' is the tickets column the board groups on; 'endpoint' is the existing
+ * quick-edit API a card-drop calls; 'payload' names the JSON key it sends.
+ */
+function kanbanBuiltInBoards(): array
+{
+    return [
+        'status'   => ['label' => 'Status',   'icon' => 'bi-list-check', 'endpoint' => 'set-status',   'payload' => 'status'],
+        'priority' => ['label' => 'Priority', 'icon' => 'bi-flag',       'endpoint' => 'set-priority', 'payload' => 'priority_id'],
+        'assignee' => ['label' => 'Assignee', 'icon' => 'bi-person',     'endpoint' => 'assign',       'payload' => 'assigned_to'],
+    ];
+}
+
+/**
+ * Custom boards a user may open: their own, plus any shared by teammates.
+ * Each row carries is_owner and the owner's name for the board picker.
+ */
+function kanbanBoardsForUser(PDO $db, int $userId): array
+{
+    $stmt = $db->prepare(
+        "SELECT b.*, (b.user_id = ?) AS is_owner,
+                CONCAT(u.first_name, ' ', u.last_name) AS owner_name
+         FROM kanban_boards b
+         JOIN users u ON u.id = b.user_id
+         WHERE b.user_id = ? OR b.is_shared = 1
+         ORDER BY b.name"
+    );
+    $stmt->execute([$userId, $userId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Fetch a custom board the user is allowed to see (owner or shared), with its
+ * buckets attached under ['buckets']. Returns null if missing or not visible.
+ */
+function kanbanLoadBoard(PDO $db, int $boardId, int $userId): ?array
+{
+    $stmt = $db->prepare('SELECT * FROM kanban_boards WHERE id = ? AND (user_id = ? OR is_shared = 1)');
+    $stmt->execute([$boardId, $userId]);
+    $board = $stmt->fetch();
+    if (!$board) {
+        return null;
+    }
+    $bs = $db->prepare('SELECT * FROM kanban_buckets WHERE board_id = ? ORDER BY sort_order, id');
+    $bs->execute([$boardId]);
+    $board['buckets'] = $bs->fetchAll();
+    return $board;
+}
+
+/**
+ * A user's preferred ticket-timeline sort order: 'desc' (newest first — the
+ * default, matching the SQL order the routes fetch in) or 'asc' (oldest
+ * first). Used by the three ticket-view templates to decide the initial order
+ * and by the profile page to seed its radio buttons.
+ */
+function getUserTimelineSort(int $userId): string
+{
+    return getSetting("timeline_sort:{$userId}", 'desc') === 'asc' ? 'asc' : 'desc';
+}
+
+/* ── "Tickets by user" page (from the inbox-view person card) ─── */
+
+/**
+ * Open tickets relevant to one user: tickets they created, plus open tickets
+ * where they were @mentioned (notifications.type = 'mention'). Scoped to what
+ * the viewing staff member is allowed to see. Rows match the ticket-list shape,
+ * newest first. A row is a "mention" (not their own ticket) precisely when its
+ * created_by is not the target user — the WHERE only admits created-or-mentioned.
+ */
+function userOpenTicketsForStaff(PDO $db, int $targetUserId, int $viewerId, ?string $viewerRole): array
+{
+    $vis  = ticketStaffVisibilitySql($db, $viewerId, $viewerRole, 't');
+    $open = ticketStatusSqlIn(ticketOpenBucketSlugs(), 't.status');
+    $sql = "SELECT t.*,
+                tp.name AS priority_name, tp.color AS priority_color,
+                tt.name AS type_name, tt.color AS type_color,
+                tt.is_confidential AS type_confidential, tt.group_id AS type_group_id,
+                CONCAT(a.first_name, ' ', a.last_name) AS agent_name
+            FROM tickets t
+            LEFT JOIN ticket_priorities tp ON t.priority_id = tp.id
+            LEFT JOIN ticket_types tt      ON t.type_id     = tt.id
+            LEFT JOIN users a              ON t.assigned_to  = a.id
+            WHERE {$open}
+              AND {$vis['sql']}
+              AND (t.created_by = ?
+                   OR t.id IN (SELECT ticket_id FROM notifications WHERE user_id = ? AND type = 'mention'))
+            ORDER BY t.created_at DESC";
+    $params = array_merge($vis['params'], [$targetUserId, $targetUserId]);
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Render the "open tickets for this user" page. $base is the calling section's
+ * ticket base path ('/agent/tickets' or '/admin/tickets'); the route guard has
+ * already run. Mirrors the ticket lists' confidential-redaction context.
+ */
+function renderTicketsByUserPage(int $targetUserId, string $base): void
+{
+    $db   = Database::connect();
+    $stmt = $db->prepare('SELECT id, first_name, last_name, email FROM users WHERE id = ?');
+    $stmt->execute([$targetUserId]);
+    $targetUser = $stmt->fetch();
+    if (!$targetUser) {
+        flash('error', 'That user no longer exists.');
+        redirect($base);
+        return;
+    }
+
+    $tickets = userOpenTicketsForStaff($db, $targetUserId, (int) Auth::id(), Auth::role());
+
+    // Confidential-redaction context, same as the ticket lists build.
+    $confidentialTypeIds = array_map(
+        'intval',
+        $db->query('SELECT id FROM ticket_types WHERE is_confidential = 1 AND group_id IS NOT NULL')
+           ->fetchAll(PDO::FETCH_COLUMN)
+    );
+    $adminGroupIds = [];
+    if ($confidentialTypeIds) {
+        $gs = $db->prepare('SELECT group_id FROM group_user_map WHERE user_id = ?');
+        $gs->execute([(int) Auth::id()]);
+        $adminGroupIds = array_map('intval', $gs->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    render('staff/tickets-by-user', [
+        'targetUser'          => $targetUser,
+        'targetUserId'        => $targetUserId,
+        'tickets'             => $tickets,
+        'base'                => $base,
+        'confidentialTypeIds' => $confidentialTypeIds,
+        'adminGroupIds'       => $adminGroupIds,
+    ]);
+}
+
+/* ── Process helpers ─────────────────────────────────────────── */
+
+/**
+ * Resolve a usable PHP CLI binary path.
+ *
+ * PHP_BINARY is empty (or points to the FPM daemon) when PHP runs under
+ * PHP-FPM. Fall back to searching PATH for a CLI php binary.
+ */
+function phpBinary(): string
+{
+    $bin = PHP_BINARY;
+    if ($bin !== '' && is_executable($bin) && !str_contains(basename($bin), 'fpm')) {
+        return $bin;
+    }
+    // Search common names in PATH
+    foreach (['php', 'php8.3', 'php8.2', 'php8.1', 'php8.0'] as $name) {
+        $found = trim((string) shell_exec('which ' . escapeshellarg($name) . ' 2>/dev/null'));
+        if ($found !== '' && is_executable($found)) {
+            return $found;
+        }
+    }
+    return 'php'; // last resort — rely on PATH at exec time
+}
+
+/* ── Email helpers ────────────────────────────────────────────── */
+
+/**
+ * Send an email using the configured SMTP settings.
+ *
+ * @param string      $toEmail   Recipient email address
+ * @param string      $toName    Recipient display name
+ * @param string      $subject   Email subject line
+ * @param string      $htmlBody  HTML body
+ * @param string      $textBody  Plain-text fallback body
+ * @param int|null    $ticketId  If set, generates a ticket-specific Message-ID and X-Ticket-ID header
+ * @return string|false  The Message-ID on success, false on failure
+ */
+
+/**
+ * Render user-supplied content safely inside an HTML email.
+ *
+ * - If the content already contains HTML tags (e.g. from CKEditor rich-text),
+ *   it is returned as-is so that formatting renders correctly in the email.
+ * - If the content is plain text (e.g. from a <textarea> or inbound email),
+ *   HTML special characters are escaped and newlines are converted to <br>.
+ */
+function emailContent(string $content): string
+{
+    if (strip_tags($content) !== $content) {
+        // Contains HTML markup — sanitize the rich text before it reaches mail.
+        return sanitizeRichHtml($content);
+    }
+    // Plain text — escape entities and preserve line breaks
+    return nl2br(htmlspecialchars($content, ENT_QUOTES, 'UTF-8'));
+}
+
+/**
+ * Addresses already emailed about a ticket during this request, lowercased and
+ * keyed for isset(). sendMail() records every ticket email; broadcasts such as
+ * notifyGroupMembers() skip anyone here so nobody gets two emails for one event.
+ */
+function ticketMailRecipients(int $ticketId, ?string $email = null): array
+{
+    static $sent = [];
+    if ($email !== null) {
+        $sent[$ticketId][strtolower($email)] = true;
+    }
+    return $sent[$ticketId] ?? [];
+}
+
+/**
+ * Send an email via SMTP.
+ *
+ * @param array $attachments Optional file attachments, each ['path' => absolute
+ *                           filesystem path, 'name' => display filename]. Files
+ *                           that don't exist on disk are silently skipped.
+ */
+function sendMail(string $toEmail, string $toName, string $subject, string $htmlBody, string $textBody = '', ?int $ticketId = null, array $attachments = [], bool $transactional = false): string|false
+{
+    if ($ticketId !== null) {
+        ticketMailRecipients($ticketId, $toEmail);
+    }
+
+    // Dry-run interception, ahead of every other check including the
+    // transactional bypass below — a --dry-run of a cron script must not be able
+    // to deliver anything, ever. Returns a fake Message-ID (not false) so the
+    // caller takes its "sent" branch and the dry run reports the same counts a
+    // live run would. class_exists() guard: CronRun is only loaded by the cron
+    // scripts, never in the web request path.
+    if (class_exists('CronRun', false) && CronRun::isDryRun()) {
+        CronRun::noteSuppressedMail($toEmail, $subject);
+        return '<dry-run-not-sent@localhost>';
+    }
+
+    // Outbound-mail kill switch. Dev and test instances set MAIL_ENABLED=false
+    // in .env so running the suite (or local dev) never delivers real mail to
+    // real recipients — the helpdesk DB carries live SMTP credentials, so a
+    // single test ticket would otherwise email every member of a notified group.
+    //
+    // Transactional bypass: password-reset / account mail is user-initiated and
+    // sends to exactly one recipient (the person who typed their own address),
+    // so it can't be used for a blast. When MAIL_TRANSACTIONAL_ENABLED=true a
+    // caller that passes $transactional=true is allowed through even while the
+    // general kill switch is off — letting resets work without re-enabling all
+    // the bulk ticket-notification mail.
+    //
+    // Anything that is NOT delivered here (kill switch, SMTP unconfigured, SMTP
+    // error) is parked in `mail_queue` so an admin can see the backlog and send
+    // or flush it from Settings → Email Queue. Failed sends are retried on a
+    // timer (mailQueueRetryDue); kill-switch rows never are, so flipping
+    // MAIL_ENABLED back on never blasts the backlog by itself.
+    $queueArgs = [$toEmail, $toName, $subject, $htmlBody, $textBody, $ticketId, $attachments, $transactional];
+
+    if (env('MAIL_ENABLED', 'true') === 'false') {
+        $transactionalAllowed = $transactional
+            && env('MAIL_TRANSACTIONAL_ENABLED', 'false') === 'true';
+
+        if (!$transactionalAllowed) {
+            $queueId = mailQueuePush(...$queueArgs, reason: 'MAIL_ENABLED=false');
+            $logDir  = ROOT_DIR . '/storage/logs';
+            if (is_dir($logDir)) {
+                file_put_contents(
+                    $logDir . '/smtp.log',
+                    sprintf("[%s] sendMail() SKIPPED — MAIL_ENABLED=false — queued id=%s to=%s subject=%s\n",
+                        date('Y-m-d H:i:s'), $queueId ?? '?', $toEmail, $subject),
+                    FILE_APPEND | LOCK_EX
+                );
+            }
+            return false;
+        }
+    }
+
+    $result = deliverMail($toEmail, $toName, $subject, $htmlBody, $textBody, $ticketId, $attachments);
+    if ($result['messageId'] === false) {
+        mailQueuePush(...$queueArgs, reason: $result['error']);
+        return false;
+    }
+    return $result['messageId'];
+}
+
+/**
+ * Park an undeliverable email in `mail_queue`. Returns the new row id, or null
+ * if the table isn't there yet (migration not run) — queueing must never turn
+ * a skipped email into a 500.
+ */
+function mailQueuePush(string $toEmail, string $toName, string $subject, string $htmlBody, string $textBody, ?int $ticketId, array $attachments, bool $transactional, string $reason): ?int
+{
+    try {
+        $db = Database::connect();
+        $db->prepare(
+            'INSERT INTO mail_queue (to_email, to_name, subject, html_body, text_body, ticket_id, attachments, transactional, reason)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $toEmail, $toName, $subject, $htmlBody, $textBody,
+            $ticketId,
+            $attachments ? json_encode(array_values($attachments)) : null,
+            $transactional ? 1 : 0,
+            mb_substr($reason, 0, 255),
+        ]);
+        return (int) $db->lastInsertId();
+    } catch (\Throwable $e) {
+        error_log('OpenHelpDesk mail queue insert failed: ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Attempt delivery of queued emails ($rows, default every row, oldest first).
+ * Bypasses the MAIL_ENABLED kill switch on purpose: the default runs only when
+ * an admin presses "Send all now", and the timed retry (mailQueueRetryDue)
+ * checks the switch itself. Delivered rows are deleted; failures stay with the
+ * error. Stops early once the transport stalls, leaving the rest queued.
+ * Each email gets the "this message was delayed" note unless that is switched
+ * off under Settings → Email Queue.
+ *
+ * @return array{sent:int, failed:int}
+ */
+function mailQueueSendAll(?array $rows = null): array
+{
+    $db   = Database::connect();
+    $rows ??= $db->query('SELECT *, TIMESTAMPDIFF(MINUTE, created_at, NOW()) AS queued_minutes FROM mail_queue ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
+    $del  = $db->prepare('DELETE FROM mail_queue WHERE id = ?');
+    $fail = $db->prepare('UPDATE mail_queue SET attempts = attempts + 1, last_error = ?, last_attempt_at = NOW() WHERE id = ?');
+    $note = getSetting('mail_queue_delay_notice', '1') === '1';
+    $sent = 0;
+    $failed = 0;
+    foreach ($rows as $row) {
+        $attachments = $row['attachments'] ? (json_decode($row['attachments'], true) ?: []) : [];
+        [$html, $text] = $note ? mailQueueDelayNotice($row) : [$row['html_body'], (string) $row['text_body']];
+        $r = deliverMail(
+            $row['to_email'], $row['to_name'], $row['subject'], $html,
+            $text, $row['ticket_id'] !== null ? (int) $row['ticket_id'] : null, $attachments
+        );
+        if (!empty($r['skipped'])) {
+            break; // the transport stalled on an earlier row; the rest wait for the next run
+        }
+        if ($r['messageId'] !== false) {
+            $del->execute([$row['id']]);
+            $sent++;
+        } else {
+            $fail->execute([mb_substr($r['error'], 0, 2000), $row['id']]);
+            $failed++;
+        }
+    }
+    return ['sent' => $sent, 'failed' => $failed];
+}
+
+/**
+ * A queued email's bodies with a note on top saying it was delayed and how long
+ * it sat in the queue, so the reader knows how stale it may be. Uses the row's
+ * `queued_minutes` (computed by MySQL, whose clock can differ from PHP's).
+ *
+ * @return array{0:string, 1:string} [html, text]
+ */
+function mailQueueDelayNotice(array $row): array
+{
+    $mins   = max(0, (int) ($row['queued_minutes'] ?? 0));
+    $waited = $mins < 1 ? 'less than a minute' : ($mins >= 2880 ? intdiv($mins, 1440) . ' days' : formatSlaDuration($mins));
+    $queued = date('M j \a\t g:i a', strtotime((string) $row['created_at']));
+    $url    = rtrim((string) env('APP_URL', ''), '/');
+    $lead   = "This message was delayed. It waited {$waited} in the email queue (queued {$queued}) and may be out of date.";
+    $tail   = 'to get the most up to date information on your tickets.';
+
+    $link   = $url !== '' ? '<a href="' . e($url) . '/login" style="color:#78350f; font-weight:bold;">HelpDesk</a>' : 'HelpDesk';
+    $banner = '<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9; padding:24px 0 0;"><tr><td align="center">'
+            . '<table width="600" cellpadding="0" cellspacing="0"><tr><td style="background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; padding:14px 18px; font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:1.5; color:#78350f;">'
+            . '<strong>' . e($lead) . '</strong> Please login to the ' . $link . ' ' . e($tail)
+            . '</td></tr></table></td></tr></table>';
+    $html = preg_replace_callback('/<body[^>]*>/i', fn ($m) => $m[0] . $banner, $row['html_body'], 1, $n);
+    if ($n === 0) {
+        $html = $banner . $row['html_body'];
+    }
+    $text = $lead . ' Please login to the HelpDesk' . ($url !== '' ? " ({$url})" : '') . ' ' . $tail . "\n\n" . (string) $row['text_body'];
+    return [$html, $text];
+}
+
+/**
+ * Hand one email to the transport chosen under Settings → Email (Send Mail Via).
+ * No kill switch and no queueing here. Only sendMail() and mailQueueSendAll()
+ * should call this.
+ *
+ * Circuit breaker: mail goes out while the user waits, so once one send fails
+ * SLOWLY (Microsoft / the SMTP server is stalling, as in the 2026-11-12 outage)
+ * every later send in this request or cron run is skipped without trying —
+ * sendMail() queues it for the timed retry. A fast failure (one bad address,
+ * a config error) doesn't trip it: those cost no waiting.
+ *
+ * @return array{messageId:string|false, error:string, skipped?:true}
+ */
+function deliverMail(string $toEmail, string $toName, string $subject, string $htmlBody, string $textBody = '', ?int $ticketId = null, array $attachments = []): array
+{
+    static $stalled = null; // ponytail: per-process; a 5 s threshold, not a health check
+    if ($stalled !== null) {
+        return ['messageId' => false, 'error' => "Not attempted: an earlier send stalled ({$stalled})", 'skipped' => true];
+    }
+    $start  = microtime(true);
+    $result = getSetting('mail_transport') === 'graph'
+        ? graphDeliver($toEmail, $toName, $subject, $htmlBody, $ticketId, $attachments)
+        : smtpDeliver($toEmail, $toName, $subject, $htmlBody, $textBody, $ticketId, $attachments);
+    if ($result['messageId'] === false && microtime(true) - $start >= 5) {
+        $stalled = mb_substr($result['error'], 0, 150);
+    }
+    return $result;
+}
+
+/**
+ * Queued emails the timed retry may send: real delivery failures from the last
+ * 3 days, least-tried first so one row that keeps failing can't hold up the
+ * rest. Kill-switch rows are never retried — an admin releases those.
+ */
+function mailQueueRetryRows(PDO $db): array
+{
+    return $db->query(
+        "SELECT *, TIMESTAMPDIFF(MINUTE, created_at, NOW()) AS queued_minutes FROM mail_queue
+          WHERE reason <> 'MAIL_ENABLED=false' AND created_at >= NOW() - INTERVAL 3 DAY
+          ORDER BY attempts, id"
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Retry failed sends every `mail_queue_retry_minutes` (Settings → Email Queue,
+ * default 30, 0 = off). Rides the 5-minute SLA cron. Returns null when it
+ * didn't run, else the send counts.
+ *
+ * @return array{sent:int, failed:int}|null
+ */
+function mailQueueRetryDue(PDO $db): ?array
+{
+    $minutes = (int) getSetting('mail_queue_retry_minutes', '30');
+    if ($minutes <= 0 || env('MAIL_ENABLED', 'true') === 'false'
+        || (class_exists('CronRun', false) && CronRun::isDryRun())) {
+        return null;
+    }
+    // 60 s of slack so a cron tick that starts a second early isn't pushed a whole tick later.
+    if (time() - (int) getSetting('mail_queue_retry_last_at', '0') < $minutes * 60 - 60) {
+        return null;
+    }
+    setSetting('mail_queue_retry_last_at', (string) time());
+    $rows = mailQueueRetryRows($db);
+    return $rows ? mailQueueSendAll($rows) : ['sent' => 0, 'failed' => 0];
+}
+
+/**
+ * The Message-ID and Reply-To both transports stamp on a message.
+ * process-replies.php reads the ticket ID back out of <ticket-{id}-…@…> when a
+ * reply has lost its "[#id]" subject tag, and ticket mail replies to the
+ * inbound mailbox so the reply is captured.
+ *
+ * @return array{0:string, 1:string} [messageId, replyTo]
+ */
+function outboundMailIds(string $fromAddr, ?int $ticketId): array
+{
+    $domain    = substr(strrchr($fromAddr, '@'), 1) ?: 'localhost';
+    $messageId = $ticketId !== null
+        ? sprintf('<ticket-%d-%d@%s>', $ticketId, time(), $domain)
+        : sprintf('<localdesk-%s@%s>', bin2hex(random_bytes(12)), $domain);
+    $replyTo   = ($ticketId !== null && getSetting('graph_enabled') === '1')
+        ? getSetting('graph_reply_to')
+        : '';
+    return [$messageId, $replyTo !== '' ? $replyTo : $fromAddr];
+}
+
+/**
+ * Send one email through Microsoft Graph as the From Address mailbox, with the
+ * Inbound Mail app registration's credentials. The app needs Mail.ReadWrite and
+ * Mail.Send on that mailbox.
+ *
+ * Builds a draft, attaches the files, then sends it: a draft is the only place
+ * Graph lets us set our own Message-ID, and files over 3 MB can only be added to
+ * an existing draft. Graph takes a single body, so the HTML one is sent.
+ *
+ * @return array{messageId:string|false, error:string}
+ */
+function graphDeliver(string $toEmail, string $toName, string $subject, string $htmlBody, ?int $ticketId = null, array $attachments = []): array
+{
+    require_once ROOT_DIR . '/src/graph.php';
+
+    $fromAddr = getSetting('mail_from_address');
+    $fromName = getSetting('mail_from_name', 'OpenHelpDesk');
+    if ($fromAddr === '') {
+        return ['messageId' => false, 'error' => 'From address not configured'];
+    }
+    $token = graphMailToken();
+    if ($token === null) {
+        return ['messageId' => false, 'error' => 'No Microsoft Graph token: check the Inbound Mail tenant ID, client ID and secret'];
+    }
+    [$messageId, $replyTo] = outboundMailIds($fromAddr, $ticketId);
+
+    $message = [
+        'subject'           => $subject,
+        'body'              => ['contentType' => 'HTML', 'content' => $htmlBody],
+        'from'              => ['emailAddress' => ['address' => $fromAddr, 'name' => $fromName]],
+        'toRecipients'      => [['emailAddress' => ['address' => $toEmail, 'name' => $toName !== '' ? $toName : $toEmail]]],
+        'replyTo'           => [['emailAddress' => ['address' => $replyTo, 'name' => $fromName]]],
+        'internetMessageId' => $messageId,
+    ];
+    if ($ticketId !== null) {
+        $message['internetMessageHeaders'] = [['name' => 'X-Ticket-ID', 'value' => (string) $ticketId]];
+    }
+
+    $auth  = ["Authorization: Bearer {$token}", 'Content-Type: application/json'];
+    $base  = 'https://graph.microsoft.com/v1.0/users/' . $fromAddr . '/messages';
+    $draft = graphRequest('POST', $base, $auth, json_encode($message));
+    $error = $draft['error'] !== '' ? 'Creating draft: ' . $draft['error'] : '';
+
+    if ($error === '') {
+        $draftUrl = $base . '/' . rawurlencode(json_decode($draft['body'], true)['id'] ?? '');
+        foreach ($attachments as $att) {
+            $path = $att['path'] ?? '';
+            if ($path !== '' && is_file($path)) {
+                $name  = $att['name'] ?? basename($path);
+                $error = graphAttach($draftUrl, $auth, $path, $name);
+                if ($error !== '') {
+                    $error = "Attaching {$name}: {$error}";
+                    break;
+                }
+            }
+        }
+        if ($error === '') {
+            $sent  = graphRequest('POST', $draftUrl . '/send', [$auth[0]]); // no body
+            $error = $sent['error'] !== '' ? 'Sending: ' . $sent['error'] : '';
+        }
+        if ($error !== '') {
+            // The queue row retries from scratch, so don't leave the half-built draft behind.
+            graphRequest('DELETE', $draftUrl, $auth);
+        }
+    }
+
+    if (is_dir(ROOT_DIR . '/storage/logs')) {
+        file_put_contents(ROOT_DIR . '/storage/logs/smtp.log',
+            sprintf("[%s] graph send to=%s from=%s %s\n", date('Y-m-d H:i:s'), $toEmail, $fromAddr,
+                $error === '' ? 'SUCCESS messageId=' . $messageId : 'ERROR ' . $error),
+            FILE_APPEND | LOCK_EX);
+    }
+    return $error === ''
+        ? ['messageId' => $messageId, 'error' => '']
+        : ['messageId' => false, 'error' => $error];
+}
+
+/**
+ * One client-credentials token per process, so a notification to a whole group
+ * doesn't ask Microsoft for a fresh token per recipient.
+ */
+function graphMailToken(): ?string
+{
+    static $token = null, $expiresAt = 0;
+    if ($token === null || time() >= $expiresAt) {
+        $token     = getAccessToken(getSetting('graph_tenant_id'), getSetting('graph_client_id'), getSetting('graph_client_secret'));
+        $expiresAt = time() + 3000; // tokens live 60–90 minutes
+    }
+    return $token;
+}
+
+/**
+ * Add one file to a Graph draft. Returns '' on success, else the error.
+ * Under 3 MB goes up in one request; bigger files need an upload session.
+ */
+function graphAttach(string $draftUrl, array $auth, string $path, string $name): string
+{
+    $size = (int) filesize($path);
+    if ($size < 3 * 1024 * 1024) {
+        return graphRequest('POST', $draftUrl . '/attachments', $auth, json_encode([
+            '@odata.type'  => '#microsoft.graph.fileAttachment',
+            'name'         => $name,
+            'contentBytes' => base64_encode((string) file_get_contents($path)),
+        ]))['error'];
+    }
+
+    $session = graphRequest('POST', $draftUrl . '/attachments/createUploadSession', $auth, json_encode([
+        'AttachmentItem' => ['attachmentType' => 'file', 'name' => $name, 'size' => $size],
+    ]));
+    if ($session['error'] !== '') {
+        return $session['error'];
+    }
+    $uploadUrl = json_decode($session['body'], true)['uploadUrl'] ?? '';
+    foreach (graphUploadRanges($size) as [$start, $end]) {
+        // The upload URL is pre-authenticated; Graph rejects a chunk that carries the bearer token.
+        $put = graphRequest('PUT', $uploadUrl, [
+            'Content-Type: application/octet-stream',
+            "Content-Range: bytes {$start}-{$end}/{$size}",
+        ], (string) file_get_contents($path, false, null, $start, $end - $start + 1));
+        if ($put['error'] !== '') {
+            return $put['error'];
+        }
+    }
+    return '';
+}
+
+/**
+ * Inclusive [start, end] byte ranges for an upload session. Graph caps each PUT
+ * at 4 MB; the default chunk is 10 × 320 KiB.
+ *
+ * @return list<array{0:int, 1:int}>
+ */
+function graphUploadRanges(int $size, int $chunk = 3276800): array
+{
+    $ranges = [];
+    for ($start = 0; $start < $size; $start += $chunk) {
+        $ranges[] = [$start, min($start + $chunk, $size) - 1];
+    }
+    return $ranges;
+}
+
+/**
+ * The actual SMTP conversation, with no kill switch and no queueing. Only
+ * deliverMail() should call this.
+ *
+ * @return array{messageId:string|false, error:string}
+ */
+function smtpDeliver(string $toEmail, string $toName, string $subject, string $htmlBody, string $textBody = '', ?int $ticketId = null, array $attachments = []): array
+{
+    $host = getSetting('smtp_host');
+    if ($host === '') {
+        return ['messageId' => false, 'error' => 'SMTP host not configured'];
+    }
+
+    $port       = (int) getSetting('smtp_port', '587');
+    $encryption = getSetting('smtp_encryption', 'tls');
+    $username   = getSetting('smtp_username');
+    $password   = getSetting('smtp_password');
+    $fromAddr   = getSetting('mail_from_address');
+    $fromName   = getSetting('mail_from_name', 'OpenHelpDesk');
+
+    if ($fromAddr === '') {
+        return ['messageId' => false, 'error' => 'From address not configured'];
+    }
+
+    [$messageId, $replyToAddr] = outboundMailIds($fromAddr, $ticketId);
+
+    // SMTP debug log — captures full SMTP conversation to storage/logs/smtp.log
+    $smtpLogDir  = ROOT_DIR . '/storage/logs';
+    $smtpLogFile = $smtpLogDir . '/smtp.log';
+    if (!is_dir($smtpLogDir)) {
+        mkdir($smtpLogDir, 0755, true);
+    }
+    $smtpDebugEnabled = getSetting('smtp_debug', '0') === '1';
+    $logEntry = sprintf("[%s] sendMail() to=%s host=%s port=%d enc=%s\n",
+        date('Y-m-d H:i:s'), $toEmail, $host, $port, $encryption);
+    file_put_contents($smtpLogFile, $logEntry, FILE_APPEND | LOCK_EX);
+
+    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->CharSet    = \PHPMailer\PHPMailer\PHPMailer::CHARSET_UTF8;
+        $mail->Host       = $host;
+        $mail->Port       = $port;
+        $mail->Timeout    = 15; // seconds — prevents indefinite hangs on unreachable hosts
+        $mail->SMTPSecure = $encryption === 'none' ? '' : $encryption;
+        if ($username !== '') {
+            $mail->SMTPAuth = true;
+            $mail->Username = $username;
+            $mail->Password = $password;
+        }
+
+        if ($smtpDebugEnabled) {
+            // Trust model for the SMTP debug log:
+            //   - Stays at DEBUG_SERVER. At this level PHPMailer's SMTP::client_send()
+            //     replaces AUTH LOGIN / AUTH PLAIN / XOAUTH2 payloads with the literal
+            //     string "[credentials hidden]" (vendor/phpmailer/phpmailer/src/SMTP.php).
+            //     Bumping this to DEBUG_LOWLEVEL would defeat that and write the
+            //     base64-encoded credentials to disk — DO NOT raise it.
+            //   - As a belt-and-braces measure we also scrub the configured password
+            //     literal from every debug line, in case a misbehaving server ever
+            //     echoes it back in a banner, error, or response trailer.
+            $mail->SMTPDebug = \PHPMailer\PHPMailer\SMTP::DEBUG_SERVER;
+            $passwordForRedaction = $password;
+            $mail->Debugoutput = function (string $str, int $level) use ($smtpLogFile, $passwordForRedaction): void {
+                $line = trim($str);
+                if ($passwordForRedaction !== '') {
+                    $line = str_replace($passwordForRedaction, '[redacted]', $line);
+                }
+                file_put_contents($smtpLogFile,
+                    '[' . date('H:i:s') . '][L' . $level . '] ' . $line . "\n",
+                    FILE_APPEND | LOCK_EX);
+            };
+        }
+
+        $mail->setFrom($fromAddr, $fromName);
+        $mail->addReplyTo($replyToAddr, $fromName);
+        $mail->addAddress($toEmail, $toName);
+
+        $mail->MessageID = $messageId;
+        if ($ticketId !== null) {
+            $mail->addCustomHeader('X-Ticket-ID', (string) $ticketId);
+        }
+
+        foreach ($attachments as $att) {
+            $path = $att['path'] ?? '';
+            if ($path !== '' && is_file($path)) {
+                $mail->addAttachment($path, $att['name'] ?? basename($path));
+            }
+        }
+
+        $mail->Subject = $subject;
+        $mail->isHTML(true);
+        $mail->Body    = $htmlBody;
+        $mail->AltBody = $textBody ?: strip_tags($htmlBody);
+
+        $mail->send();
+        file_put_contents($smtpLogFile,
+            '[' . date('H:i:s') . '] SUCCESS messageId=' . $messageId . "\n",
+            FILE_APPEND | LOCK_EX);
+        return ['messageId' => $messageId, 'error' => ''];
+    } catch (\PHPMailer\PHPMailer\Exception $e) {
+        $err = '[' . date('H:i:s') . '] ERROR ' . $mail->ErrorInfo . "\n";
+        file_put_contents($smtpLogFile, $err, FILE_APPEND | LOCK_EX);
+        error_log('OpenHelpDesk mail error: ' . $mail->ErrorInfo);
+        return ['messageId' => false, 'error' => $mail->ErrorInfo ?: $e->getMessage()];
+    }
+}
+
+/**
+ * Replace {{token}} placeholders in a string with values from the given map.
+ */
+function applyEmailTokens(string $template, array $tokens): string
+{
+    foreach ($tokens as $key => $value) {
+        $template = str_replace('{{' . $key . '}}', (string) $value, $template);
+    }
+    return $template;
+}
+
+/**
+ * Format SLA minutes as a human-readable duration, e.g. "30 minutes",
+ * "4 hours", "1 hour 30 minutes".
+ */
+function formatSlaDuration(int $minutes): string
+{
+    $h = intdiv($minutes, 60);
+    $m = $minutes % 60;
+    $parts = [];
+    if ($h > 0) {
+        $parts[] = $h . ' ' . ($h === 1 ? 'hour' : 'hours');
+    }
+    if ($m > 0 || $h === 0) {
+        $parts[] = $m . ' ' . ($m === 1 ? 'minute' : 'minutes');
+    }
+    return implode(' ', $parts);
+}
+
+/**
+ * Parse a human-typed duration into a whole number of minutes.
+ *
+ * Accepts any mix of day/hour/minute tokens with the unit suffix d, h or m
+ * (case-insensitive), e.g. "72h", "3d", "4320m", "1d 2h 30m", "1d2h30m".
+ * A bare number with no suffix is interpreted in $defaultUnit, so existing
+ * single-unit fields keep working when someone types just "72".
+ *
+ * Conversion is calendar-based everywhere: 1d = 24h = 1440m.
+ *
+ * Returns the total minutes, or null when the input is blank or cannot be
+ * parsed (so callers can distinguish "leave unset" from "invalid").
+ */
+function parseDurationToMinutes(string $raw, string $defaultUnit = 'm'): ?int
+{
+    $s = strtolower(trim($raw));
+    if ($s === '') {
+        return null;
+    }
+
+    $factor = ['d' => 1440, 'h' => 60, 'm' => 1];
+    $defaultUnit = isset($factor[$defaultUnit]) ? $defaultUnit : 'm';
+
+    // Each token is a run of digits optionally followed by a d/h/m unit.
+    // The whole string must be nothing but such tokens (plus whitespace),
+    // otherwise we treat it as garbage and bail.
+    if (!preg_match('/^(\s*\d+\s*[dhm]?\s*)+$/', $s)) {
+        return null;
+    }
+
+    preg_match_all('/(\d+)\s*([dhm]?)/', $s, $matches, PREG_SET_ORDER);
+    $total = 0;
+    foreach ($matches as $m) {
+        $unit = $m[2] !== '' ? $m[2] : $defaultUnit;
+        $total += (int) $m[1] * $factor[$unit];
+    }
+    return $total;
+}
+
+/**
+ * Render a minute count as a compact, rolled-up duration using the largest
+ * units that fit, e.g. 60 → "1h", 80 → "1h 20m", 1440 → "1d", 1530 → "1d 1h 30m".
+ *
+ * Calendar-based: 1d = 24h, 1h = 60m. Returns "0m" for zero/negative input.
+ */
+function formatDuration(int $minutes): string
+{
+    if ($minutes <= 0) {
+        return '0m';
+    }
+    $d = intdiv($minutes, 1440);
+    $h = intdiv($minutes % 1440, 60);
+    $m = $minutes % 60;
+    $parts = [];
+    if ($d > 0) { $parts[] = $d . 'd'; }
+    if ($h > 0) { $parts[] = $h . 'h'; }
+    if ($m > 0) { $parts[] = $m . 'm'; }
+    return implode(' ', $parts);
+}
+
+/* ── Time tracking ────────────────────────────────────────────── */
+
+/**
+ * Logged work time as hours + minutes: 2700 → "45m", 7500 → "2h 05m", 20 → "<1m".
+ * Never rolls up into days the way formatDuration() does — 26 hours of logged
+ * work is not "1d 2h".
+ */
+function formatTrackedTime(int $seconds): string
+{
+    if ($seconds > 0 && $seconds < 60) {
+        return '<1m';
+    }
+    $m = intdiv(max(0, $seconds), 60);
+    return $m < 60 ? $m . 'm' : intdiv($m, 60) . 'h ' . sprintf('%02d', $m % 60) . 'm';
+}
+
+/** Does this ticket type show the Time Tracking card? */
+function timeTrackingEnabledForType(PDO $db, ?int $typeId): bool
+{
+    if (!$typeId) {
+        return false;
+    }
+    $stmt = $db->prepare('SELECT time_tracking_enabled FROM ticket_types WHERE id = ?');
+    $stmt->execute([$typeId]);
+    return (int) $stmt->fetchColumn() === 1;
+}
+
+/**
+ * Seconds on a time entry including a running timer. The timer is measured on
+ * PHP's clock, the same clock that wrote timer_started_at (local dev MySQL
+ * runs hours off PHP, so NOW() can't be used for this).
+ */
+function timeEntryElapsed(array $entry, ?int $now = null): int
+{
+    $running = empty($entry['timer_started_at'])
+        ? 0
+        : max(0, ($now ?? time()) - strtotime($entry['timer_started_at']));
+    return (int) $entry['seconds'] + $running;
+}
+
+/** A ticket's time entries, newest work first, each with `elapsed` seconds. */
+function ticketTimeEntries(PDO $db, int $ticketId): array
+{
+    $stmt = $db->prepare(
+        "SELECT te.*, CONCAT(u.first_name, ' ', u.last_name) AS user_name
+         FROM ticket_time_entries te
+         LEFT JOIN users u ON u.id = te.user_id
+         WHERE te.ticket_id = ?
+         ORDER BY te.work_date DESC, te.id DESC"
+    );
+    $stmt->execute([$ticketId]);
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$row) {
+        $row['elapsed'] = timeEntryElapsed($row);
+    }
+    return $rows;
+}
+
+/**
+ * Hours + minutes typed into the Log time form → seconds, or null when either
+ * is not a whole number or the total is outside 0..24h. Zero is allowed here;
+ * callers decide whether an empty entry is acceptable.
+ */
+function timeEntryInputSeconds(string $hours, string $minutes): ?int
+{
+    $h = trim($hours) === '' ? '0' : trim($hours);
+    $m = trim($minutes) === '' ? '0' : trim($minutes);
+    if (!ctype_digit($h) || !ctype_digit($m) || (int) $m > 59) {
+        return null;
+    }
+    $seconds = (int) $h * 3600 + (int) $m * 60;
+    return $seconds <= 86400 ? $seconds : null;
+}
+
+/** Stop every timer this agent has running (one live timer per agent). */
+function stopRunningTimeEntries(PDO $db, int $userId, string $now): void
+{
+    $stmt = $db->prepare('SELECT * FROM ticket_time_entries WHERE user_id = ? AND timer_started_at IS NOT NULL');
+    $stmt->execute([$userId]);
+    $upd = $db->prepare('UPDATE ticket_time_entries SET seconds = ?, timer_started_at = NULL, updated_at = ? WHERE id = ?');
+    foreach ($stmt->fetchAll() as $entry) {
+        $upd->execute([timeEntryElapsed($entry, strtotime($now)), $now, $entry['id']]);
+    }
+}
+
+/**
+ * Build the {{sla}}, {{sla_response}} and {{sla_resolution}} email tokens for
+ * a ticket's type + priority combination. All three resolve to empty strings
+ * when SLA tracking is disabled, business hours are not configured, or no
+ * policy matches — so templates referencing them degrade gracefully.
+ */
+function slaEmailTokens(PDO $db, ?int $typeId, ?int $priorityId): array
+{
+    $empty = ['sla' => '', 'sla_response' => '', 'sla_resolution' => ''];
+    if (!$priorityId || !slaEnabled() || Sla::getBusinessSchedule() === null) {
+        return $empty;
+    }
+    $policy = Sla::findPolicy($db, $typeId, $priorityId);
+    if (!$policy) {
+        return $empty;
+    }
+    // A policy can set only one of the two targets — describe just what it sets
+    // rather than promising a "0 minutes" deadline.
+    $responseMinutes   = (int) $policy['first_response_minutes'];
+    $resolutionMinutes = (int) $policy['resolution_minutes'];
+    return [
+        'sla'            => slaTargetSentence($responseMinutes, $resolutionMinutes),
+        'sla_response'   => $responseMinutes   > 0 ? formatSlaDuration($responseMinutes)   : '',
+        'sla_resolution' => $resolutionMinutes > 0 ? formatSlaDuration($resolutionMinutes) : '',
+    ];
+}
+
+/**
+ * One-line description of a policy's targets, e.g. "First response within
+ * 4 hours and resolution within 48 hours (business hours)". Empty when
+ * neither target is set.
+ */
+function slaTargetSentence(int $responseMinutes, int $resolutionMinutes): string
+{
+    $response   = $responseMinutes   > 0 ? formatSlaDuration($responseMinutes)   : '';
+    $resolution = $resolutionMinutes > 0 ? formatSlaDuration($resolutionMinutes) : '';
+    if ($response !== '' && $resolution !== '') {
+        return "First response within {$response} and resolution within {$resolution} (business hours)";
+    }
+    if ($response !== '') {
+        return "First response within {$response} (business hours)";
+    }
+    if ($resolution !== '') {
+        return "Resolution within {$resolution} (business hours)";
+    }
+    return '';
+}
+
+/**
+ * Target sentences for the SLA notice block on the ticket forms, keyed
+ * [typeId => [priorityId => sentence]]. Key 0 holds the type-independent
+ * defaults; the form falls back to it for a type with no override. Mirrors
+ * Sla::findPolicy()'s merge (a per-type row overrides only the targets it
+ * sets) without a query per combination. Empty when SLA tracking is off or
+ * business hours are not configured, so the block never shows.
+ */
+function slaNoticeMap(PDO $db): array
+{
+    if (!slaEnabled() || Sla::getBusinessSchedule() === null) {
+        return [];
+    }
+    $rows = $db->query(
+        'SELECT type_id, priority_id, first_response_minutes, resolution_minutes FROM sla_policies'
+    )->fetchAll(PDO::FETCH_ASSOC);
+    $defaults = [];
+    $byType   = [];
+    foreach ($rows as $r) {
+        if ($r['type_id'] === null) {
+            $defaults[(int) $r['priority_id']] = $r;
+        } else {
+            $byType[(int) $r['type_id']][(int) $r['priority_id']] = $r;
+        }
+    }
+    $map = [];
+    foreach ($defaults as $pid => $d) {
+        $s = slaTargetSentence((int) $d['first_response_minutes'], (int) $d['resolution_minutes']);
+        if ($s !== '') {
+            $map[0][$pid] = $s;
+        }
+    }
+    foreach ($byType as $typeId => $perPriority) {
+        foreach ($perPriority as $pid => $t) {
+            $d = $defaults[$pid] ?? [];
+            $s = slaTargetSentence(
+                (int) $t['first_response_minutes'] ?: (int) ($d['first_response_minutes'] ?? 0),
+                (int) $t['resolution_minutes']     ?: (int) ($d['resolution_minutes'] ?? 0)
+            );
+            if ($s !== '') {
+                $map[$typeId][$pid] = $s;
+            }
+        }
+    }
+    return $map;
+}
+
+/**
+ * After SLA timers start on a new ticket, queue the "here's when to expect
+ * us" modal for the page the submitter lands on (rendered by
+ * partials/flash.php). Silent when the ticket has no due dates.
+ */
+function flashSlaNotice(PDO $db, int $ticketId): void
+{
+    $stmt = $db->prepare('SELECT first_response_due_at, resolution_due_at FROM tickets WHERE id = ?');
+    $stmt->execute([$ticketId]);
+    $t = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$t) {
+        return;
+    }
+    $fmt = static fn (?string $d): string => $d ? date('l, M j \a\t g:i A', strtotime($d)) : '';
+    $notice = array_filter([
+        'response'   => $fmt($t['first_response_due_at']),
+        'resolution' => $fmt($t['resolution_due_at']),
+    ]);
+    if ($notice !== []) {
+        flash('sla_notice', json_encode($notice));
+    }
+}
+
+/**
+ * Email templates whose layout renders an editable main paragraph below the
+ * status box, exposed as "Message Body" on the Email Templates page.
+ *
+ * Adding a key here is not enough on its own — the template's own defaults in
+ * getEmailTpl() need a 'body' entry, and its file in templates/emails/ has to
+ * actually echo $bodyText.
+ */
+const EMAIL_TPL_BODY_TABS = [];
+
+/**
+ * Resolve the customisable parts of an outgoing email (subject, intro text,
+ * message body, button label, footer text) from admin settings, falling back
+ * to hard-coded defaults. Token values are HTML-escaped when placed into
+ * HTML fields.
+ *
+ * @param string $name       Template slug: 'ticket-created', 'ticket-updated', or 'ticket-merged'
+ * @param array  $rawTokens  Raw (unescaped) values keyed by token name (without braces)
+ * @param ?int   $groupId    When set, look up a per-group override of the subject/
+ *                           intro/button before falling back to the global custom
+ *                           value, then the hard-coded default. Used so different
+ *                           teams can word their requester-facing emails differently.
+ */
+function getEmailTpl(string $name, array $rawTokens, ?int $groupId = null): array
+{
+    $key = str_replace('-', '_', $name); // e.g. 'ticket-created' → 'ticket_created'
+
+    $defaults = [
+        'ticket_created' => [
+            'subject' => '[Ticket #{{ticket_id}}] {{subject}}',
+            'intro'   => 'Your ticket has been created and our team will review it shortly.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_updated' => [
+            'subject' => '[Ticket #{{ticket_id}}] Update: {{subject}}',
+            'intro'   => 'Your ticket has been updated.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_forwarded' => [
+            'subject' => '[Ticket #{{ticket_id}}] {{subject}}',
+            'intro'   => '{{author}} has forwarded this support ticket to you for your input. The original request and conversation are included below — reply to this email and your response will be added to the ticket.',
+            'button'  => '',
+        ],
+        'ticket_merged' => [
+            'subject' => '[Ticket #{{source_ticket_id}}] Your ticket has been merged',
+            'intro'   => 'Ticket #{{source_ticket_id}} has been consolidated with a related ticket. You can view updates and add comments on the master ticket.',
+            'button'  => 'View Master Ticket',
+        ],
+        'csat_survey' => [
+            'subject' => 'How did we do? — [Ticket #{{ticket_id}}] {{subject}}',
+            'intro'   => 'Your ticket has been resolved. We\'d love to hear how we did — it only takes one click!',
+            'button'  => '',
+        ],
+        'ticket_reminder' => [
+            'subject' => 'Following up on your ticket [#{{ticket_id}}] {{subject}}',
+            'intro'   => 'We\'re still waiting to hear back from you on your support ticket. Please reply with an update so we can continue helping you.',
+            'button'  => 'View & Reply',
+        ],
+        'ticket_new_group' => [
+            'subject' => '[Ticket #{{ticket_id}}] New Ticket: {{subject}}',
+            'intro'   => 'A new support ticket has been submitted.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_assigned_agent' => [
+            'subject' => '[Ticket #{{ticket_id}}] Assigned to you: {{subject}}',
+            'intro'   => 'A ticket has been assigned to you.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_assigned_requester' => [
+            'subject' => '[Ticket #{{ticket_id}}] Assigned: {{subject}}',
+            'intro'   => 'Your ticket has been assigned to {{agent_name}} and will be handled shortly.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_assigned_group' => [
+            'subject' => '[Ticket #{{ticket_id}}] Assigned to your group: {{subject}}',
+            'intro'   => 'A ticket has been assigned to your group.',
+            'button'  => 'View Ticket',
+        ],
+        'escalation_alert' => [
+            'subject' => 'Escalation Alert: [Ticket #{{ticket_id}}] {{subject}}',
+            'intro'   => 'An escalation rule has been triggered for a ticket that requires your attention.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_escalated_agent' => [
+            'subject' => '[Ticket #{{ticket_id}}] Escalated to you (Level {{step_order}}): {{subject}}',
+            'intro'   => '{{escalated_by_name}} has escalated this ticket to you. Please review and take it forward.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_overdue' => [
+            'subject' => '[Ticket #{{ticket_id}}] Past its due date: {{subject}}',
+            'intro'   => 'This ticket was due on {{due_date}} and is still open. Please contact {{requester}} to let them know where things stand. If it needs more time, set a new due date on the ticket and tell them when to expect it.',
+            'button'  => 'Open Ticket',
+        ],
+        'ticket_update_due' => [
+            'subject' => '[Ticket #{{ticket_id}}] No reply to {{requester}} in {{days_since_contact}} days: {{subject}}',
+            'intro'   => '{{requester}} hasn\'t had a reply on this ticket in {{days_since_contact}} days. Please send them a short update so they know it\'s still being worked on, even if nothing has changed yet.',
+            'button'  => 'Open Ticket',
+        ],
+        'ticket_status_resolved' => [
+            'subject' => '[Ticket #{{ticket_id}}] Resolved: {{subject}}',
+            'intro'   => 'Your support ticket has been resolved. If you have further questions, please reply to this email and we\'ll follow up.',
+            'button'  => 'View Ticket',
+        ],
+        'ticket_status_closed' => [
+            'subject' => '[Ticket #{{ticket_id}}] Closed: {{subject}}',
+            'intro'   => 'Your support ticket has been closed. Thank you for contacting us. If you need further assistance, please submit a new ticket.',
+            'button'  => 'View Ticket',
+        ],
+        'confidential_ticket_accessed' => [
+            'subject' => '[Security Notice] Confidential Ticket #{{ticket_id}} accessed by {{admin_name}}',
+            'intro'   => '{{admin_name}} ({{admin_email}}) has accessed confidential ticket #{{ticket_id}} "{{subject}}" at {{timestamp}} from IP {{ip_address}}. This access has been recorded in the audit log.',
+            'button'  => 'View Ticket',
+        ],
+        'confidential_group_membership_changed' => [
+            'subject' => '[Security Notice] New members added to confidential group "{{group_name}}"',
+            'intro'   => '{{actor_name}} ({{actor_email}}) added the following user(s) to the confidential group "{{group_name}}" at {{timestamp}} from IP {{ip_address}}: {{added_users}}. You are receiving this alert because you are a member of this confidential group.',
+            'button'  => 'View Group',
+        ],
+        'confidential_flag_removed' => [
+            'subject' => '[Security Alert] Confidential status removed from {{target_type}} "{{target_name}}"',
+            'intro'   => '{{actor_name}} ({{actor_email}}) removed the confidential flag from {{target_type}} "{{target_name}}" at {{timestamp}} from IP {{ip_address}}. This action was authenticated and recorded in the audit log.',
+            'button'  => 'View Details',
+            'footer'  => '',
+        ],
+        'confidential_entity_deleted' => [
+            'subject' => '[Security Alert] Confidential {{target_type}} "{{target_name}}" was deleted',
+            'intro'   => '{{actor_name}} ({{actor_email}}) deleted the confidential {{target_type}} "{{target_name}}" at {{timestamp}} from IP {{ip_address}}. This action was authenticated and recorded in the audit log.',
+            'button'  => '',
+            'footer'  => '',
+        ],
+    ];
+
+    $d = $defaults[$key] ?? ['subject' => '', 'intro' => '', 'button' => 'View Ticket'];
+
+    // Per-group override layer. Resolution order for each part:
+    //   group override → global custom value → hard-coded default.
+    // The footer is shared across every email type and is never per-group.
+    $g = $groupId ? "__group_{$groupId}" : '';
+    $subjectTpl = ($g ? getSetting("email_subject_{$key}{$g}") : null)
+                  ?: getSetting("email_subject_{$key}") ?: $d['subject'];
+    $introTpl   = ($g ? getSetting("email_intro_{$key}{$g}") : null)
+                  ?: getSetting("email_intro_{$key}")   ?: $d['intro'];
+    $button     = ($g ? getSetting("email_button_{$key}{$g}") : null)
+                  ?: getSetting("email_button_{$key}")  ?: $d['button'];
+    // 'body' — an optional second paragraph for layouts that have one to
+    // render (none right now; see EMAIL_TPL_BODY_TABS). Empty string for every
+    // other template, so passing it through a layout that ignores it is safe.
+    $bodyTpl    = ($g ? getSetting("email_body_{$key}{$g}") : null)
+                  ?: getSetting("email_body_{$key}")    ?: ($d['body'] ?? '');
+    $footer     = getSetting('email_footer_text')    ?: 'This is an automated message from OpenHelpDesk. Please do not reply directly to this email.';
+
+    // Add common token aliases so custom templates using alternative names still work
+    $aliases = [
+        'ticket_subject'      => $rawTokens['subject']     ?? '',
+        'customer_first_name' => $rawTokens['first_name']  ?? '',
+        'customer_last_name'  => $rawTokens['last_name']   ?? '',
+        'customer_name'       => $rawTokens['user_name']   ?? '',
+        'customer_full_name'  => $rawTokens['user_name']   ?? '',
+    ];
+    $rawTokens = array_merge($aliases, $rawTokens);
+
+    // Subject line: raw substitution (email headers are plain text)
+    $subject = applyEmailTokens($subjectTpl, $rawTokens);
+
+    // Intro text: the token VALUES going into HTML must be escaped
+    $safeTokens = [];
+    foreach ($rawTokens as $k => $v) {
+        $safeTokens[$k] = htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+    }
+    $intro = applyEmailTokens($introTpl, $safeTokens);
+
+    // Body: same escaping rules as the intro. nl2br() so an admin who types a
+    // blank line between sentences gets the break they expect in the email —
+    // this is a multi-line field, unlike the one-line intro.
+    $body = $bodyTpl !== '' ? nl2br(applyEmailTokens($bodyTpl, $safeTokens)) : '';
+
+    return [
+        'subject' => $subject,
+        'intro'   => $intro,  // already HTML-safe
+        'body'    => $body,   // already HTML-safe; '' when the template has none
+        'button'  => htmlspecialchars($button, ENT_QUOTES, 'UTF-8'),
+        'footer'  => htmlspecialchars($footer, ENT_QUOTES, 'UTF-8'),
+    ];
+}
+
+/**
+ * Render an email template and return the HTML string.
+ */
+function renderEmail(string $template, array $data = []): string
+{
+    extract($data);
+    ob_start();
+    require ROOT_DIR . '/templates/emails/' . $template . '.php';
+    return ob_get_clean();
+}
+
+/**
+ * The out-of-the-box state for an email_notify:* key when no row exists yet.
+ *
+ * Historically every notification type defaulted to ON, which is the right
+ * call for the classic agent/requester mail — an upgrade shouldn't silently
+ * mute it. New recipient classes are the opposite: defaulting them ON would
+ * mail people who never asked for it the moment the code lands.
+ */
+function emailNotifyDefault(string $type): string
+{
+    return match ($type) {
+        'ticket_overdue', 'ticket_update_due' => '0',
+        default                               => '1',
+    };
+}
+
+/**
+ * Check whether a notification type is globally enabled by the admin.
+ * Defaults per emailNotifyDefault() if no setting has been saved yet.
+ */
+function emailNotifyEnabled(string $type): bool
+{
+    return getSetting('email_notify:' . $type, emailNotifyDefault($type)) !== '0';
+}
+
+/**
+ * Notify the ticket creator that their ticket was updated (comment added).
+ * Skips if the updater IS the creator (no self-notifications).
+ */
+function notifyTicketCreator(PDO $db, int $ticketId, string $message, string $authorName): void
+{
+    if (!emailNotifyEnabled('requester_agent_comment')) {
+        return;
+    }
+    $stmt = $db->prepare(
+        "SELECT t.subject, t.created_by, t.group_id, u.email, u.first_name, u.last_name, u.notify_ticket_updated
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?"
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || (int) $row['created_by'] === Auth::id()) {
+        return; // ticket not found or updater is the creator
+    }
+    if (!(bool)($row['notify_ticket_updated'] ?? 1)) {
+        return; // user opted out of ticket reply emails
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . '/portal/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-updated', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'message'    => $message,
+        'author'     => $authorName,
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ], $row['group_id'] ? (int) $row['group_id'] : null);
+
+    $emailHtml = renderEmail('ticket-updated', [
+        'ticketId'    => $ticketId,
+        'subject'     => $row['subject'],
+        'message'     => $message,
+        'authorName'  => $authorName,
+        'ticketUrl'   => $ticketUrl,
+        'introText'   => $tpl['intro'],
+        'buttonLabel' => $tpl['button'],
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        $tpl['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * True if the current user may forward tickets to anyone at all — i.e. holds
+ * either the internal or the external forward permission. Used to decide whether
+ * the Forward button is shown.
+ */
+function canForwardTickets(): bool
+{
+    return Auth::can('tickets.forward.internal') || Auth::can('tickets.forward.external');
+}
+
+/**
+ * Classify forward recipients into internal vs external by email.
+ *
+ * Internal  = the address matches a real in-system user (users.is_external = 0).
+ * External  = a brand-new address, OR one matching a previously auto-provisioned
+ *             external contact (users.is_external = 1).
+ *
+ * Invalid email strings are ignored here — forwardTicket() reports those.
+ *
+ * @return array{internal: string[], external: string[]} lowercased addresses.
+ */
+function classifyForwardRecipients(PDO $db, array $emails): array
+{
+    $valid = [];
+    foreach ($emails as $e) {
+        $e = strtolower(trim($e));
+        if ($e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL)) {
+            $valid[$e] = true; // dedupe
+        }
+    }
+    $valid = array_keys($valid);
+    if (empty($valid)) {
+        return ['internal' => [], 'external' => []];
+    }
+
+    // Which of these are real internal users (is_external = 0)?
+    $ph = implode(',', array_fill(0, count($valid), '?'));
+    $stmt = $db->prepare("SELECT LOWER(email) FROM users WHERE LOWER(email) IN ($ph) AND is_external = 0");
+    $stmt->execute($valid);
+    $internalSet = array_flip($stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $internal = $external = [];
+    foreach ($valid as $e) {
+        if (isset($internalSet[$e])) {
+            $internal[] = $e;
+        } else {
+            $external[] = $e;
+        }
+    }
+    return ['internal' => $internal, 'external' => $external];
+}
+
+/**
+ * Permission gate for a forward request. Returns a human-readable error naming
+ * the addresses the current user isn't allowed to forward to, or null if the
+ * request is fully permitted.
+ */
+function forwardPermissionError(PDO $db, array $emails): ?string
+{
+    $classes  = classifyForwardRecipients($db, $emails);
+    $problems = [];
+    if (!empty($classes['external']) && !Auth::can('tickets.forward.external')) {
+        $problems[] = 'external addresses (' . implode(', ', $classes['external']) . ')';
+    }
+    if (!empty($classes['internal']) && !Auth::can('tickets.forward.internal')) {
+        $problems[] = 'internal contacts (' . implode(', ', $classes['internal']) . ')';
+    }
+    if (empty($problems)) {
+        return null;
+    }
+    return "You don't have permission to forward to " . implode(' or ', $problems) . '.';
+}
+
+/**
+ * Forward a ticket — its details, full public conversation, and attachments —
+ * to one or more email addresses (external third parties or in-system contacts).
+ *
+ * Each recipient is resolved to a `users` row; unknown addresses are auto-
+ * provisioned as `role = 'user'`, `is_external = 1` contacts so their replies
+ * thread back into the ticket via the inbound mail processor. Every recipient
+ * is added to the ticket CC list so they receive future updates.
+ *
+ * @param string[] $emails          Recipient email addresses.
+ * @param array    $newAttachments  Freshly-uploaded files from handleAttachmentUploads().
+ * @return array{sent: string[], invalid: string[]}  Labels of who was emailed + rejected addresses.
+ */
+function forwardTicket(PDO $db, int $ticketId, array $emails, string $note, array $newAttachments, int $actorId, string $actorName): array
+{
+    $result = ['sent' => [], 'invalid' => []];
+
+    // ── Load ticket + requester + lookups ────────────────────────────────────
+    $tStmt = $db->prepare(
+        'SELECT t.subject, t.description, t.status, t.created_at, t.type_id,
+                t.priority_id, t.location_id,
+                u.first_name AS req_first, u.last_name AS req_last
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?'
+    );
+    $tStmt->execute([$ticketId]);
+    $t = $tStmt->fetch();
+    if (!$t) {
+        return $result;
+    }
+
+    $typeName = $priorityName = $locationName = '';
+    if ($t['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$t['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($t['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$t['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+    if ($t['location_id']) {
+        $s = $db->prepare('SELECT name FROM locations WHERE id = ?');
+        $s->execute([$t['location_id']]);
+        $locationName = $s->fetchColumn() ?: '';
+    }
+
+    // ── Build the conversation thread: original request + public comments ─────
+    $thread = [[
+        'author'  => trim($t['req_first'] . ' ' . $t['req_last']),
+        'date'    => date('M j, Y g:i A', strtotime($t['created_at'])),
+        'message' => $t['description'] ?? '',
+    ]];
+    $cStmt = $db->prepare(
+        "SELECT tl.details, tl.created_at,
+                CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) AS author
+         FROM ticket_timeline tl
+         LEFT JOIN users u ON tl.user_id = u.id
+         WHERE tl.ticket_id = ? AND tl.action = 'comment' AND tl.is_internal = 0
+         ORDER BY tl.created_at ASC"
+    );
+    $cStmt->execute([$ticketId]);
+    foreach ($cStmt->fetchAll() as $c) {
+        $thread[] = [
+            'author'  => trim($c['author']) !== '' ? trim($c['author']) : 'System',
+            'date'    => date('M j, Y g:i A', strtotime($c['created_at'])),
+            'message' => $c['details'] ?? '',
+        ];
+    }
+
+    // ── Gather attachments: every file on the ticket + new uploads ────────────
+    $attachments = [];
+    $aStmt = $db->prepare('SELECT original_name, stored_name FROM ticket_attachments WHERE ticket_id = ?');
+    $aStmt->execute([$ticketId]);
+    foreach ($aStmt->fetchAll() as $a) {
+        $attachments[] = ['path' => ATTACHMENT_STORAGE_PATH . $a['stored_name'], 'name' => $a['original_name']];
+    }
+    foreach ($newAttachments as $a) {
+        $attachments[] = ['path' => ATTACHMENT_STORAGE_PATH . $a['stored_name'], 'name' => $a['original_name']];
+    }
+    $attachmentNote = '';
+    if (!empty($attachments)) {
+        $attachmentNote = count($attachments) . ' file(s) from this ticket are attached to this email.';
+    }
+
+    // ── Resolve recipients, CC them, and send ────────────────────────────────
+    $appUrl = env('APP_URL', 'http://localhost:8000');
+    foreach ($emails as $email) {
+        $email = strtolower(trim($email));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if ($email !== '') {
+                $result['invalid'][] = $email;
+            }
+            continue;
+        }
+
+        // Find or auto-provision the recipient as a contact.
+        $uStmt = $db->prepare('SELECT id, first_name, last_name FROM users WHERE LOWER(email) = ?');
+        $uStmt->execute([$email]);
+        $user = $uStmt->fetch();
+        if (!$user) {
+            [$first, $last] = forwardParseName($email);
+            $hashedPw = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+            $db->prepare(
+                "INSERT INTO users (first_name, last_name, email, password, role, is_external) VALUES (?, ?, ?, ?, 'user', 1)"
+            )->execute([$first, $last, $email, $hashedPw]);
+            $user = ['id' => (int) $db->lastInsertId(), 'first_name' => $first, 'last_name' => $last];
+        }
+
+        // Add to the ticket CC list (idempotent).
+        $exists = $db->prepare('SELECT 1 FROM ticket_cc WHERE ticket_id = ? AND user_id = ?');
+        $exists->execute([$ticketId, $user['id']]);
+        if (!$exists->fetchColumn()) {
+            $db->prepare('INSERT INTO ticket_cc (ticket_id, user_id, added_by) VALUES (?, ?, ?)')
+               ->execute([$ticketId, $user['id'], $actorId]);
+        }
+
+        $tpl = getEmailTpl('ticket-forwarded', [
+            'ticket_id' => $ticketId,
+            'subject'   => $t['subject'],
+            'author'    => $actorName,
+        ]);
+
+        $emailHtml = renderEmail('ticket-forwarded', [
+            'ticketId'      => $ticketId,
+            'subject'       => $t['subject'],
+            'introText'     => $tpl['intro'],
+            'footerText'    => $tpl['footer'],
+            'authorName'    => $actorName,
+            'forwardNote'   => $note,
+            'requesterName' => trim($t['req_first'] . ' ' . $t['req_last']),
+            'statusLabel'   => ticketStatusLabel($t['status']),
+            'typeName'      => $typeName,
+            'priorityName'  => $priorityName,
+            'locationName'  => $locationName,
+            'openedAt'      => date('M j, Y', strtotime($t['created_at'])),
+            'thread'        => $thread,
+            'attachmentNote'=> $attachmentNote,
+        ]);
+
+        sendMail(
+            $email,
+            trim($user['first_name'] . ' ' . $user['last_name']),
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $ticketId,
+            $attachments
+        );
+
+        $label = trim($user['first_name'] . ' ' . $user['last_name']);
+        $result['sent'][] = $label !== '' ? "{$label} <{$email}>" : $email;
+    }
+
+    return $result;
+}
+
+/**
+ * Split an email address into a [first, last] name guess for an auto-provisioned
+ * external contact. "jane.doe@acme.com" → ["Jane", "Doe"]; "vendor@acme.com" → ["Vendor", ""].
+ */
+function forwardParseName(string $email): array
+{
+    $local = strstr($email, '@', true) ?: $email;
+    $local = str_replace(['.', '_', '-', '+'], ' ', $local);
+    $local = trim(preg_replace('/\s+/', ' ', $local));
+    if ($local === '') {
+        return ['External', 'Contact'];
+    }
+    $parts = explode(' ', $local, 2);
+    $first = ucfirst($parts[0]);
+    $last  = isset($parts[1]) ? ucwords($parts[1]) : '';
+    return [$first, $last];
+}
+
+/**
+ * Send a confirmation email to the requester when their ticket is created.
+ * Works from any creation path (portal form, admin/agent form, API, email-to-ticket).
+ * Gated by the global `requester_new_ticket` setting AND the user's
+ * `notify_ticket_created` preference.
+ */
+function notifyRequesterTicketCreated(PDO $db, int $ticketId): void
+{
+    // Teams fires independently of the requester email gates below — this helper
+    // is called on every ticket-creation path (admin/api/agent/floor/portal),
+    // so it's the single choke point for a "new ticket" channel post.
+    Teams::notifyTicketEvent($db, $ticketId, 'created');
+
+    if (!emailNotifyEnabled('requester_new_ticket')) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        'SELECT t.subject, t.description, t.type_id, t.location_id, t.priority_id, t.group_id,
+                u.id AS user_id, u.email, u.first_name, u.last_name, u.notify_ticket_created
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || !(bool) ($row['notify_ticket_created'] ?? 1)) {
+        return;
+    }
+
+    $typeName = $locationName = $priorityName = '';
+    if ($row['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$row['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($row['location_id']) {
+        $s = $db->prepare('SELECT name FROM locations WHERE id = ?');
+        $s->execute([$row['location_id']]);
+        $locationName = $s->fetchColumn() ?: '';
+    }
+    if ($row['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$row['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . '/portal/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-created', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'type'       => $typeName,
+        'location'   => $locationName,
+        'priority'   => $priorityName,
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ] + slaEmailTokens($db, $row['type_id'] ? (int) $row['type_id'] : null, $row['priority_id'] ? (int) $row['priority_id'] : null),
+    $row['group_id'] ? (int) $row['group_id'] : null);
+
+    $emailHtml = renderEmail('ticket-created', [
+        'ticketId'     => $ticketId,
+        'subject'      => $row['subject'],
+        'description'  => $row['description'],
+        'typeName'     => $typeName,
+        'locationName' => $locationName,
+        'priorityName' => $priorityName,
+        'ticketUrl'    => $ticketUrl,
+        'introText'    => $tpl['intro'],
+        'buttonLabel'  => $tpl['button'],
+        'footerText'   => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        $tpl['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email the requester when their ticket is assigned to an agent, telling them
+ * who will be handling it. Gated by the global `requester_ticket_assigned`
+ * setting AND the requester's `notify_ticket_assigned` preference. Skips when
+ * the requester is the assigned agent (they get the agent-side email).
+ */
+function notifyRequesterTicketAssigned(PDO $db, int $ticketId, int $agentId): void
+{
+    if (!emailNotifyEnabled('requester_ticket_assigned')) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        'SELECT t.subject, t.type_id, t.priority_id,
+                u.id AS user_id, u.email, u.first_name, u.last_name, u.notify_ticket_assigned
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return;
+    }
+    if ((int) $row['user_id'] === $agentId) {
+        return; // requester is the assigned agent
+    }
+    if (!(bool) ($row['notify_ticket_assigned'] ?? 1)) {
+        return;
+    }
+
+    $a = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    $a->execute([$agentId]);
+    $agent = $a->fetch();
+    if (!$agent) {
+        return;
+    }
+    $agentName = trim($agent['first_name'] . ' ' . $agent['last_name']);
+
+    $typeName = $priorityName = '';
+    if ($row['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$row['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($row['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$row['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . '/portal/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-assigned-requester', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'agent_name' => $agentName,
+        'type'       => $typeName,
+        'priority'   => $priorityName,
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ]);
+
+    $emailHtml = renderEmail('ticket-assigned-requester', [
+        'ticketId'     => $ticketId,
+        'subject'      => $row['subject'],
+        'agentName'    => $agentName,
+        'typeName'     => $typeName,
+        'priorityName' => $priorityName,
+        'ticketUrl'    => $ticketUrl,
+        'introText'    => $tpl['intro'],
+        'buttonLabel'  => $tpl['button'],
+        'footerText'   => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        $tpl['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email all CC'd users on a ticket about a new comment.
+ * Skips the comment author and the ticket creator (already notified separately).
+ */
+function notifyCcUsers(PDO $db, int $ticketId, string $message, string $authorName): void
+{
+    if (!emailNotifyEnabled('cc_note_added')) {
+        return;
+    }
+    // Get ticket subject and creator
+    $ticket = $db->prepare('SELECT subject, created_by, group_id FROM tickets WHERE id = ?');
+    $ticket->execute([$ticketId]);
+    $ticketRow = $ticket->fetch();
+    if (!$ticketRow) return;
+
+    $creatorId = (int) $ticketRow['created_by'];
+    $ticketGroupId = $ticketRow['group_id'] ? (int) $ticketRow['group_id'] : null;
+    $currentId = Auth::id();
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+
+    // Fetch CC'd users
+    $cc = $db->prepare(
+        'SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.notify_ticket_cc
+         FROM ticket_cc tc
+         JOIN users u ON tc.user_id = u.id
+         WHERE tc.ticket_id = ?'
+    );
+    $cc->execute([$ticketId]);
+
+    foreach ($cc->fetchAll() as $user) {
+        $uid = (int) $user['id'];
+        if ($uid === $currentId || $uid === $creatorId) continue;
+        // In-app "Ticket Update" for CC'd users — independent of email opt-out.
+        createNotification($db, $uid, $ticketId, 'ticket_update', $message, $currentId);
+        if (!(bool)($user['notify_ticket_cc'] ?? 1)) continue; // opted out
+
+        // Build the correct URL based on role
+        $prefix = match ($user['role']) {
+            'admin' => '/admin',
+            'agent' => '/agent',
+            default => '/portal',
+        };
+        $ticketUrl = $appUrl . $prefix . '/tickets/' . $ticketId;
+
+        $tpl = getEmailTpl('ticket-updated', [
+            'ticket_id'  => $ticketId,
+            'subject'    => $ticketRow['subject'],
+            'message'    => $message,
+            'author'     => $authorName,
+            'user_name'  => $user['first_name'] . ' ' . $user['last_name'],
+            'first_name' => $user['first_name'],
+            'last_name'  => $user['last_name'],
+        ], $ticketGroupId);
+
+        $emailHtml = renderEmail('ticket-updated', [
+            'ticketId'    => $ticketId,
+            'subject'     => $ticketRow['subject'],
+            'message'     => $message,
+            'authorName'  => $authorName,
+            'ticketUrl'   => $ticketUrl,
+            'introText'   => $tpl['intro'],
+            'buttonLabel' => $tpl['button'],
+            'footerText'  => $tpl['footer'],
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $ticketId
+        );
+    }
+}
+
+/**
+ * Notify a user that they have just been added as a CC on a ticket.
+ *
+ * Fires once, at the moment of being CC'd — distinct from notifyCcUsers(),
+ * which fires on every subsequent reply. In-app notification always; email
+ * respects the recipient's notify_ticket_cc opt-out. $actorId is the user who
+ * performed the add (skipped, so nobody is told they CC'd themselves); pass 0
+ * when there is no human actor (e.g. an automation rule), in which case the
+ * in-app notification simply carries no "added by".
+ */
+function notifyCcAdded(PDO $db, int $ticketId, int $userId, string $addedByName, int $actorId): void
+{
+    if (!emailNotifyEnabled('cc_note_added')) {
+        return;
+    }
+    if ($userId <= 0 || ($actorId > 0 && $userId === $actorId)) {
+        return;
+    }
+
+    $ticket = $db->prepare('SELECT subject, group_id, created_by FROM tickets WHERE id = ?');
+    $ticket->execute([$ticketId]);
+    $ticketRow = $ticket->fetch();
+    if (!$ticketRow) return;
+    // The requester already gets every requester email; a CC rule that matches
+    // their own ticket would otherwise email them twice. notifyCcUsers() skips
+    // the creator for the same reason.
+    if ((int) $ticketRow['created_by'] === $userId) return;
+
+    $userStmt = $db->prepare(
+        'SELECT id, first_name, last_name, email, role, notify_ticket_cc FROM users WHERE id = ?'
+    );
+    $userStmt->execute([$userId]);
+    $user = $userStmt->fetch();
+    if (!$user) return;
+
+    $ticketGroupId = $ticketRow['group_id'] ? (int) $ticketRow['group_id'] : null;
+
+    // In-app "Ticket Update" — independent of email opt-out. A non-positive
+    // actor (automation) is recorded as no actor, since mentioned_by is an FK.
+    createNotification($db, $userId, $ticketId, 'ticket_update', null, $actorId > 0 ? $actorId : null);
+
+    if (!(bool) ($user['notify_ticket_cc'] ?? 1)) return; // opted out of CC emails
+
+    $appUrl = env('APP_URL', 'http://localhost:8000');
+    $prefix = match ($user['role']) {
+        'admin' => '/admin',
+        'agent' => '/agent',
+        default => '/portal',
+    };
+    $ticketUrl = $appUrl . $prefix . '/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-updated', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $ticketRow['subject'],
+        'message'    => '',
+        'author'     => $addedByName,
+        'user_name'  => $user['first_name'] . ' ' . $user['last_name'],
+        'first_name' => $user['first_name'],
+        'last_name'  => $user['last_name'],
+    ], $ticketGroupId);
+
+    $emailHtml = renderEmail('ticket-cc-added', [
+        'ticketId'    => $ticketId,
+        'subject'     => $ticketRow['subject'],
+        'addedByName' => $addedByName,
+        'userName'    => $user['first_name'] . ' ' . $user['last_name'],
+        'ticketUrl'   => $ticketUrl,
+        'buttonLabel' => $tpl['button'],
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $user['email'],
+        $user['first_name'] . ' ' . $user['last_name'],
+        '[Ticket #' . $ticketId . '] You were added as a CC: ' . $ticketRow['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email all watchers of a ticket about a new public comment.
+ * Skips the comment author, the ticket creator (notified separately),
+ * and any CC'd users (notified separately).
+ */
+function notifyWatchers(PDO $db, int $ticketId, string $message, string $authorName): void
+{
+    $ticketStmt = $db->prepare('SELECT subject, created_by, assigned_to FROM tickets WHERE id = ?');
+    $ticketStmt->execute([$ticketId]);
+    $ticketRow = $ticketStmt->fetch();
+    if (!$ticketRow) return;
+
+    $creatorId  = (int) $ticketRow['created_by'];
+    $assignedId = $ticketRow['assigned_to'] !== null ? (int) $ticketRow['assigned_to'] : 0;
+    $currentId  = Auth::id();
+
+    // Collect CC'd user IDs to avoid double-notifying
+    $ccStmt = $db->prepare('SELECT user_id FROM ticket_cc WHERE ticket_id = ?');
+    $ccStmt->execute([$ticketId]);
+    $ccIdList = array_map('intval', array_column($ccStmt->fetchAll(), 'user_id'));
+
+    $stmt = $db->prepare(
+        "SELECT u.id, u.first_name, u.last_name, u.email, u.role
+         FROM ticket_watchers tw
+         JOIN users u ON tw.user_id = u.id
+         WHERE tw.ticket_id = ? AND " . staffRoleSqlIn('u.role') . ""
+    );
+    $stmt->execute([$ticketId]);
+
+    foreach ($stmt->fetchAll() as $user) {
+        $uid = (int) $user['id'];
+        if ($uid === $currentId || $uid === $creatorId) continue;
+        if ($assignedId && $uid === $assignedId) continue; // notified separately as the assignee
+        if (in_array($uid, $ccIdList, true)) continue;
+
+        // In-app "Ticket Update" for watchers on a new public comment.
+        createNotification($db, $uid, $ticketId, 'ticket_update', $message, $currentId);
+
+        $prefix    = roleIsAdmin($user['role']) ? '/admin' : '/agent';
+        $ticketUrl = appUrl() . $prefix . '/tickets/' . $ticketId;
+
+        $tpl = getEmailTpl('ticket-updated', [
+            'ticket_id'  => $ticketId,
+            'subject'    => $ticketRow['subject'],
+            'message'    => $message,
+            'author'     => $authorName,
+            'user_name'  => $user['first_name'] . ' ' . $user['last_name'],
+            'first_name' => $user['first_name'],
+            'last_name'  => $user['last_name'],
+        ]);
+
+        $emailHtml = renderEmail('ticket-updated', [
+            'ticketId'    => $ticketId,
+            'subject'     => $ticketRow['subject'],
+            'message'     => $message,
+            'authorName'  => $authorName,
+            'ticketUrl'   => $ticketUrl,
+            'introText'   => $tpl['intro'],
+            'buttonLabel' => $tpl['button'],
+            'footerText'  => $tpl['footer'],
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $ticketId
+        );
+    }
+}
+
+/**
+ * Email group members with notify_new_ticket enabled when a ticket is created.
+ * Only the ticket's own group is notified, or the ticket type's group when the
+ * ticket has none; if neither is set, every opted-in group is. Skips members who
+ * have opted out via notify_group_new_ticket = 0.
+ */
+function notifyGroupMembers(PDO $db, int $ticketId): void
+{
+    if (!emailNotifyEnabled('agent_new_ticket')) {
+        return;
+    }
+    // Fetch the ticket. Pull the type's confidential flag + group so we can gate
+    // recipients and redact the body below.
+    $tStmt = $db->prepare(
+        'SELECT t.subject, t.description, t.type_id, t.location_id, t.priority_id, t.created_by, t.group_id, t.assigned_to,
+                COALESCE(tt.is_confidential, 0) AS is_confidential, tt.group_id AS conf_group_id
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE t.id = ?'
+    );
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket) {
+        return;
+    }
+
+    // Confidential tickets must never broadcast their subject/body to the
+    // site-wide notify_new_ticket audience. Restrict recipients to the
+    // confidential type's group and redact the content to a bare link.
+    $isConfidential = (int) $ticket['is_confidential'] === 1;
+    $confGroupId    = $ticket['conf_group_id'] !== null ? (int) $ticket['conf_group_id'] : null;
+    $subjectForEmail = $isConfidential ? '[Confidential ticket]' : $ticket['subject'];
+    $descForEmail    = $isConfidential
+        ? 'The contents of this ticket are confidential. Open the ticket to view it.'
+        : $ticket['description'];
+
+    // Submitter name
+    $uStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    $uStmt->execute([$ticket['created_by']]);
+    $submitter = $uStmt->fetch();
+    $submitterName = $submitter ? trim($submitter['first_name'] . ' ' . $submitter['last_name']) : '';
+
+    // Resolve type / location / priority names
+    $typeName = $locationName = $priorityName = '';
+    if ($ticket['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$ticket['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($ticket['location_id']) {
+        $s = $db->prepare('SELECT name FROM locations WHERE id = ?');
+        $s->execute([$ticket['location_id']]);
+        $locationName = $s->fetchColumn() ?: '';
+    }
+    if ($ticket['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$ticket['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+
+    // The ticket's own group wins, then the type's group; either notifies only
+    // that group (if it opted in). Shared types like "Collections/Discover Job
+    // Requests" have no group, so keying off the type alone broadcast every
+    // ticket of that type to unrelated opted-in groups. Only a ticket with no
+    // group at all falls back to every group with the flag on.
+    $targetGroupId = $ticket['group_id'] !== null ? (int) $ticket['group_id'] : $confGroupId;
+    if ($targetGroupId !== null) {
+        $gStmt = $db->prepare('SELECT id FROM `groups` WHERE id = ? AND notify_new_ticket = 1');
+        $gStmt->execute([$targetGroupId]);
+    } else {
+        $gStmt = $db->query('SELECT id FROM `groups` WHERE notify_new_ticket = 1');
+    }
+    $groupIds = $gStmt->fetchAll(PDO::FETCH_COLUMN);
+    if (empty($groupIds)) {
+        return;
+    }
+
+    // Collect unique members across all notified groups
+    $members = [];
+    foreach ($groupIds as $gid) {
+        $mStmt = $db->prepare(
+            'SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.notify_group_new_ticket
+             FROM group_user_map gum
+             JOIN users u ON u.id = gum.user_id
+             WHERE gum.group_id = ?'
+        );
+        $mStmt->execute([$gid]);
+        foreach ($mStmt->fetchAll() as $m) {
+            $members[(int) $m['id']] = $m; // deduplicate
+        }
+    }
+
+    // Fail closed for confidential tickets: keep only recipients who are members
+    // of the confidential group (the users authorized to see the content). If the
+    // type has no group, nobody outside the creator may be notified.
+    if ($isConfidential) {
+        $members = array_filter($members, static function ($m) use ($db, $confGroupId) {
+            return $confGroupId !== null && in_array($confGroupId, userGroupIds($db, (int) $m['id']), true);
+        });
+    }
+
+    // People directly on the ticket get their own email, so the broadcast skips
+    // them: the requester and assignee (whichever order the caller sends those
+    // in), plus anyone already emailed about it this request, e.g. a CC rule.
+    $directIds = array_map('intval', array_filter([$ticket['created_by'], $ticket['assigned_to']]));
+    $members = array_filter($members, static fn($m) => !in_array((int) $m['id'], $directIds, true));
+    $alreadyEmailed = ticketMailRecipients($ticketId);
+
+    $appUrl = env('APP_URL', 'http://localhost:8000');
+    $slaTokens = slaEmailTokens($db, $ticket['type_id'] ? (int) $ticket['type_id'] : null, $ticket['priority_id'] ? (int) $ticket['priority_id'] : null);
+
+    foreach ($members as $user) {
+        if (isset($alreadyEmailed[strtolower((string) $user['email'])])) {
+            continue;
+        }
+        // In-app "New Ticket" alert for group members — independent of email opt-out.
+        createNotification(
+            $db,
+            (int) $user['id'],
+            $ticketId,
+            'new_ticket',
+            $subjectForEmail,
+            (int) $ticket['created_by']
+        );
+        if (!(bool) ($user['notify_group_new_ticket'] ?? 1)) {
+            continue;
+        }
+
+        $rolePrefix = match ($user['role']) {
+            'admin' => '/admin',
+            'agent' => '/agent',
+            default => '/portal',
+        };
+        $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+        $tpl = getEmailTpl('ticket-new-group', [
+            'ticket_id'  => $ticketId,
+            'subject'    => $subjectForEmail,
+            'type'       => $typeName,
+            'location'   => $locationName,
+            'priority'   => $priorityName,
+            'submitter'  => $submitterName,
+            'user_name'  => $user['first_name'] . ' ' . $user['last_name'],
+            'first_name' => $user['first_name'],
+            'last_name'  => $user['last_name'],
+        ] + $slaTokens);
+
+        $emailHtml = renderEmail('ticket-opened-group', [
+            'ticketId'      => $ticketId,
+            'subject'       => $subjectForEmail,
+            'description'   => $descForEmail,
+            'typeName'      => $typeName,
+            'locationName'  => $locationName,
+            'priorityName'  => $priorityName,
+            'submitterName' => $submitterName,
+            'ticketUrl'     => $ticketUrl,
+            'introText'     => $tpl['intro'],
+            'buttonLabel'   => $tpl['button'],
+            'footerText'    => $tpl['footer'],
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $ticketId
+        );
+    }
+}
+
+/**
+ * Email the agent when a ticket is assigned directly to them.
+ */
+function notifyAssignedAgent(PDO $db, int $ticketId, int $agentId): void
+{
+    // Teams "ticket assigned" post — independent of the agent's email prefs and
+    // of self-assignment skipping below, so the channel always reflects who owns
+    // the ticket now. Disable via the per-event toggle if it's too chatty.
+    Teams::notifyTicketEvent($db, $ticketId, 'assigned', ['assignee_id' => $agentId]);
+
+    // In-app "New Assignment" feed notification — fires regardless of the
+    // agent's email preferences (createNotification self-skips self-assignment).
+    createNotification($db, $agentId, $ticketId, 'assignment', null, Auth::id());
+
+    if (!emailNotifyEnabled('agent_assigned_agent')) {
+        return;
+    }
+    if ($agentId === Auth::id()) {
+        return; // self-assignment
+    }
+
+    $stmt = $db->prepare(
+        'SELECT id, first_name, last_name, email, role, notify_assigned_to_me
+         FROM users WHERE id = ?'
+    );
+    $stmt->execute([$agentId]);
+    $agent = $stmt->fetch();
+    if (!$agent || !(bool) ($agent['notify_assigned_to_me'] ?? 1)) {
+        return;
+    }
+
+    $tStmt = $db->prepare(
+        'SELECT t.subject, t.description, t.type_id, t.priority_id, t.created_by
+         FROM tickets t WHERE t.id = ?'
+    );
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket) {
+        return;
+    }
+
+    $uStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    $uStmt->execute([$ticket['created_by']]);
+    $submitter = $uStmt->fetch();
+    $submitterName = $submitter ? trim($submitter['first_name'] . ' ' . $submitter['last_name']) : '';
+
+    $typeName = $priorityName = '';
+    if ($ticket['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$ticket['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($ticket['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$ticket['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+
+    $rolePrefix = match ($agent['role']) {
+        'admin' => '/admin',
+        default => '/agent',
+    };
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket_assigned_agent', [
+        'ticket_id'   => $ticketId,
+        'subject'     => $ticket['subject'],
+        'type'        => $typeName,
+        'priority'    => $priorityName,
+        'submitter'   => $submitterName,
+        'user_name'   => $agent['first_name'] . ' ' . $agent['last_name'],
+        'first_name'  => $agent['first_name'],
+        'last_name'   => $agent['last_name'],
+    ] + slaEmailTokens($db, $ticket['type_id'] ? (int) $ticket['type_id'] : null, $ticket['priority_id'] ? (int) $ticket['priority_id'] : null));
+
+    $emailHtml = renderEmail('ticket-assigned-agent', [
+        'ticketId'      => $ticketId,
+        'subject'       => $ticket['subject'],
+        'description'   => $ticket['description'],
+        'typeName'      => $typeName,
+        'priorityName'  => $priorityName,
+        'submitterName' => $submitterName,
+        'ticketUrl'     => $ticketUrl,
+        'introText'     => $tpl['intro'],
+        'buttonLabel'   => $tpl['button'],
+        'footerText'    => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $agent['email'],
+        $agent['first_name'] . ' ' . $agent['last_name'],
+        $tpl['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email all members of a group when a ticket is assigned to that group.
+ */
+function notifyAssignedGroup(PDO $db, int $ticketId, int $groupId): void
+{
+    if (!emailNotifyEnabled('agent_assigned_group')) {
+        return;
+    }
+
+    $gStmt = $db->prepare('SELECT name FROM `groups` WHERE id = ?');
+    $gStmt->execute([$groupId]);
+    $groupName = $gStmt->fetchColumn() ?: '';
+
+    $tStmt = $db->prepare(
+        'SELECT t.subject, t.description, t.type_id, t.priority_id, t.created_by,
+                COALESCE(tt.is_confidential, 0) AS is_confidential, tt.group_id AS conf_group_id
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON tt.id = t.type_id
+         WHERE t.id = ?'
+    );
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket) {
+        return;
+    }
+
+    // Redact confidential content out of the group email — email is a lower-trust
+    // channel, so even authorized members get a bare link and open the ticket to
+    // read it. Recipients are gated to the confidential group below.
+    $isConfidential = (int) $ticket['is_confidential'] === 1;
+    $confGroupId    = $ticket['conf_group_id'] !== null ? (int) $ticket['conf_group_id'] : null;
+    $subjectForEmail = $isConfidential ? '[Confidential ticket]' : $ticket['subject'];
+    $descForEmail    = $isConfidential
+        ? 'The contents of this ticket are confidential. Open the ticket to view it.'
+        : $ticket['description'];
+
+    $uStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    $uStmt->execute([$ticket['created_by']]);
+    $submitter = $uStmt->fetch();
+    $submitterName = $submitter ? trim($submitter['first_name'] . ' ' . $submitter['last_name']) : '';
+
+    $typeName = $priorityName = '';
+    if ($ticket['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$ticket['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($ticket['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$ticket['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+
+    $mStmt = $db->prepare(
+        'SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.notify_assigned_to_group
+         FROM group_user_map gum
+         JOIN users u ON u.id = gum.user_id
+         WHERE gum.group_id = ?'
+    );
+    $mStmt->execute([$groupId]);
+    $groupMembers = $mStmt->fetchAll();
+    $appUrl = env('APP_URL', 'http://localhost:8000');
+    $slaTokens = slaEmailTokens($db, $ticket['type_id'] ? (int) $ticket['type_id'] : null, $ticket['priority_id'] ? (int) $ticket['priority_id'] : null);
+
+    // Fail closed for confidential tickets: only members of the confidential
+    // group may be told about it (e.g. a confidential ticket reassigned to a
+    // non-confidential group must not notify that group).
+    if ($isConfidential) {
+        $groupMembers = array_filter($groupMembers, static function ($m) use ($db, $confGroupId) {
+            return $confGroupId !== null && in_array($confGroupId, userGroupIds($db, (int) $m['id']), true);
+        });
+    }
+
+    foreach ($groupMembers as $member) {
+        if ((int) $member['id'] === Auth::id()) {
+            continue; // skip the person making the change
+        }
+        // In-app "New Assignment" for the group — independent of email opt-out.
+        createNotification($db, (int) $member['id'], $ticketId, 'assignment', null, Auth::id());
+        if (!(bool) ($member['notify_assigned_to_group'] ?? 1)) {
+            continue;
+        }
+
+        $rolePrefix = match ($member['role']) {
+            'admin' => '/admin',
+            default => '/agent',
+        };
+        $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+        $tpl = getEmailTpl('ticket_assigned_group', [
+            'ticket_id'   => $ticketId,
+            'subject'     => $subjectForEmail,
+            'group'       => $groupName,
+            'type'        => $typeName,
+            'priority'    => $priorityName,
+            'submitter'   => $submitterName,
+            'user_name'   => $member['first_name'] . ' ' . $member['last_name'],
+            'first_name'  => $member['first_name'],
+            'last_name'   => $member['last_name'],
+        ] + $slaTokens);
+
+        $emailHtml = renderEmail('ticket-assigned-group', [
+            'ticketId'      => $ticketId,
+            'subject'       => $subjectForEmail,
+            'description'   => $descForEmail,
+            'groupName'     => $groupName,
+            'typeName'      => $typeName,
+            'priorityName'  => $priorityName,
+            'submitterName' => $submitterName,
+            'ticketUrl'     => $ticketUrl,
+            'introText'     => $tpl['intro'],
+            'buttonLabel'   => $tpl['button'],
+            'footerText'    => $tpl['footer'],
+        ]);
+
+        sendMail(
+            $member['email'],
+            $member['first_name'] . ' ' . $member['last_name'],
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $ticketId
+        );
+    }
+}
+
+/**
+ * Email the assigned agent when the ticket requester (portal user) adds a comment.
+ */
+function notifyAgentRequesterReplied(PDO $db, int $ticketId, string $message): void
+{
+    if (!emailNotifyEnabled('agent_requester_reply')) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        'SELECT t.subject, t.assigned_to,
+                u.id AS agent_id, u.first_name, u.last_name, u.email, u.role, u.notify_requester_replied
+         FROM tickets t
+         JOIN users u ON u.id = t.assigned_to
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if ($row) {
+        // In-app "Customer Reply" for the assigned agent — independent of email opt-out.
+        createNotification($db, (int) $row['agent_id'], $ticketId, 'customer_reply', $message);
+    }
+    if (!$row || !(bool) ($row['notify_requester_replied'] ?? 1)) {
+        return;
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $rolePrefix = match ($row['role']) {
+        'admin' => '/admin',
+        default => '/agent',
+    };
+    $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-updated', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'message'    => $message,
+        'author'     => 'the requester',
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ]);
+
+    // Override intro for agent context
+    $introText = 'The requester has replied to a ticket assigned to you.';
+
+    $emailHtml = renderEmail('ticket-updated', [
+        'ticketId'    => $ticketId,
+        'subject'     => $row['subject'],
+        'message'     => $message,
+        'authorName'  => 'The Requester',
+        'ticketUrl'   => $ticketUrl,
+        'introText'   => $introText,
+        'buttonLabel' => $tpl['button'],
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        '[Ticket #' . $ticketId . '] Requester replied: ' . $row['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email the assigned agent when ANOTHER staff member posts a public reply to a
+ * ticket assigned to them. Mirrors notifyAgentRequesterReplied() (requester
+ * replies) and notifyAgentNoteAdded() (internal notes) to close the gap where a
+ * public staff-to-staff reply left the assignee uninformed.
+ *
+ * Skips the reply author ($actorId). In-app notification always; email reuses
+ * the requester-replied opt-out (notify_requester_replied) since both mean
+ * "someone replied to a ticket assigned to you".
+ */
+function notifyAssignedAgentReply(PDO $db, int $ticketId, string $message, string $authorName, int $actorId): void
+{
+    if (!emailNotifyEnabled('agent_requester_reply')) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        'SELECT t.subject, t.assigned_to,
+                u.id AS agent_id, u.first_name, u.last_name, u.email, u.role, u.notify_requester_replied
+         FROM tickets t
+         JOIN users u ON u.id = t.assigned_to
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || (int) $row['assigned_to'] === $actorId) {
+        return; // unassigned, or the assignee is the one replying
+    }
+
+    // In-app "Ticket Update" for the assigned agent — independent of email opt-out.
+    createNotification($db, (int) $row['agent_id'], $ticketId, 'ticket_update', $message, $actorId);
+    if (!(bool) ($row['notify_requester_replied'] ?? 1)) {
+        return;
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $rolePrefix = match ($row['role']) {
+        'admin' => '/admin',
+        default => '/agent',
+    };
+    $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-updated', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'message'    => $message,
+        'author'     => $authorName,
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ]);
+
+    $emailHtml = renderEmail('ticket-updated', [
+        'ticketId'    => $ticketId,
+        'subject'     => $row['subject'],
+        'message'     => $message,
+        'authorName'  => $authorName,
+        'ticketUrl'   => $ticketUrl,
+        'introText'   => htmlspecialchars($authorName, ENT_QUOTES, 'UTF-8') . ' replied to a ticket assigned to you.',
+        'buttonLabel' => $tpl['button'],
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        '[Ticket #' . $ticketId . '] New reply: ' . $row['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email the assigned agent when an internal note is added to their ticket.
+ */
+function notifyAgentNoteAdded(PDO $db, int $ticketId, string $message): void
+{
+    if (!emailNotifyEnabled('agent_note_added')) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        'SELECT t.subject, t.assigned_to,
+                u.id AS agent_id, u.first_name, u.last_name, u.email, u.role, u.notify_note_added
+         FROM tickets t
+         JOIN users u ON u.id = t.assigned_to
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || (int) $row['assigned_to'] === Auth::id()) {
+        return; // not assigned or self
+    }
+    // In-app "Note Added" for the assigned agent — independent of email opt-out.
+    createNotification($db, (int) $row['agent_id'], $ticketId, 'note_added', $message, Auth::id());
+    if (!(bool) ($row['notify_note_added'] ?? 1)) {
+        return;
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $rolePrefix = match ($row['role']) {
+        'admin' => '/admin',
+        default => '/agent',
+    };
+    $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket-updated', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'message'    => $message,
+        'author'     => Auth::fullName(),
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ]);
+
+    $emailHtml = renderEmail('ticket-updated', [
+        'ticketId'    => $ticketId,
+        'subject'     => $row['subject'],
+        'message'     => $message,
+        'authorName'  => Auth::fullName(),
+        'ticketUrl'   => $ticketUrl,
+        'introText'   => 'An internal note was added to a ticket assigned to you.',
+        'buttonLabel' => $tpl['button'],
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        '[Ticket #' . $ticketId . '] Note added: ' . $row['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email the ticket requester when their ticket status changes to resolved or closed.
+ *
+ * When $newStatus is also the survey trigger, the satisfaction survey is put in
+ * this email rather than sent as a second one: the survey row is claimed here,
+ * so the sendCsatSurvey() call that follows at the call site no-ops. Call this
+ * BEFORE sendCsatSurvey(). Pass $withSurvey = false where the close must not
+ * survey at all (Close-menu reasons, the task parent's auto-resolve).
+ */
+function notifyRequesterStatusChanged(PDO $db, int $ticketId, string $newStatus, bool $withSurvey = true): void
+{
+    // Match the slug against the two semantic default flags rather than the
+    // literal strings 'resolved' / 'closed', so admins can rename either
+    // status without breaking the email + opt-in wiring.
+    if ($newStatus === ticketDefaultResolvedStatusSlug()) {
+        $settingKey   = 'requester_ticket_resolved';
+        $userCol      = 'notify_ticket_solved';
+        $templateKind = 'resolved';
+    } elseif ($newStatus === ticketDefaultClosedStatusSlug()) {
+        $settingKey   = 'requester_ticket_closed';
+        $userCol      = 'notify_ticket_closed';
+        $templateKind = 'closed';
+    } else {
+        return;
+    }
+    if (!emailNotifyEnabled($settingKey)) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        "SELECT t.subject, u.id AS user_id, u.email, u.first_name, u.last_name, u.{$userCol} AS opted_in
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?"
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || !(bool) ($row['opted_in'] ?? 1)) {
+        return;
+    }
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . '/portal/tickets/' . $ticketId;
+
+    $defaultIntros = [
+        'resolved' => 'Your support ticket has been resolved. If you have further questions, please reply to this email and we\'ll follow up.',
+        'closed'   => 'Your support ticket has been closed. Thank you for contacting us. If you need further assistance, please submit a new ticket.',
+    ];
+
+    // $templateKind is the semantic flag ('resolved' / 'closed') and stays
+    // stable even if an admin renames the underlying slug. $newStatus is the
+    // actual slug stored on the ticket — that's what the email body shows.
+    $tpl = getEmailTpl('ticket-status-' . $templateKind, [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+    ]);
+
+    $survey = $withSurvey && $newStatus === getSetting('csat_trigger_status', ticketDefaultResolvedStatusSlug())
+        ? csatCreateSurvey($db, $ticketId)
+        : null;
+
+    $emailHtml = renderEmail('ticket-status-changed', [
+        'ticketId'    => $ticketId,
+        'subject'     => $row['subject'],
+        'newStatus'   => $newStatus,
+        'survey'      => $survey,
+        'ticketUrl'   => $ticketUrl,
+        'introText'   => !empty($tpl['intro']) ? $tpl['intro'] : $defaultIntros[$templateKind],
+        'buttonLabel' => !empty($tpl['button']) ? $tpl['button'] : 'View Ticket',
+        'footerText'  => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        $tpl['subject'] ?: '[Ticket #' . $ticketId . '] ' . $row['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Email the creator (and CC'd users) of a source ticket that it was merged into a master ticket.
+ */
+function notifyTicketMerged(PDO $db, int $sourceId, int $targetId): void
+{
+    // Fetch source ticket and creator
+    $srcStmt = $db->prepare(
+        "SELECT t.subject, t.created_by, u.email, u.first_name, u.last_name, u.notify_ticket_merged
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?"
+    );
+    $srcStmt->execute([$sourceId]);
+    $src = $srcStmt->fetch();
+    if (!$src) return;
+
+    // Fetch target ticket subject
+    $tgtStmt = $db->prepare('SELECT subject FROM tickets WHERE id = ?');
+    $tgtStmt->execute([$targetId]);
+    $tgt = $tgtStmt->fetch();
+    if (!$tgt) return;
+
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . '/portal/tickets/' . $targetId;
+
+    $mergedTokensBase = [
+        'source_ticket_id' => $sourceId,
+        'source_subject'   => $src['subject'],
+        'target_ticket_id' => $targetId,
+        'target_subject'   => $tgt['subject'],
+    ];
+
+    // Notify source ticket creator
+    if ((bool)($src['notify_ticket_merged'] ?? 1)) {
+        $tpl = getEmailTpl('ticket-merged', array_merge($mergedTokensBase, [
+            'user_name'  => $src['first_name'] . ' ' . $src['last_name'],
+            'first_name' => $src['first_name'],
+            'last_name'  => $src['last_name'],
+        ]));
+
+        $emailHtml = renderEmail('ticket-merged', [
+            'sourceTicketId' => $sourceId,
+            'sourceSubject'  => $src['subject'],
+            'targetTicketId' => $targetId,
+            'targetSubject'  => $tgt['subject'],
+            'ticketUrl'      => $ticketUrl,
+            'introText'      => $tpl['intro'],
+            'buttonLabel'    => $tpl['button'],
+            'footerText'     => $tpl['footer'],
+        ]);
+
+        sendMail(
+            $src['email'],
+            $src['first_name'] . ' ' . $src['last_name'],
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $targetId
+        );
+    }
+
+    // Notify CC'd users on the source ticket (skip creator)
+    $ccStmt = $db->prepare(
+        'SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.notify_ticket_cc
+         FROM ticket_cc tc
+         JOIN users u ON tc.user_id = u.id
+         WHERE tc.ticket_id = ?'
+    );
+    $ccStmt->execute([$sourceId]);
+
+    $creatorId = (int) $src['created_by'];
+    foreach ($ccStmt->fetchAll() as $user) {
+        if ((int) $user['id'] === $creatorId) continue;
+        if (!(bool)($user['notify_ticket_cc'] ?? 1)) continue; // opted out
+
+        $prefix = match ($user['role']) {
+            'admin' => '/admin',
+            'agent' => '/agent',
+            default => '/portal',
+        };
+        $ccTicketUrl = $appUrl . $prefix . '/tickets/' . $targetId;
+
+        $ccTpl = getEmailTpl('ticket-merged', array_merge($mergedTokensBase, [
+            'user_name'  => $user['first_name'] . ' ' . $user['last_name'],
+            'first_name' => $user['first_name'],
+            'last_name'  => $user['last_name'],
+        ]));
+
+        $ccHtml = renderEmail('ticket-merged', [
+            'sourceTicketId' => $sourceId,
+            'sourceSubject'  => $src['subject'],
+            'targetTicketId' => $targetId,
+            'targetSubject'  => $tgt['subject'],
+            'ticketUrl'      => $ccTicketUrl,
+            'introText'      => $ccTpl['intro'],
+            'buttonLabel'    => $ccTpl['button'],
+            'footerText'     => $ccTpl['footer'],
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $ccTpl['subject'],
+            $ccHtml,
+            '',
+            $targetId
+        );
+    }
+}
+
+/* ── Escalation Rules ────────────────────────────────────────── */
+
+/**
+ * Evaluate a single escalation rule against a single ticket.
+ * Returns true if ALL conditions match, false otherwise.
+ */
+function evaluateEscalationConditions(\PDO $db, array $conditions, array $ticket): bool
+{
+    foreach ($conditions as $cond) {
+        $field    = $cond['field']    ?? '';
+        $operator = $cond['operator'] ?? 'equals';
+        $value    = $cond['value']    ?? '';
+
+        switch ($field) {
+            case 'sla_state':
+                $actual = $ticket['sla_state'] ?? '';
+                if ($operator === 'equals'     && $actual !== $value) return false;
+                if ($operator === 'not_equals' && $actual === $value) return false;
+                break;
+
+            case 'hours_open':
+                $stmt = $db->prepare('SELECT TIMESTAMPDIFF(HOUR, created_at, NOW()) FROM tickets WHERE id = ?');
+                $stmt->execute([(int) $ticket['id']]);
+                $hours = (int) $stmt->fetchColumn();
+                if ($operator === 'greater_than' && $hours <= (int) $value) return false;
+                break;
+
+            case 'hours_since_update':
+                $stmt = $db->prepare('SELECT TIMESTAMPDIFF(HOUR, updated_at, NOW()) FROM tickets WHERE id = ?');
+                $stmt->execute([(int) $ticket['id']]);
+                $hours = (int) $stmt->fetchColumn();
+                if ($operator === 'greater_than' && $hours <= (int) $value) return false;
+                break;
+
+            case 'hours_in_status':
+                $stmt = $db->prepare(
+                    'SELECT TIMESTAMPDIFF(HOUR, created_at, NOW()) FROM ticket_timeline
+                     WHERE ticket_id = ? AND action = \'status_changed\'
+                     ORDER BY created_at DESC LIMIT 1'
+                );
+                $stmt->execute([(int) $ticket['id']]);
+                $lastChange = $stmt->fetchColumn();
+                // If no status change exists, measure from ticket creation
+                if ($lastChange === false) {
+                    $stmt2 = $db->prepare('SELECT TIMESTAMPDIFF(HOUR, created_at, NOW()) FROM tickets WHERE id = ?');
+                    $stmt2->execute([(int) $ticket['id']]);
+                    $lastChange = (int) $stmt2->fetchColumn();
+                }
+                if ($operator === 'greater_than' && (int) $lastChange <= (int) $value) return false;
+                break;
+
+            case 'is_assigned':
+                $assigned = !empty($ticket['assigned_to']);
+                $wantYes  = $value === 'yes';
+                if ($operator === 'equals' && $assigned !== $wantYes) return false;
+                break;
+
+            case 'priority_id':
+                $actual = (string) ($ticket['priority_id'] ?? '');
+                if ($operator === 'equals'     && $actual !== $value) return false;
+                if ($operator === 'not_equals' && $actual === $value) return false;
+                break;
+
+            case 'status':
+                $actual = $ticket['status'] ?? '';
+                if ($operator === 'equals'     && $actual !== $value) return false;
+                if ($operator === 'not_equals' && $actual === $value) return false;
+                break;
+
+            case 'group_id':
+                $actual = (string) ($ticket['group_id'] ?? '');
+                if ($operator === 'equals'        && $actual !== $value)             return false;
+                if ($operator === 'not_equals'    && $actual === $value)             return false;
+                if ($operator === 'is_empty'      && !empty($ticket['group_id']))    return false;
+                if ($operator === 'is_not_empty'  && empty($ticket['group_id']))     return false;
+                break;
+
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Execute all actions for a matched escalation rule against a ticket.
+ * Adds per-action timeline entries. Handles notifications via email + in-app.
+ */
+function runEscalationRule(\PDO $db, array $rule, array $ticket): void
+{
+    $ticketId  = (int) $ticket['id'];
+    $ruleName  = $rule['name'];
+    $actions   = is_string($rule['actions']) ? json_decode($rule['actions'], true) : $rule['actions'];
+
+    // System user ID for timeline entries: use assigned agent or NULL
+    $systemUserId = null;
+
+    $appUrl     = env('APP_URL', 'http://localhost:8000');
+    $appName    = getSetting('app_name', 'OpenHelpDesk');
+    $brandColor = getSetting('branding_primary_color', '#4f46e5');
+
+    // Add a parent timeline entry marking the escalation fired
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+    )->execute([$ticketId, 'escalation_triggered', "Escalation rule \"{$ruleName}\" triggered"]);
+
+    $validStatuses   = ticketActiveStatusSlugs();
+
+    foreach ($actions as $act) {
+        $actionType = $act['action'] ?? '';
+        $actionVal  = $act['value']  ?? '';
+
+        switch ($actionType) {
+            case 'set_priority':
+                $newPriority = $actionVal !== '' ? (int) $actionVal : null;
+                $db->prepare('UPDATE tickets SET priority_id = ? WHERE id = ?')->execute([$newPriority, $ticketId]);
+                $name = 'None';
+                if ($newPriority) {
+                    $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+                    $s->execute([$newPriority]);
+                    $name = $s->fetchColumn() ?: 'None';
+                }
+                $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)')
+                   ->execute([$ticketId, 'priority_changed', "Priority set to {$name} by escalation rule"]);
+                if ($newPriority) {
+                    \Sla::onPriorityChanged($db, $ticketId, $newPriority, $ticket['type_id'] ? (int) $ticket['type_id'] : null);
+                }
+                break;
+
+            case 'set_assigned_to':
+                $newAssigned = $actionVal !== '' ? (int) $actionVal : null;
+                $db->prepare('UPDATE tickets SET assigned_to = ? WHERE id = ?')->execute([$newAssigned, $ticketId]);
+                $agentName = 'Unassigned';
+                if ($newAssigned) {
+                    $s = $db->prepare("SELECT CONCAT(first_name, ' ', last_name) FROM users WHERE id = ?");
+                    $s->execute([$newAssigned]);
+                    $agentName = $s->fetchColumn() ?: 'Unknown';
+                }
+                $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)')
+                   ->execute([$ticketId, 'assigned', "Assigned to {$agentName} by escalation rule"]);
+                break;
+
+            case 'set_group':
+                $newGroup = $actionVal !== '' ? (int) $actionVal : null;
+                $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?')->execute([$newGroup, $ticketId]);
+                $groupName = 'None';
+                if ($newGroup) {
+                    $s = $db->prepare('SELECT name FROM groups WHERE id = ?');
+                    $s->execute([$newGroup]);
+                    $groupName = $s->fetchColumn() ?: 'None';
+                }
+                $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)')
+                   ->execute([$ticketId, 'group_changed', "Group set to {$groupName} by escalation rule"]);
+                break;
+
+            case 'set_status':
+                if (!in_array($actionVal, $validStatuses, true)) break;
+                $oldStatus = $ticket['status'];
+                $db->prepare('UPDATE tickets SET status = ? WHERE id = ?')->execute([$actionVal, $ticketId]);
+                $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)')
+                   ->execute([$ticketId, 'status_changed', "Status changed from {$oldStatus} to {$actionVal} by escalation rule"]);
+                \Sla::onStatusChanged($db, $ticketId, $oldStatus, $actionVal);
+                break;
+
+            case 'add_internal_note':
+                $note = trim($actionVal);
+                if ($note === '') break;
+                $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)')
+                   ->execute([$ticketId, 'comment', $note]);
+                break;
+
+            case 'notify_user':
+            case 'notify_assigned_agent':
+                // Resolve the target user
+                if ($actionType === 'notify_assigned_agent') {
+                    // Re-fetch assigned_to in case a previous action changed it
+                    $s = $db->prepare('SELECT assigned_to FROM tickets WHERE id = ?');
+                    $s->execute([$ticketId]);
+                    $targetUserId = (int) $s->fetchColumn();
+                } else {
+                    $targetUserId = (int) $actionVal;
+                }
+                if ($targetUserId <= 0) break;
+
+                $s = $db->prepare('SELECT id, first_name, last_name, email, role, notify_escalation FROM users WHERE id = ?');
+                $s->execute([$targetUserId]);
+                $targetUser = $s->fetch();
+                if (!$targetUser) break;
+                if (!(bool)($targetUser['notify_escalation'] ?? 1)) break; // opted out
+
+                // Ensure the recipient can actually open the ticket from the email link,
+                // even if they're outside the ticket's group. Mirrors manual-escalation
+                // behaviour. Confidential tickets are exempt: access there is restricted
+                // to the confidential group, so we never auto-add an outside watcher.
+                if (roleIsStaff($targetUser['role']) && !ticketIsConfidential($db, (int) $ticketId)) {
+                    $db->prepare('INSERT IGNORE INTO ticket_watchers (ticket_id, user_id) VALUES (?, ?)')
+                       ->execute([$ticketId, $targetUserId]);
+                }
+
+                // Fetch ticket subject for message
+                $s = $db->prepare('SELECT subject FROM tickets WHERE id = ?');
+                $s->execute([$ticketId]);
+                $subject = $s->fetchColumn() ?: "(Ticket #{$ticketId})";
+
+                $noteText = "Escalation alert: Rule \"{$ruleName}\" was triggered on this ticket.";
+
+                // Timeline entry for the notification
+                $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)')
+                   ->execute([$ticketId, 'escalation_notification', $noteText]);
+                $tlId = (int) $db->lastInsertId();
+
+                // In-app SLA/escalation notification (no human actor; system-generated).
+                createNotification($db, $targetUserId, $ticketId, 'sla_breach', $noteText, null, $tlId);
+
+                // Email notification
+                $rolePrefix = match ($targetUser['role']) {
+                    'admin' => '/admin',
+                    'agent' => '/agent',
+                    default => '/portal',
+                };
+                $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+                $escTpl = getEmailTpl('escalation_alert', [
+                    'ticket_id'  => $ticketId,
+                    'subject'    => $subject,
+                    'rule_name'  => $ruleName,
+                    'first_name' => $targetUser['first_name'],
+                    'last_name'  => $targetUser['last_name'],
+                    'user_name'  => $targetUser['first_name'] . ' ' . $targetUser['last_name'],
+                ]);
+                $emailHtml = renderEmail('escalation', [
+                    'ticketId'    => $ticketId,
+                    'subject'     => $subject,
+                    'ruleName'    => $ruleName,
+                    'firstName'   => $targetUser['first_name'],
+                    'ticketUrl'   => $ticketUrl,
+                    'brandColor'  => $brandColor,
+                    'appName'     => $appName,
+                    'introText'   => $escTpl['intro'],
+                    'buttonLabel' => $escTpl['button'],
+                    'footerText'  => $escTpl['footer'],
+                ]);
+                sendMail(
+                    $targetUser['email'],
+                    $targetUser['first_name'] . ' ' . $targetUser['last_name'],
+                    $escTpl['subject'],
+                    $emailHtml,
+                    '',
+                    $ticketId
+                );
+                break;
+
+            case 'notify_ticket_creator':
+                // Send a reminder email to the person who submitted the ticket
+                $s = $db->prepare(
+                    'SELECT t.subject, t.group_id, u.id AS user_id, u.first_name, u.last_name, u.email, u.notify_ticket_updated
+                     FROM tickets t
+                     JOIN users u ON t.created_by = u.id
+                     WHERE t.id = ?'
+                );
+                $s->execute([$ticketId]);
+                $creator = $s->fetch();
+                if (!$creator) break;
+                if (!(bool)($creator['notify_ticket_updated'] ?? 1)) break; // user opted out
+
+                $tpl        = getEmailTpl('ticket-reminder', [
+                    'ticket_id'  => $ticketId,
+                    'subject'    => $creator['subject'],
+                    'first_name' => $creator['first_name'],
+                    'last_name'  => $creator['last_name'],
+                    'user_name'  => $creator['first_name'] . ' ' . $creator['last_name'],
+                ], $creator['group_id'] ? (int) $creator['group_id'] : null);
+                $ticketUrl  = $appUrl . '/portal/tickets/' . $ticketId;
+                $footerText = getSetting('email_footer_text') ?: 'This is an automated message from ' . $appName . '. Please do not reply directly to this email.';
+
+                $emailHtml = renderEmail('ticket-reminder', [
+                    'ticketId'    => $ticketId,
+                    'subject'     => $creator['subject'],
+                    'firstName'   => $creator['first_name'],
+                    'introText'   => $tpl['intro'],
+                    'buttonLabel' => $tpl['button'],
+                    'ticketUrl'   => $ticketUrl,
+                    'brandColor'  => $brandColor,
+                    'appName'     => $appName,
+                    'footerText'  => $footerText,
+                ]);
+
+                sendMail(
+                    $creator['email'],
+                    $creator['first_name'] . ' ' . $creator['last_name'],
+                    $tpl['subject'],
+                    $emailHtml,
+                    '',
+                    $ticketId
+                );
+
+                $db->prepare(
+                    'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                )->execute([$ticketId, 'escalation_notification',
+                    "Reminder email sent to ticket creator ({$creator['email']}) by escalation rule \"{$ruleName}\"."]);
+                break;
+        }
+    }
+}
+
+/* ── CSAT Survey ──────────────────────────────────────────────── */
+
+/**
+ * Claim a ticket's one survey: insert the csat_surveys row and return the links
+ * an email needs (surveyUrl, reopenUrl, showReopen) plus the requester `row`.
+ * Null when no survey should go out — CSAT disabled, ticket already surveyed,
+ * requester has no email or opted out, or External mode with no URL.
+ */
+function csatCreateSurvey(\PDO $db, int $ticketId): ?array
+{
+    if (getSetting('csat_enabled') !== '1') {
+        return null;
+    }
+
+    // Don't send twice for the same ticket
+    $exists = $db->prepare('SELECT id FROM csat_surveys WHERE ticket_id = ?');
+    $exists->execute([$ticketId]);
+    if ($exists->fetchColumn()) {
+        return null;
+    }
+
+    // Fetch ticket subject + creator details
+    $stmt = $db->prepare(
+        'SELECT t.subject, t.group_id, u.id AS user_id, u.email, u.first_name, u.last_name, u.notify_csat
+         FROM tickets t
+         JOIN users u ON t.created_by = u.id
+         WHERE t.id = ?'
+    );
+    $stmt->execute([$ticketId]);
+    $row = $stmt->fetch();
+    if (!$row || empty($row['email'])) {
+        return null;
+    }
+    if (!(bool)($row['notify_csat'] ?? 1)) {
+        return null; // user opted out of satisfaction surveys
+    }
+
+    $mode = getSetting('csat_mode', 'internal');
+
+    // External mode requires a configured URL — bail (and don't burn the
+    // one-survey-per-ticket slot) if the admin has selected External but
+    // left the URL blank.
+    if ($mode === 'external' && trim(getSetting('csat_external_url', '')) === '') {
+        return null;
+    }
+
+    $token = bin2hex(random_bytes(32));
+
+    $appUrl     = env('APP_URL', 'http://localhost:8000');
+    $showReopen = getSetting('csat_show_reopen', '1') === '1';
+
+    if ($mode === 'external') {
+        $surveyUrl = csatSubstitutePlaceholders(getSetting('csat_external_url', ''), [
+            'ticket_id'  => (string) $ticketId,
+            'token'      => $token,
+            'user_email' => $row['email'],
+            'first_name' => $row['first_name'],
+            'last_name'  => $row['last_name'],
+            'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+            'subject'    => $row['subject'],
+        ]);
+    } else {
+        $surveyUrl = $appUrl . '/survey/' . $token;
+    }
+    $reopenUrl = $showReopen ? $appUrl . '/survey/' . $token . '/reopen' : '';
+
+    // Record the survey, storing the exact link sent so the ticket view can
+    // deep-link to it (public page for built-in, third-party URL for external).
+    $db->prepare('INSERT INTO csat_surveys (ticket_id, user_id, token, survey_url) VALUES (?, ?, ?, ?)')
+       ->execute([$ticketId, (int) $row['user_id'], $token, $surveyUrl]);
+
+    return ['row' => $row, 'surveyUrl' => $surveyUrl, 'reopenUrl' => $reopenUrl, 'showReopen' => $showReopen];
+}
+
+/**
+ * Send the standalone survey email to the ticket creator. No-ops when
+ * csatCreateSurvey() declines — including when the closed/resolved notice
+ * already carried this ticket's survey (notifyRequesterStatusChanged).
+ */
+function sendCsatSurvey(\PDO $db, int $ticketId): void
+{
+    $survey = csatCreateSurvey($db, $ticketId);
+    if ($survey === null) {
+        return;
+    }
+    ['row' => $row, 'surveyUrl' => $surveyUrl, 'reopenUrl' => $reopenUrl, 'showReopen' => $showReopen] = $survey;
+    $brandColor = getSetting('branding_primary_color', '#4f46e5');
+    $appName    = getSetting('app_name', 'OpenHelpDesk');
+
+    $tpl = getEmailTpl('csat_survey', [
+        'ticket_id'  => $ticketId,
+        'subject'    => $row['subject'],
+        'first_name' => $row['first_name'],
+        'last_name'  => $row['last_name'],
+        'user_name'  => $row['first_name'] . ' ' . $row['last_name'],
+    ], $row['group_id'] ? (int) $row['group_id'] : null);
+
+    $emailHtml = renderEmail('csat-survey', [
+        'ticketId'   => $ticketId,
+        'subject'    => $row['subject'],
+        'firstName'  => $row['first_name'],
+        'surveyUrl'  => $surveyUrl,
+        'reopenUrl'  => $reopenUrl,
+        'showReopen' => $showReopen,
+        'brandColor' => $brandColor,
+        'appName'    => $appName,
+        'introText'  => $tpl['intro'],
+        'footerText' => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $row['email'],
+        $row['first_name'] . ' ' . $row['last_name'],
+        $tpl['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Substitute {placeholder} tokens in a URL with URL-encoded values.
+ * Unknown tokens are left as-is so they remain visible for debugging.
+ */
+function csatSubstitutePlaceholders(string $url, array $values): string
+{
+    $map = [];
+    foreach ($values as $key => $value) {
+        $map['{' . $key . '}'] = rawurlencode((string) $value);
+    }
+    return strtr($url, $map);
+}
+
+/**
+ * Record a CSAT response against a survey row and surface it on the ticket
+ * timeline. Shared by the built-in survey form and the external webhook so
+ * both paths behave identically. First response wins — repeats are ignored.
+ *
+ * Returns true if this call recorded the response, false if one already existed.
+ */
+function recordCsatResponse(\PDO $db, array $survey, int $rating, string $comment = ''): bool
+{
+    if ($rating < 1 || $rating > 5) {
+        return false;
+    }
+    if (($survey['responded_at'] ?? null) !== null) {
+        return false; // already answered — idempotent
+    }
+
+    $comment = trim($comment);
+    if (mb_strlen($comment) > 2000) {
+        $comment = mb_substr($comment, 0, 2000);
+    }
+
+    $db->prepare('UPDATE csat_surveys SET rating = ?, comment = ?, responded_at = NOW() WHERE id = ?')
+       ->execute([$rating, $comment !== '' ? $comment : null, (int) $survey['id']]);
+
+    // Surface the rating inline on the ticket as an internal note so agents see
+    // it in the conversation, not just the CSAT panel.
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+         VALUES (?, NULL, ?, ?, 1)'
+    )->execute([
+        (int) $survey['ticket_id'],
+        'csat_received',
+        'Customer rated their experience ' . $rating . '/5 via the satisfaction survey'
+            . ($comment !== '' ? ' — “' . $comment . '”' : ''),
+    ]);
+
+    return true;
+}
+
+/* ── Name helpers ─────────────────────────────────────────────── */
+
+/**
+ * Split a "First Last" string into [first_name, last_name].
+ */
+function splitFullName(string $name): array
+{
+    $name = trim($name);
+    if ($name === '') {
+        return ['Unknown', 'User'];
+    }
+    $parts = preg_split('/\s+/', $name, 2);
+    return [
+        $parts[0],
+        $parts[1] ?? '',
+    ];
+}
+
+/* ── TOTP (RFC 6238) ──────────────────────────────────────────── */
+
+/**
+ * Generate a random 16-character base32 secret for TOTP.
+ */
+function totpGenerateSecret(int $length = 16): string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $bytes    = random_bytes($length);
+    $secret   = '';
+    for ($i = 0; $i < $length; $i++) {
+        $secret .= $alphabet[ord($bytes[$i]) & 31];
+    }
+    return $secret;
+}
+
+/**
+ * Decode a base32 string to raw bytes.
+ */
+function totpBase32Decode(string $base32): string
+{
+    static $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $base32 = strtoupper(rtrim($base32, '='));
+    $binary = '';
+    foreach (str_split($base32) as $char) {
+        $pos = strpos($alphabet, $char);
+        if ($pos === false) continue;
+        $binary .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
+    }
+    $bytes = '';
+    foreach (str_split($binary, 8) as $chunk) {
+        if (strlen($chunk) === 8) {
+            $bytes .= chr((int) bindec($chunk));
+        }
+    }
+    return $bytes;
+}
+
+/**
+ * Verify a 6-digit TOTP code. Allows ±$window time steps for clock drift.
+ * On success, $matchedStep is set to the absolute time-step counter the code
+ * matched — callers use it to reject replay of an already-used step
+ * (see totpVerifyOnce).
+ */
+function totpVerify(string $secret, string $code, int $window = 1, ?int &$matchedStep = null): bool
+{
+    $matchedStep = null;
+    if (!preg_match('/^\d{6}$/', $code)) {
+        return false;
+    }
+    $rawSecret = totpBase32Decode($secret);
+    $timeStep  = (int) floor(time() / 30);
+    for ($i = -$window; $i <= $window; $i++) {
+        $msg    = pack('J', $timeStep + $i);
+        $hmac   = hash_hmac('sha1', $msg, $rawSecret, true);
+        $offset = ord($hmac[19]) & 0x0f;
+        $otp    = (
+            ((ord($hmac[$offset])     & 0x7f) << 24) |
+            ((ord($hmac[$offset + 1]) & 0xff) << 16) |
+            ((ord($hmac[$offset + 2]) & 0xff) << 8)  |
+             (ord($hmac[$offset + 3]) & 0xff)
+        ) % 1_000_000;
+        if (str_pad((string) $otp, 6, '0', STR_PAD_LEFT) === $code) {
+            $matchedStep = $timeStep + $i;
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Verify a TOTP code for a specific user AND consume its time-step so the same
+ * code can't be replayed within its ~90s validity window (a captured or
+ * shoulder-surfed code otherwise authenticates a second session). Rejects any
+ * code whose matched step is <= the last step this user already used.
+ *
+ * Falls back to plain verification (no replay protection) only if the
+ * totp_last_step column can't be read/written, so a schema/DB hiccup never
+ * locks a legitimate user out of 2FA.
+ */
+function totpVerifyOnce(PDO $db, int $userId, string $secret, string $code, int $window = 1): bool
+{
+    $matchedStep = null;
+    if (!totpVerify($secret, $code, $window, $matchedStep)) {
+        return false;
+    }
+    try {
+        $stmt = $db->prepare('SELECT totp_last_step FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $last = $stmt->fetchColumn();
+        if ($last !== false && $last !== null && (int) $last >= $matchedStep) {
+            return false; // replay of an already-used (or older) step
+        }
+        $db->prepare('UPDATE users SET totp_last_step = ? WHERE id = ?')
+           ->execute([$matchedStep, $userId]);
+    } catch (\Throwable $e) {
+        error_log('[totp] replay check unavailable: ' . $e->getMessage());
+    }
+    return true;
+}
+
+/**
+ * Build the otpauth:// URI for a QR code.
+ */
+function totpGetUri(string $secret, string $email): string
+{
+    $appName = rawurlencode(getSetting('branding_app_name', 'OpenHelpDesk'));
+    $email   = rawurlencode($email);
+    return "otpauth://totp/{$appName}:{$email}?secret={$secret}&issuer={$appName}&algorithm=SHA1&digits=6&period=30";
+}
+
+/**
+ * Return a URL to a QR code image for the given otpauth:// URI.
+ */
+function totpGetQrUrl(string $uri): string
+{
+    return 'https://api.qrserver.com/v1/create-qr-code/?data=' . rawurlencode($uri) . '&size=200x200&margin=4';
+}
+
+/* ── Audit log ────────────────────────────────────────────────── */
+
+/**
+ * Map of legacy audit-log action names to their canonical, dotted, area-first
+ * replacements. Lives in one place so both the write path (which canonicalizes
+ * new rows) and the viewer (which canonicalizes display + expands filters to
+ * also match the legacy names on old rows) read from the same table.
+ *
+ * Adding a new entry here is enough to roll out a rename — old rows continue
+ * to filter correctly because the legacy name is still recognized as an alias
+ * of the canonical one; new rows are stored under the canonical name from
+ * here on out so eventually no legacy values remain in the table.
+ */
+function auditAliases(): array
+{
+    return [
+        'login'                              => 'auth.login',
+        'logout'                             => 'auth.logout',
+        '2fa.enable'                         => 'auth.2fa_enabled',
+        '2fa.disable'                        => 'auth.2fa_disabled',
+        '2fa.admin_reset'                    => 'user.2fa_reset_by_admin',
+        'ticket_escalated'                   => 'ticket.escalated',
+        'confidential_ticket_viewed'         => 'ticket.confidential_viewed',
+        'group_managers_changed'             => 'group.managers_changed',
+        'ai_settings_saved'                  => 'ai.settings_changed',
+        'ai_classification_override'         => 'ai.classification_override',
+        'ai_backfill_run'                    => 'ai.backfill_run',
+        'manager_skill_assignments_changed'  => 'manager.skill_assignments_changed',
+        'manager_skill_created'              => 'manager.skill_created',
+        'manager_skill_updated'              => 'manager.skill_updated',
+        'manager_skill_deleted'              => 'manager.skill_deleted',
+        'default_group_changed'              => 'settings.default_group_changed',
+        'escalation_path_saved'              => 'escalation_path.saved',
+    ];
+}
+
+/** Resolve a possibly-legacy action name to its canonical form. */
+function auditCanonicalAction(string $action): string
+{
+    return auditAliases()[$action] ?? $action;
+}
+
+/** Reverse lookup: legacy names that map to a given canonical action. */
+function auditLegacyAliasesFor(string $canonical): array
+{
+    $legacy = [];
+    foreach (auditAliases() as $old => $new) {
+        if ($new === $canonical) {
+            $legacy[] = $old;
+        }
+    }
+    return $legacy;
+}
+
+/**
+ * Record an admin audit event. Silently swallows all errors so that
+ * a logging failure never breaks the main request.
+ *
+ * $userIdOverride lets unauthenticated paths (API login, etc.) record the
+ * acting user explicitly; when omitted the row uses Auth::id() (which may
+ * be null for failed-login attempts, and that is intentional).
+ *
+ * Legacy action names are rewritten to their canonical equivalents on the
+ * way in, so the table converges on the new naming convention even when an
+ * older callsite is still emitting the old name.
+ */
+function logAudit(string $action, ?int $targetId = null, ?string $targetType = null, ?string $detail = null, ?int $userIdOverride = null): void
+{
+    $action = auditCanonicalAction($action);
+    try {
+        $db = Database::connect();
+        $db->prepare(
+            'INSERT INTO audit_log (user_id, action, target_type, target_id, detail, ip_address)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $userIdOverride ?? Auth::id(),
+            $action,
+            $targetType,
+            $targetId,
+            $detail,
+            $_SERVER['REMOTE_ADDR'] ?? null,
+        ]);
+    } catch (\Throwable $e) {
+        // Never let audit logging break the application
+    }
+}
+
+/**
+ * Diff two associative arrays and write an audit_log entry summarizing the
+ * fields that changed, in the form "field: old→new; field2: old→new".
+ *
+ * Fields listed in $sensitiveFields are rendered as "field: (changed)" so
+ * passwords, secrets, and tokens never land in the audit log as plaintext.
+ * Returns silently (no log row) when nothing actually changed.
+ */
+function logAuditChange(
+    string $action,
+    ?int $targetId,
+    ?string $targetType,
+    array $before,
+    array $after,
+    array $sensitiveFields = []
+): void {
+    $parts = [];
+    $sensitive = array_flip($sensitiveFields);
+    foreach ($after as $field => $newVal) {
+        $oldVal = $before[$field] ?? null;
+        if ((string) $oldVal === (string) $newVal) {
+            continue;
+        }
+        if (isset($sensitive[$field])) {
+            $parts[] = "{$field}: (changed)";
+            continue;
+        }
+        $oldStr = $oldVal === null ? '(null)' : (string) $oldVal;
+        $newStr = $newVal === null ? '(null)' : (string) $newVal;
+        // Truncate noisy values so the detail column stays readable
+        if (strlen($oldStr) > 60) $oldStr = substr($oldStr, 0, 57) . '...';
+        if (strlen($newStr) > 60) $newStr = substr($newStr, 0, 57) . '...';
+        $parts[] = "{$field}: {$oldStr}→{$newStr}";
+    }
+    if (empty($parts)) {
+        return;
+    }
+    logAudit($action, $targetId, $targetType, implode('; ', $parts));
+}
+
+/**
+ * Find users whose presence row is older than the online window, log a
+ * `session.timed_out` audit entry for each (with the disappeared user's
+ * own user_id and last-known IP, not the sweeper's), and delete the stale
+ * rows. Called on every heartbeat — runs in a transaction with FOR UPDATE
+ * so concurrent heartbeats can't double-log the same disappearance.
+ */
+function sweepStalePresence(int $windowSeconds = 120): void
+{
+    try {
+        $db = Database::connect();
+        $db->beginTransaction();
+        $stmt = $db->prepare(
+            'SELECT user_id, ip_address, user_agent, last_seen
+               FROM user_presence
+              WHERE last_seen < DATE_SUB(NOW(), INTERVAL ? SECOND)
+              FOR UPDATE'
+        );
+        $stmt->execute([$windowSeconds]);
+        $stale = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if ($stale) {
+            $ins = $db->prepare(
+                'INSERT INTO audit_log (user_id, action, detail, ip_address)
+                 VALUES (?, ?, ?, ?)'
+            );
+            $ids = [];
+            foreach ($stale as $row) {
+                $detail = 'last_seen=' . $row['last_seen']
+                    . '; ua=' . (string) ($row['user_agent'] ?? '');
+                $ins->execute([
+                    (int) $row['user_id'],
+                    'session.timed_out',
+                    $detail,
+                    $row['ip_address'],
+                ]);
+                $ids[] = (int) $row['user_id'];
+            }
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $db->prepare("DELETE FROM user_presence WHERE user_id IN ($placeholders)")
+               ->execute($ids);
+        }
+        $db->commit();
+    } catch (\Throwable $e) {
+        try {
+            if (isset($db) && $db->inTransaction()) {
+                $db->rollBack();
+            }
+        } catch (\Throwable $ignored) {
+            // ignore
+        }
+        // Never let presence sweeping break the heartbeat request
+    }
+}
+
+/* ── Confidential ticket helpers ─────────────────────────────── */
+
+/**
+ * Determine if the current user needs re-authentication to view a confidential ticket.
+ * Returns true if the ticket's type is confidential AND the current admin is NOT
+ * a member of the type's group.
+ */
+function requiresConfidentialReAuth(PDO $db, array $ticket): bool
+{
+    if (!Auth::isAdmin()) {
+        return false;
+    }
+    if (empty($ticket['type_id'])) {
+        return false;
+    }
+
+    $stmt = $db->prepare('SELECT is_confidential, group_id FROM ticket_types WHERE id = ?');
+    $stmt->execute([$ticket['type_id']]);
+    $type = $stmt->fetch();
+
+    if (!$type || !$type['is_confidential'] || !$type['group_id']) {
+        return false;
+    }
+
+    $gs = $db->prepare('SELECT 1 FROM group_user_map WHERE group_id = ? AND user_id = ? LIMIT 1');
+    $gs->execute([$type['group_id'], Auth::id()]);
+    return !$gs->fetchColumn();
+}
+
+/**
+ * Check if a ticket should appear redacted in listings for the current user.
+ * Designed to be called in a loop without extra queries — pass preloaded data.
+ *
+ * @param array $ticket            A ticket row (must include type_id and type_group_id)
+ * @param array $confidentialTypeIds  Array of int type IDs that are confidential
+ * @param array $userGroupIds         Array of int group IDs the current user belongs to
+ */
+function isTicketRedactedForUser(array $ticket, array $confidentialTypeIds, array $userGroupIds): bool
+{
+    if (!Auth::isAdmin()) {
+        return false;
+    }
+    if (empty($ticket['type_id']) || !in_array((int) $ticket['type_id'], $confidentialTypeIds, true)) {
+        return false;
+    }
+    $typeGroupId = (int) ($ticket['type_group_id'] ?? 0);
+    return $typeGroupId > 0 && !in_array($typeGroupId, $userGroupIds, true);
+}
+
+/**
+ * Notify all members of a confidential ticket's group that an admin has accessed it.
+ */
+function notifyConfidentialAccess(PDO $db, int $ticketId): void
+{
+    $tStmt = $db->prepare('SELECT t.subject, t.type_id FROM tickets t WHERE t.id = ?');
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket || !$ticket['type_id']) {
+        return;
+    }
+
+    $ttStmt = $db->prepare('SELECT group_id, name FROM ticket_types WHERE id = ? AND is_confidential = 1');
+    $ttStmt->execute([$ticket['type_id']]);
+    $type = $ttStmt->fetch();
+    if (!$type || !$type['group_id']) {
+        return;
+    }
+
+    $mStmt = $db->prepare(
+        'SELECT u.id, u.first_name, u.last_name, u.email, u.role
+         FROM group_user_map gum
+         JOIN users u ON u.id = gum.user_id
+         WHERE gum.group_id = ?'
+    );
+    $mStmt->execute([$type['group_id']]);
+    $members = $mStmt->fetchAll();
+    if (empty($members)) {
+        return;
+    }
+
+    $adminName  = Auth::fullName();
+    $adminEmail = Auth::user()['email'] ?? '';
+    $ip         = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $timestamp  = date('Y-m-d H:i:s');
+    $appUrl     = env('APP_URL', 'http://localhost:8000');
+
+    foreach ($members as $user) {
+        $rolePrefix = roleLandingPath($user['role']);
+        $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+        $tpl = getEmailTpl('confidential-ticket-accessed', [
+            'ticket_id'   => $ticketId,
+            'subject'     => $ticket['subject'],
+            'admin_name'  => $adminName,
+            'admin_email' => $adminEmail,
+            'ip_address'  => $ip,
+            'timestamp'   => $timestamp,
+            'user_name'   => $user['first_name'] . ' ' . $user['last_name'],
+            'first_name'  => $user['first_name'],
+            'last_name'   => $user['last_name'],
+        ]);
+
+        $emailHtml = renderEmail('confidential-access-alert', [
+            'ticketId'    => $ticketId,
+            'subject'     => $ticket['subject'],
+            'typeName'    => $type['name'],
+            'adminName'   => $adminName,
+            'adminEmail'  => $adminEmail,
+            'ipAddress'   => $ip,
+            'timestamp'   => $timestamp,
+            'ticketUrl'   => $ticketUrl,
+            'introText'   => $tpl['intro'],
+            'buttonLabel' => $tpl['button'],
+            'footerText'  => $tpl['footer'],
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml,
+            '',
+            $ticketId
+        );
+    }
+}
+
+/**
+ * Notify all current members of a confidential group when new members are added.
+ *
+ * Called from the admin group edit handler. Only fires when the group is
+ * marked confidential AND there were existing members BEFORE the edit AND
+ * at least one new member was added — that policy is enforced by the caller.
+ *
+ * @param PDO   $db
+ * @param int   $groupId
+ * @param int[] $addedUserIds  Newly added user IDs (i.e. were not in the group prior to this edit)
+ */
+function notifyConfidentialGroupMembership(PDO $db, int $groupId, array $addedUserIds): void
+{
+    if (empty($addedUserIds)) {
+        return;
+    }
+
+    // Load group
+    $gStmt = $db->prepare('SELECT id, name, is_confidential FROM `groups` WHERE id = ?');
+    $gStmt->execute([$groupId]);
+    $group = $gStmt->fetch();
+    if (!$group || empty($group['is_confidential'])) {
+        return;
+    }
+
+    // Current members (post-edit) — these are the recipients of the alert
+    $mStmt = $db->prepare(
+        'SELECT u.id, u.first_name, u.last_name, u.email, u.role
+         FROM group_user_map gum
+         JOIN users u ON u.id = gum.user_id
+         WHERE gum.group_id = ?'
+    );
+    $mStmt->execute([$groupId]);
+    $members = $mStmt->fetchAll();
+    if (empty($members)) {
+        return;
+    }
+
+    // Names of the newly added users (for the email body)
+    $placeholders = implode(',', array_fill(0, count($addedUserIds), '?'));
+    $aStmt = $db->prepare(
+        "SELECT id, first_name, last_name, email FROM users WHERE id IN ($placeholders)"
+    );
+    $aStmt->execute($addedUserIds);
+    $addedUsers = $aStmt->fetchAll();
+    if (empty($addedUsers)) {
+        return;
+    }
+
+    $addedNamesList = array_map(
+        static fn($u) => trim($u['first_name'] . ' ' . $u['last_name']) . ' <' . $u['email'] . '>',
+        $addedUsers
+    );
+    $addedNamesText = implode(', ', $addedNamesList);
+
+    $actorName  = Auth::fullName();
+    $actorEmail = Auth::user()['email'] ?? '';
+    $ip         = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $timestamp  = date('Y-m-d H:i:s');
+    $appUrl     = env('APP_URL', 'http://localhost:8000');
+
+    $tpl = getEmailTpl('confidential-group-membership-changed', [
+        'group_name'  => $group['name'],
+        'group_id'    => $groupId,
+        'added_users' => $addedNamesText,
+        'actor_name'  => $actorName,
+        'actor_email' => $actorEmail,
+        'ip_address'  => $ip,
+        'timestamp'   => $timestamp,
+    ]);
+
+    foreach ($members as $user) {
+        $rolePrefix = roleLandingPath($user['role']);
+        $groupUrl = $appUrl . $rolePrefix . '/groups/' . $groupId . '/edit';
+
+        $emailHtml = renderEmail('confidential-group-membership-alert', [
+            'groupId'     => $groupId,
+            'groupName'   => $group['name'],
+            'addedUsers'  => $addedUsers,
+            'actorName'   => $actorName,
+            'actorEmail'  => $actorEmail,
+            'ipAddress'   => $ip,
+            'timestamp'   => $timestamp,
+            'groupUrl'    => $groupUrl,
+            'introText'   => $tpl['intro'],
+            'buttonLabel' => $tpl['button'],
+            'footerText'  => $tpl['footer'] ?? '',
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml
+        );
+    }
+
+    // Audit log
+    logAudit(
+        'confidential_group_membership_changed',
+        $groupId,
+        'group',
+        $actorName . ' (ID: ' . Auth::id() . ') added ' . count($addedUsers)
+            . ' member(s) to confidential group "' . $group['name'] . '": ' . $addedNamesText
+    );
+}
+
+/**
+ * Sync one user's group memberships from the "other side" of the relationship —
+ * i.e. from the user edit form rather than the group edit form.
+ *
+ * The group form owns the whole membership row set for a single group and can
+ * safely DELETE-then-INSERT. Here the opposite is true: we own the whole group
+ * set for a single user, so we diff instead, leaving every other member of each
+ * group (and their is_manager flags) untouched.
+ *
+ * Mirrors the group form's side effects so membership changes are audited and
+ * alerted identically no matter which page they were made from:
+ *   - confidential add/remove attempts are logged BEFORE any write
+ *   - members of a confidential group are emailed when someone is added
+ *     (silent when the group had no prior members, per the confidential spec)
+ *   - a group.members_changed entry is written per affected group
+ *
+ * @param PDO   $db
+ * @param int   $userId          The user being edited
+ * @param int[] $groupIds        Group IDs the user should belong to after the save
+ * @param int[] $managerGroupIds Subset of $groupIds where the user is a group manager
+ * @param string $userLabel      "First Last <email>" for the audit trail
+ * @return array{added:int,removed:int,managers:int} What actually changed, for the flash message
+ */
+function syncUserGroupMemberships(PDO $db, int $userId, array $groupIds, array $managerGroupIds, string $userLabel): array
+{
+    // Only real groups, no duplicates. Anything unknown is dropped rather than
+    // erroring — a stale form can't create phantom membership rows.
+    $valid = array_map('intval', $db->query('SELECT id FROM `groups`')->fetchAll(PDO::FETCH_COLUMN));
+    $want  = array_values(array_intersect(array_unique(array_map('intval', $groupIds)), $valid));
+    $wantManager = array_intersect(array_unique(array_map('intval', $managerGroupIds)), $want);
+
+    $priorStmt = $db->prepare('SELECT group_id, is_manager FROM group_user_map WHERE user_id = ?');
+    $priorStmt->execute([$userId]);
+    $prior = [];
+    foreach ($priorStmt->fetchAll() as $row) {
+        $prior[(int) $row['group_id']] = (int) $row['is_manager'];
+    }
+    $priorIds = array_keys($prior);
+
+    $added   = array_values(array_diff($want, $priorIds));
+    $removed = array_values(array_diff($priorIds, $want));
+
+    // is_manager flips on groups the user is (and stays) a member of
+    $managerFlips = [];
+    foreach (array_intersect($want, $priorIds) as $gid) {
+        $shouldManage = in_array($gid, $wantManager, true) ? 1 : 0;
+        if ($shouldManage !== $prior[$gid]) {
+            $managerFlips[$gid] = $shouldManage;
+        }
+    }
+
+    $summary = ['added' => count($added), 'removed' => count($removed), 'managers' => count($managerFlips)];
+    if (!$added && !$removed && !$managerFlips) {
+        return $summary;
+    }
+
+    // Group names + confidential flags for everything we're about to touch
+    $touched = array_values(array_unique(array_merge($added, $removed, array_keys($managerFlips))));
+    $ph      = implode(',', array_fill(0, count($touched), '?'));
+    $gStmt   = $db->prepare("SELECT id, name, is_confidential FROM `groups` WHERE id IN ($ph)");
+    $gStmt->execute($touched);
+    $groups = [];
+    foreach ($gStmt->fetchAll() as $g) {
+        $groups[(int) $g['id']] = $g;
+    }
+
+    $actor = Auth::fullName() . ' (ID: ' . Auth::id() . ')';
+
+    // Audit the ATTEMPT on confidential groups before writing anything, so the
+    // record survives a failure part-way through.
+    foreach ($added as $gid) {
+        if (!empty($groups[$gid]['is_confidential'])) {
+            logAudit(
+                'confidential_group_member_add_attempted',
+                $gid,
+                'group',
+                $actor . ' is attempting to add 1 member to confidential group "'
+                    . $groups[$gid]['name'] . '" (ID: ' . $gid . '): ' . $userLabel
+                    . ' — via the user edit page'
+            );
+        }
+    }
+    foreach ($removed as $gid) {
+        if (!empty($groups[$gid]['is_confidential'])) {
+            logAudit(
+                'confidential_group_member_remove_attempted',
+                $gid,
+                'group',
+                $actor . ' is attempting to remove 1 member from confidential group "'
+                    . $groups[$gid]['name'] . '" (ID: ' . $gid . '): ' . $userLabel
+                    . ' — via the user edit page'
+            );
+        }
+    }
+
+    // Did each group we're adding to already have members? Decides whether the
+    // confidential alert fires (the first member of an empty group is silent).
+    $hadMembers = [];
+    if ($added) {
+        $cStmt = $db->prepare('SELECT COUNT(*) FROM group_user_map WHERE group_id = ?');
+        foreach ($added as $gid) {
+            $cStmt->execute([$gid]);
+            $hadMembers[$gid] = (int) $cStmt->fetchColumn() > 0;
+        }
+    }
+
+    if ($removed) {
+        $rph = implode(',', array_fill(0, count($removed), '?'));
+        $db->prepare("DELETE FROM group_user_map WHERE user_id = ? AND group_id IN ($rph)")
+            ->execute(array_merge([$userId], $removed));
+    }
+    if ($added) {
+        $ins = $db->prepare('INSERT INTO group_user_map (group_id, user_id, is_manager) VALUES (?, ?, ?)');
+        foreach ($added as $gid) {
+            $ins->execute([$gid, $userId, in_array($gid, $wantManager, true) ? 1 : 0]);
+        }
+    }
+    if ($managerFlips) {
+        $upd = $db->prepare('UPDATE group_user_map SET is_manager = ? WHERE user_id = ? AND group_id = ?');
+        foreach ($managerFlips as $gid => $flag) {
+            $upd->execute([$flag, $userId, $gid]);
+        }
+    }
+
+    // One audit entry per affected group, keyed to the group so it shows up in
+    // that group's history the same way an edit from the group page would.
+    foreach ($added as $gid) {
+        logAudit(
+            'group.members_changed',
+            $gid,
+            'group',
+            $actor . ' added ' . $userLabel . ' to group "' . $groups[$gid]['name']
+                . '" (ID: ' . $gid . ')'
+                . (in_array($gid, $wantManager, true) ? ' as a group manager' : '')
+                . ' — via the user edit page'
+        );
+    }
+    foreach ($removed as $gid) {
+        logAudit(
+            'group.members_changed',
+            $gid,
+            'group',
+            $actor . ' removed ' . $userLabel . ' from group "' . $groups[$gid]['name']
+                . '" (ID: ' . $gid . ') — via the user edit page'
+        );
+    }
+    foreach ($managerFlips as $gid => $flag) {
+        logAudit(
+            'group.managers_changed',
+            $gid,
+            'group',
+            $actor . ($flag ? ' granted ' : ' revoked ') . $userLabel
+                . ' manager rights on group "' . $groups[$gid]['name']
+                . '" (ID: ' . $gid . ') — via the user edit page'
+        );
+    }
+
+    // Confidential alerts last — after the rows exist, so the new member is
+    // included in the recipient list exactly as the group form does it.
+    foreach ($added as $gid) {
+        if (!empty($groups[$gid]['is_confidential']) && !empty($hadMembers[$gid])) {
+            notifyConfidentialGroupMembership($db, $gid, [$userId]);
+        }
+    }
+
+    return $summary;
+}
+
+/**
+ * Notify all members of a confidential group when the confidential flag is
+ * removed from the group itself or from a ticket type linked to the group.
+ *
+ * @param PDO    $db
+ * @param string $targetType  'group' or 'ticket type'
+ * @param string $targetName  Name of the group or ticket type
+ * @param int    $groupId     The group whose members should be notified
+ * @param string $viewUrl     URL for the "View Details" button (empty to omit)
+ */
+function notifyConfidentialFlagRemoved(PDO $db, string $targetType, string $targetName, int $groupId, string $viewUrl = ''): void
+{
+    $mStmt = $db->prepare(
+        'SELECT u.id, u.first_name, u.last_name, u.email, u.role
+         FROM group_user_map gum
+         JOIN users u ON u.id = gum.user_id
+         WHERE gum.group_id = ?'
+    );
+    $mStmt->execute([$groupId]);
+    $members = $mStmt->fetchAll();
+    if (empty($members)) {
+        return;
+    }
+
+    $actorName  = Auth::fullName();
+    $actorEmail = Auth::user()['email'] ?? '';
+    $ip         = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $timestamp  = date('Y-m-d H:i:s');
+
+    $tpl = getEmailTpl('confidential_flag_removed', [
+        'target_type' => $targetType,
+        'target_name' => $targetName,
+        'actor_name'  => $actorName,
+        'actor_email' => $actorEmail,
+        'ip_address'  => $ip,
+        'timestamp'   => $timestamp,
+    ]);
+
+    foreach ($members as $user) {
+        $emailHtml = renderEmail('confidential-flag-removed', [
+            'targetType'  => $targetType,
+            'targetName'  => $targetName,
+            'actorName'   => $actorName,
+            'actorEmail'  => $actorEmail,
+            'ipAddress'   => $ip,
+            'timestamp'   => $timestamp,
+            'viewUrl'     => $viewUrl,
+            'introText'   => $tpl['intro'],
+            'buttonLabel' => $tpl['button'],
+            'footerText'  => $tpl['footer'] ?? '',
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml
+        );
+    }
+}
+
+/**
+ * Notify all members of a confidential group when the group or a linked
+ * confidential ticket type is deleted entirely.
+ *
+ * @param PDO    $db
+ * @param string $targetType  'group' or 'ticket type'
+ * @param string $targetName  Name of the deleted entity
+ * @param array  $members     Pre-fetched member rows (id, first_name, last_name, email, role)
+ */
+function notifyConfidentialEntityDeleted(PDO $db, string $targetType, string $targetName, array $members): void
+{
+    if (empty($members)) {
+        return;
+    }
+
+    $actorName  = Auth::fullName();
+    $actorEmail = Auth::user()['email'] ?? '';
+    $ip         = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $timestamp  = date('Y-m-d H:i:s');
+
+    $tpl = getEmailTpl('confidential_entity_deleted', [
+        'target_type' => $targetType,
+        'target_name' => $targetName,
+        'actor_name'  => $actorName,
+        'actor_email' => $actorEmail,
+        'ip_address'  => $ip,
+        'timestamp'   => $timestamp,
+    ]);
+
+    foreach ($members as $user) {
+        $emailHtml = renderEmail('confidential-entity-deleted', [
+            'targetType'  => $targetType,
+            'targetName'  => $targetName,
+            'actorName'   => $actorName,
+            'actorEmail'  => $actorEmail,
+            'ipAddress'   => $ip,
+            'timestamp'   => $timestamp,
+            'introText'   => $tpl['intro'],
+            'footerText'  => $tpl['footer'] ?? '',
+        ]);
+
+        sendMail(
+            $user['email'],
+            $user['first_name'] . ' ' . $user['last_name'],
+            $tpl['subject'],
+            $emailHtml
+        );
+    }
+}
+
+/* ── Sidebar helpers ──────────────────────────────────────────── */
+
+/**
+ * True if the viewer can open at least one Settings-area feature. Every staff
+ * member qualifies: admins see everything, and Status Banners — gated only by
+ * Auth::requireStaff — now lives in the Settings area, so even a permission-less
+ * staff role has one item there. Non-staff (portal) users never qualify. Drives
+ * the single "Settings" sidebar link and the GET /admin/settings landing gate;
+ * the settings-nav itself still hides every item the role can't open.
+ */
+function canAccessSettingsArea(): bool
+{
+    return Auth::isAdmin() || Auth::isStaff();
+}
+
+function adminSidebar(string $active = ''): array
+{
+    // Admin-area pages are reachable by any custom staff level that holds the
+    // page's specific permission (each route gates with Auth::requirePermission).
+    // Such a non-admin must see THEIR permission-filtered sidebar — never the
+    // full admin menu, whose links would 403. Admins get the full menu below.
+    if (!Auth::isAdmin()) {
+        return staffSidebar($active);
+    }
+    // Only standard day-to-day actions live on the rail; every management /
+    // configuration area (Users, Ticket Forms, KB management, Recurring Tickets,
+    // Audit Log, Reports, …) is reached through the Settings page's left nav.
+    return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), [
+        ['icon' => 'bi-speedometer2',    'label' => label('nav.dashboard'),     'url' => '/admin',            'key' => 'dashboard'],
+        ['icon' => 'bi-ticket-detailed', 'label' => label('nav.tickets'),       'url' => '/admin/tickets',    'key' => 'tickets'],
+        ['icon' => 'bi-pc-display',      'label' => label('nav.inventory', 'Inventory'), 'url' => '/inventory', 'key' => 'inventory'],
+        ['icon' => 'bi-sliders',         'label' => label('nav.settings'),      'url' => '/admin/settings',   'key' => 'settings'],
+        ['icon' => 'bi-question-circle', 'label' => label('nav.docs'),          'url' => '/admin/docs',       'key' => 'docs'],
+    ]);
+}
+
+function portalSidebar(string $active = ''): array
+{
+    return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), [
+        ['icon' => 'bi-speedometer2',    'label' => label('portal.nav.dashboard'),     'url' => '/portal',         'key' => 'dashboard'],
+        ['icon' => 'bi-ticket-detailed', 'label' => label('portal.nav.my_tickets'),    'url' => '/portal/tickets', 'key' => 'tickets'],
+        ['icon' => 'bi-grid-1x2',        'label' => 'Floor mode',                      'url' => '/portal/floor',   'key' => 'floor', 'touchOnly' => true],
+        ['icon' => 'bi-book',            'label' => label('portal.nav.knowledge_base'), 'url' => '/portal/kb',     'key' => 'kb'],
+        ['icon' => 'bi-question-circle', 'label' => 'Help',                            'url' => '/portal/help',    'key' => 'help'],
+    ]);
+}
+
+/**
+ * Sidebar for any non-admin staff role. Standard day-to-day actions plus a
+ * single "Settings" link (shown when the role holds any grantable permission).
+ * Every admin-area feature a role might be granted now lives on the Settings
+ * page, whose own permission-filtered left nav reveals exactly what the role
+ * can open — so the rail no longer grows one icon per granted permission.
+ * Admins use adminSidebar() instead.
+ */
+function staffSidebar(string $active = ''): array
+{
+    $items = [
+        ['icon' => 'bi-speedometer2',     'label' => label('agent.nav.dashboard'),      'url' => '/agent',                  'key' => 'dashboard'],
+        ['icon' => 'bi-ticket-detailed',  'label' => label('agent.nav.tickets'),        'url' => '/agent/tickets',          'key' => 'tickets'],
+        ['icon' => 'bi-grid-1x2',         'label' => 'Floor mode',                      'url' => '/agent/floor',            'key' => 'floor', 'touchOnly' => true],
+        ['icon' => 'bi-book',             'label' => label('agent.nav.knowledge_base'), 'url' => '/agent/kb',               'key' => 'kb'],
+    ];
+    if (Assets::canView()) {
+        $items[] = ['icon' => 'bi-pc-display', 'label' => label('nav.inventory', 'Inventory'), 'url' => '/inventory', 'key' => 'inventory'];
+    }
+    // Canned Responses (personal reply snippets) now lives on the profile page
+    // for every staff member — see templates/pages/profile/edit.php.
+    // Status Banners moved to the Settings area (Operations group) — it's open
+    // to all staff, so canAccessSettingsArea() now admits every staff role.
+
+    if (canAccessSettingsArea()) {
+        $items[] = ['icon' => 'bi-sliders', 'label' => label('nav.settings'), 'url' => '/admin/settings', 'key' => 'settings'];
+    }
+
+    $items[] = ['icon' => 'bi-question-circle', 'label' => 'Help', 'url' => '/agent/help', 'key' => 'help'];
+
+    return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), $items);
+}
+
+// Back-compat aliases — both historical staff sidebars now resolve through the
+// permission-aware builder, so existing call sites stay correct for custom roles.
+function agentSidebar(string $active = ''): array
+{
+    return staffSidebar($active);
+}
+
+function powerUserSidebar(string $active = ''): array
+{
+    return staffSidebar($active);
+}
+
+function sortUrl(string $col, string $currentSort, string $currentDir, array $baseParams, string $basePath): string
+{
+    $newDir = ($col === $currentSort && $currentDir === 'asc') ? 'desc' : 'asc';
+    return e($basePath . '?' . http_build_query(array_merge($baseParams, ['sort' => $col, 'dir' => $newDir])));
+}
+
+function sortIcon(string $col, string $currentSort, string $currentDir): string
+{
+    if ($col !== $currentSort) {
+        return '';
+    }
+    $icon = $currentDir === 'asc' ? 'bi-arrow-up' : 'bi-arrow-down';
+    return '<i class="bi ' . $icon . ' ms-1" style="font-size:.7rem;color:var(--ld-primary);"></i>';
+}
+
+/**
+ * True when a location row is the "System Wide" / "All Branches"
+ * meta-branch — a data row used to tag work that affects every branch,
+ * not a real site.
+ */
+function isMetaLocationName(string $name): bool
+{
+    return in_array(preg_replace('/[^a-z]/', '', strtolower($name)), ['systemwide', 'allbranches'], true);
+}
+
+/**
+ * Ids of meta-branch location rows (usually one or none). In list
+ * filters, ticking one of these means "any location" — the location
+ * constraint is skipped entirely — because matching the literal row
+ * would show (almost) nothing.
+ */
+function metaLocationIds(): array
+{
+    static $ids = null;
+    if ($ids === null) {
+        $ids = [];
+        foreach (Database::connect()->query('SELECT id, name FROM locations')->fetchAll() as $l) {
+            if (isMetaLocationName((string) $l['name'])) {
+                $ids[] = (int) $l['id'];
+            }
+        }
+    }
+    return $ids;
+}
+
+/**
+ * The on/off ticket-list filters for a panel, in display order.
+ *
+ * One list, three consumers, which is the point: the save route decides what a
+ * saved filter round-trips, the applied-filter pills' "remove just this one" URLs
+ * must carry the others through, and the saved-filter list highlights the entry
+ * matching the current request. Those three disagreeing is invisible until a user
+ * saves a filter that silently loses a toggle, or removes one pill and loses
+ * another filter with it.
+ *
+ * `created_today` / `due_today` have no checkbox — they arrive from the wallboard
+ * drill-downs — but they behave exactly like the rest and belong here for the same
+ * reason. `sla` and `created_within` are deliberately absent: they are an enum and
+ * an integer, not toggles.
+ *
+ * @return list<string>
+ */
+function ticketBoolFilterKeys(string $panel = 'agent'): array
+{
+    return $panel === 'admin'
+        ? ['requested_by_me', 'watched', 'has_attachment']
+        : ['requested_by_me', 'watched', 'has_attachment', 'resolved_today', 'escalated_to_me', 'created_today', 'due_today', 'hide_mentioned'];
+}
+
+/**
+ * Predicate for "this ticket has at least one attachment".
+ *
+ * EXISTS rather than a JOIN so a ticket with five files still counts once —
+ * joining ticket_attachments would multiply the row and break both the COUNT(*)
+ * used for pagination and the LIMIT on the list query.
+ *
+ * $visibleToRequester drops attachments hanging off an internal note. The portal
+ * already hides those, so without this a requester ticking "Has attachment" gets
+ * back tickets whose only file is on a note they cannot see — a filter that
+ * appears broken, and a hint that an internal note exists.
+ */
+function ticketHasAttachmentSql(string $alias = 't', bool $visibleToRequester = false): string
+{
+    $internal = $visibleToRequester
+        ? ' LEFT JOIN ticket_timeline tl ON ta.timeline_id = tl.id
+             WHERE (tl.is_internal IS NULL OR tl.is_internal = 0) AND ta.ticket_id = ' . $alias . '.id'
+        : ' WHERE ta.ticket_id = ' . $alias . '.id';
+
+    return 'EXISTS (SELECT 1 FROM ticket_attachments ta' . $internal . ')';
+}
+
+/**
+ * Build WHERE clause and bindings for ticket filtering.
+ * Returns ['where' => string, 'params' => array].
+ */
+function buildTicketFilterQuery(array $filters): array
+{
+    $where  = [];
+    $params = [];
+
+    // Normalize: accept both scalar (legacy) and array values
+    $fStatus   = array_values(array_filter(array_map('trim', (array) ($filters['status']   ?? []))));
+    $fPriority = array_values(array_filter(array_map('trim', (array) ($filters['priority'] ?? []))));
+    $fType     = array_values(array_filter(array_map('trim', (array) ($filters['type']     ?? []))));
+    $fLocation = array_values(array_filter(array_map('trim', (array) ($filters['location'] ?? []))));
+    $fAgent    = array_values(array_filter(array_map('trim', (array) ($filters['agent']    ?? []))));
+    $fGroup     = array_values(array_filter(array_map('trim', (array) ($filters['group']     ?? []))));
+    $fRequester = array_values(array_filter(array_map('trim', (array) ($filters['requester'] ?? []))));
+    $fSearch    = trim($filters['q'] ?? '');
+    $fDateFrom = trim($filters['date_from'] ?? '');
+    $fDateTo   = trim($filters['date_to'] ?? '');
+    $fWatched  = !empty($filters['watched']);
+    $fHasAttachment = !empty($filters['has_attachment']);
+
+    // Defensive: silently drop status values that no longer exist in the
+    // lookup table. Saved filters from before a status was removed would
+    // otherwise hit `status IN (...stale_slug...)` and quietly return zero
+    // rows; the user never knew their filter was broken. Filtering at the
+    // helper level means every ticket-list page benefits.
+    if (!empty($fStatus)) {
+        $fStatus = array_values(array_intersect($fStatus, ticketStatusSlugs()));
+    }
+    if (!empty($fStatus)) {
+        $placeholders = implode(',', array_fill(0, count($fStatus), '?'));
+        $where[]  = 't.status IN (' . $placeholders . ')';
+        $params   = array_merge($params, $fStatus);
+    }
+    if (!empty($fPriority)) {
+        $ids = array_map('intval', $fPriority);
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $where[]  = 't.priority_id IN (' . $placeholders . ')';
+        $params   = array_merge($params, $ids);
+    }
+    if (!empty($fType)) {
+        $ids = array_map('intval', $fType);
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $where[]  = 't.type_id IN (' . $placeholders . ')';
+        $params   = array_merge($params, $ids);
+    }
+    if (!empty($fLocation)) {
+        $ids = array_map('intval', $fLocation);
+        // Ticking the "System Wide" meta-branch means "any location":
+        // skip the constraint instead of matching the literal row.
+        if (!array_intersect($ids, metaLocationIds())) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $where[]  = 't.location_id IN (' . $placeholders . ')';
+            $params   = array_merge($params, $ids);
+        }
+    }
+    if (!empty($fAgent)) {
+        $agentConds  = [];
+        $otherAgents = [];
+        foreach ($fAgent as $v) {
+            if ($v === 'unassigned') {
+                $agentConds[] = 't.assigned_to IS NULL';
+            } else {
+                $otherAgents[] = (int) $v;
+            }
+        }
+        if (!empty($otherAgents)) {
+            $placeholders = implode(',', array_fill(0, count($otherAgents), '?'));
+            $agentConds[] = 't.assigned_to IN (' . $placeholders . ')';
+            $params       = array_merge($params, $otherAgents);
+        }
+        if (!empty($agentConds)) {
+            $where[] = '(' . implode(' OR ', $agentConds) . ')';
+        }
+    }
+    if (!empty($fGroup)) {
+        $groupConds  = [];
+        $otherGroups = [];
+        foreach ($fGroup as $v) {
+            if ($v === 'none') {
+                $groupConds[] = 't.group_id IS NULL';
+            } else {
+                $otherGroups[] = (int) $v;
+            }
+        }
+        if (!empty($otherGroups)) {
+            $placeholders = implode(',', array_fill(0, count($otherGroups), '?'));
+            $groupConds[] = 't.group_id IN (' . $placeholders . ')';
+            $params       = array_merge($params, $otherGroups);
+        }
+        if (!empty($groupConds)) {
+            $where[] = '(' . implode(' OR ', $groupConds) . ')';
+        }
+    }
+    if (!empty($fRequester)) {
+        $ids = array_map('intval', $fRequester);
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $where[]  = 't.created_by IN (' . $placeholders . ')';
+        $params   = array_merge($params, $ids);
+    }
+    if ($fSearch !== '') {
+        $where[]  = 't.subject LIKE ?';
+        $params[] = '%' . $fSearch . '%';
+    }
+    if ($fDateFrom !== '') {
+        $where[]  = 't.created_at >= ?';
+        $params[] = $fDateFrom . ' 00:00:00';
+    }
+    if ($fDateTo !== '') {
+        $where[]  = 't.created_at <= ?';
+        $params[] = $fDateTo . ' 23:59:59';
+    }
+
+    if (!empty($filters['requested_by_me'])) {
+        $where[]  = 't.created_by = ?';
+        $params[] = Auth::id();
+    }
+
+    if ($fWatched) {
+        $where[]  = 't.id IN (SELECT ticket_id FROM ticket_watchers WHERE user_id = ?)';
+        $params[] = Auth::id();
+    }
+
+    // Staff see attachments on internal notes, so no visibility carve-out here.
+    if ($fHasAttachment) {
+        $where[] = ticketHasAttachmentSql('t');
+    }
+
+    $whereClause = !empty($where) ? ' WHERE ' . implode(' AND ', $where) : '';
+
+    return ['where' => $whereClause, 'params' => $params];
+}
+
+/**
+ * Evaluate a single automation condition against a ticket row.
+ */
+function evalAutomationCondition(array $cond, array $ticket): bool
+{
+    $actual = $ticket[$cond['field'] ?? ''] ?? null;
+    return match ($cond['operator'] ?? '') {
+        'equals'       => (string) $actual === (string) ($cond['value'] ?? ''),
+        'not_equals'   => (string) $actual !== (string) ($cond['value'] ?? ''),
+        'is_empty'     => $actual === null || $actual === '',
+        'is_not_empty' => $actual !== null && $actual !== '',
+        default        => false,
+    };
+}
+
+/**
+ * Evaluate the conditions block of an automation against a ticket.
+ *
+ * Supports v2 (group-based: OR between groups, ALL/ANY within each group)
+ * and v1 (flat array, treated as a single ALL group for backward compatibility).
+ */
+function evalAutomationConditions(array $conditions, array $ticket): bool
+{
+    // v1 backward compat: flat indexed array of condition objects
+    if (isset($conditions[0]['field'])) {
+        $conditions = ['groups' => [['match' => 'all', 'conditions' => $conditions]]];
+    }
+
+    $groups = $conditions['groups'] ?? [];
+    if (empty($groups)) {
+        return true; // no conditions — always fires
+    }
+
+    // OR between groups: automation fires if any single group passes
+    foreach ($groups as $group) {
+        $anyMatch = ($group['match'] ?? 'all') === 'any';
+        $groupPasses = !$anyMatch; // 'all' starts true, 'any' starts false
+        foreach ($group['conditions'] as $cond) {
+            $result = evalAutomationCondition($cond, $ticket);
+            if ($anyMatch) {
+                if ($result) { $groupPasses = true; break; }
+            } else {
+                if (!$result) { $groupPasses = false; break; }
+            }
+        }
+        if ($groupPasses) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Run all enabled automations for a given trigger event against a ticket.
+ */
+function runAutomations(PDO $db, int $ticketId, string $triggerEvent): void
+{
+    $rules = $db->prepare(
+        'SELECT * FROM automations WHERE trigger_event = ? AND is_enabled = 1 ORDER BY sort_order, id'
+    );
+    $rules->execute([$triggerEvent]);
+    $automations = $rules->fetchAll();
+
+    if (empty($automations)) {
+        return;
+    }
+
+    foreach ($automations as $auto) {
+        // Re-fetch ticket for each automation so earlier automations' changes are visible
+        $stmt = $db->prepare('SELECT * FROM tickets WHERE id = ?');
+        $stmt->execute([$ticketId]);
+        $ticket = $stmt->fetch();
+        if (!$ticket) {
+            return;
+        }
+
+        $conditions = json_decode($auto['conditions'], true) ?: [];
+        $actions    = json_decode($auto['actions'], true) ?: [];
+
+        $match = evalAutomationConditions($conditions, $ticket);
+
+        if (!$match) {
+            continue;
+        }
+
+        // Execute actions
+        foreach ($actions as $act) {
+            $action = $act['action'] ?? '';
+            $val    = $act['value'] ?? '';
+
+            try {
+            switch ($action) {
+                case 'set_group':
+                    $groupId = $val === '' ? null : (int) $val;
+                    $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?')->execute([$groupId, $ticketId]);
+                    $groupName = 'None';
+                    if ($groupId) {
+                        $s = $db->prepare('SELECT name FROM groups WHERE id = ?');
+                        $s->execute([$groupId]);
+                        $groupName = $s->fetchColumn() ?: 'Unknown';
+                    }
+                    $db->prepare(
+                        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                    )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': Group set to {$groupName}"]);
+                    break;
+
+                case 'set_assigned_to':
+                    $agentId = $val === '' ? null : (int) $val;
+                    $db->prepare('UPDATE tickets SET assigned_to = ? WHERE id = ?')->execute([$agentId, $ticketId]);
+                    $agentName = 'Unassigned';
+                    if ($agentId) {
+                        $s = $db->prepare("SELECT CONCAT(first_name, ' ', last_name) FROM users WHERE id = ?");
+                        $s->execute([$agentId]);
+                        $agentName = $s->fetchColumn() ?: 'Unknown';
+                    }
+                    $db->prepare(
+                        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                    )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': Assigned to {$agentName}"]);
+                    break;
+
+                case 'set_type':
+                    $typeId = $val === '' ? null : (int) $val;
+                    $db->prepare('UPDATE tickets SET type_id = ? WHERE id = ?')->execute([$typeId, $ticketId]);
+                    $typeName = 'None';
+                    if ($typeId) {
+                        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+                        $s->execute([$typeId]);
+                        $typeName = $s->fetchColumn() ?: 'Unknown';
+                    }
+                    Sla::onTypeChanged($db, $ticketId, $typeId);
+                    $db->prepare(
+                        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                    )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': Type set to {$typeName}"]);
+                    break;
+
+                case 'set_priority':
+                    $priorityId = $val === '' ? null : (int) $val;
+                    $db->prepare('UPDATE tickets SET priority_id = ? WHERE id = ?')->execute([$priorityId, $ticketId]);
+                    $priorityName = 'None';
+                    if ($priorityId) {
+                        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+                        $s->execute([$priorityId]);
+                        $priorityName = $s->fetchColumn() ?: 'Unknown';
+                        Sla::onPriorityChanged($db, $ticketId, $priorityId, $ticket['type_id'] ? (int) $ticket['type_id'] : null);
+                    }
+                    $db->prepare(
+                        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                    )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': Priority set to {$priorityName}"]);
+                    break;
+
+                case 'set_status':
+                    if (!in_array($val, ticketActiveStatusSlugs(), true)) {
+                        break;
+                    }
+                    $oldStatus = $ticket['status'];
+                    $db->prepare('UPDATE tickets SET status = ? WHERE id = ?')->execute([$val, $ticketId]);
+                    Sla::onStatusChanged($db, $ticketId, $oldStatus, $val);
+                    $db->prepare(
+                        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                    )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': Status set to {$val}"]);
+                    break;
+
+                case 'add_tag':
+                    $tagName = trim(strtolower(preg_replace('/[^a-zA-Z0-9_\-\s]/', '', $val)));
+                    if ($tagName === '') {
+                        break;
+                    }
+                    $findTag = $db->prepare('SELECT id FROM ticket_tags WHERE name = ?');
+                    $findTag->execute([$tagName]);
+                    $tagId = $findTag->fetchColumn();
+                    if (!$tagId) {
+                        $db->prepare('INSERT INTO ticket_tags (name) VALUES (?)')->execute([$tagName]);
+                        $tagId = (int) $db->lastInsertId();
+                    }
+                    // Only add if not already tagged
+                    $exists = $db->prepare('SELECT 1 FROM ticket_tag_map WHERE ticket_id = ? AND tag_id = ?');
+                    $exists->execute([$ticketId, $tagId]);
+                    if (!$exists->fetchColumn()) {
+                        $db->prepare('INSERT INTO ticket_tag_map (ticket_id, tag_id) VALUES (?, ?)')->execute([$ticketId, $tagId]);
+                        $db->prepare(
+                            'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                        )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': Tag #{$tagName} added"]);
+                    }
+                    break;
+
+                case 'add_cc':
+                    $ccUserId = (int) $val;
+                    if ($ccUserId <= 0) {
+                        break;
+                    }
+                    // Only add if not already CC'd
+                    $exists = $db->prepare('SELECT 1 FROM ticket_cc WHERE ticket_id = ? AND user_id = ?');
+                    $exists->execute([$ticketId, $ccUserId]);
+                    if (!$exists->fetchColumn()) {
+                        $db->prepare(
+                            'INSERT INTO ticket_cc (ticket_id, user_id, added_by) VALUES (?, ?, ?)'
+                        )->execute([$ticketId, $ccUserId, $ccUserId]);
+                        $s = $db->prepare("SELECT CONCAT(first_name, ' ', last_name) FROM users WHERE id = ?");
+                        $s->execute([$ccUserId]);
+                        $ccName = $s->fetchColumn() ?: 'Unknown';
+                        $db->prepare(
+                            'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                        )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': CC'd {$ccName}"]);
+                        // Notify the newly-CC'd user (no human actor — pass 0).
+                        notifyCcAdded($db, $ticketId, $ccUserId, "Automation \"{$auto['name']}\"", 0);
+                    }
+                    break;
+            }
+            } catch (PDOException $e) {
+                // ponytail: a stale target id (deleted type/group/agent) must not 500 the
+                // request that fired the rule; skip the action and leave a trace.
+                error_log("Automation '{$auto['name']}' action '{$action}' skipped: " . $e->getMessage());
+                $db->prepare(
+                    'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+                )->execute([$ticketId, 'automation', "Automation '{$auto['name']}': could not apply '{$action}' (value '{$val}' no longer exists)"]);
+            }
+        }
+    }
+}
+
+/**
+ * Is this inbound Graph message machine-sent — an out-of-office / vacation
+ * reply, a bounce, or bulk mail? These are the only inbound emails the reply
+ * processor drops, so they can never open a ticket; anything a person wrote
+ * becomes a comment or a ticket.
+ *
+ * Headers decide first (RFC 3834 Auto-Submitted, Exchange's OOF and bounce
+ * markers, the X-Autoreply family, bulk/list Precedence). The subject is a
+ * last resort, and only its START counts — "Automatic reply: …" is an
+ * auto-reply, "RE: [Ticket #12] Out of office not working" is a person.
+ */
+function isAutoReply(array $msg): bool
+{
+    foreach (($msg['internetMessageHeaders'] ?? []) as $header) {
+        $name  = strtolower(trim($header['name'] ?? ''));
+        $value = strtolower(trim($header['value'] ?? ''));
+
+        // RFC 3834 — any value other than "no" means it is automated
+        if ($name === 'auto-submitted' && $value !== 'no') {
+            return true;
+        }
+
+        // Exchange / Outlook out-of-office suppression, Exchange's bounce marker,
+        // and the non-standard autoresponder headers other mail systems stamp
+        if (in_array($name, ['x-auto-response-suppress', 'x-ms-exchange-message-is-ndr', 'x-autoreply', 'x-autorespond', 'x-autogenerated'], true)) {
+            return true;
+        }
+
+        // Mailing list / bulk senders
+        if ($name === 'precedence' && in_array($value, ['bulk', 'auto_reply', 'list', 'junk'], true)) {
+            return true;
+        }
+
+        // Delivery / read reports (bounces)
+        if ($name === 'content-type' && str_contains($value, 'multipart/report')) {
+            return true;
+        }
+    }
+
+    // Bounces come from the mail system itself
+    if (preg_match('/^(mailer-daemon|postmaster)@/i', (string) ($msg['from']['emailAddress']['address'] ?? ''))) {
+        return true;
+    }
+
+    // Spam-filter digests (SpamTitan's quarantine report) carry none of the
+    // headers above. Anchored to the body's start, so a person forwarding one
+    // to ask for a release ("can you free this email?") still opens a ticket.
+    if (preg_match('/^\s*This is your Spam Quarantine Report\b/i', (string) ($msg['bodyPreview'] ?? ''))) {
+        return true;
+    }
+
+    // Subject-line prefixes as a last resort
+    $prefixes = 'automatic reply|auto[- ]?reply|auto[- ]?response|out of (the )?office( auto ?reply)?'
+              . '|vacation reply|away from (the )?office|on vacation|undeliverable|delivery status notification'
+              . '|mail delivery failed|returned mail'
+              . '|autosvar|abwesend|abwesenheitsnotiz|automatische antwort'   // Swedish/Norwegian, German
+              . '|hors du bureau|réponse automatique'                          // French
+              . '|fuera de la oficina|respuesta automática';                   // Spanish
+    return (bool) preg_match('/^(' . $prefixes . ')\s*(:|\(|$)/iu', trim((string) ($msg['subject'] ?? '')));
+}
+
+/**
+ * Subject for a ticket opened from an email reply: the reply's subject without
+ * RE:/FW: prefixes, the old "[Ticket #N]" tag (outbound mail adds the new one)
+ * or the "Closed:" / "Resolved:" label from the status emails.
+ */
+function followUpTicketSubject(string $subject): string
+{
+    $s = preg_replace('/\[(?:Ticket\s*)?#\d+\]/i', '', $subject);
+    $s = preg_replace('/^\s*((re|fw|fwd|aw|sv|wg|tr)\s*:\s*)+/i', '', $s);
+    $s = preg_replace('/^\s*(closed|resolved)\s*:\s*/i', '', $s);
+    $s = trim(preg_replace('/\s{2,}/', ' ', $s));
+    return $s !== '' ? $s : '(No Subject)';
+}
+
+/**
+ * Why an email reply can't be added to the ticket it names — so it opens a new
+ * ticket instead — or null when it can. Replies are never dropped (auto-replies
+ * are filtered out before this): a reply to a ticket that no longer exists,
+ * from an address with no account, or from a requester to a Closed ticket each
+ * becomes a ticket of its own. Staff replies always land on the ticket, closed
+ * or not, so their #commands still work.
+ */
+function inboundReplyNewTicketReason(?array $ticket, ?array $sender, bool $senderIsStaff, string $closedSlug): ?string
+{
+    if ($ticket === null) {
+        return 'missing';
+    }
+    if ($sender === null) {
+        return 'unknown_sender';
+    }
+    if (!$senderIsStaff && $ticket['status'] === $closedSlug) {
+        return 'closed';
+    }
+    return null;
+}
+
+/**
+ * Parse hashtag commands from the end of an email reply body.
+ *
+ * Scans backward through the body lines. A line is a "command line" if its
+ * entire trimmed content consists only of one or more #word tokens (e.g. "#close #high").
+ * Blank lines are always skipped.
+ *
+ * To handle email signatures that appear after the command (e.g. "Thanks, John / IT Support"),
+ * the scan allows up to MAX_SIG_LINES non-command non-blank lines at the tail before giving up.
+ * Once any command line is found, the scan stops immediately at the next non-command non-blank
+ * line going further up — this prevents scanning through the entire email body.
+ *
+ * Only lines that are purely "#word" tokens qualify as commands — hashtags embedded in
+ * normal sentences (e.g. "check ticket #123") are never treated as commands.
+ *
+ * Returns an array:
+ *   'body'          => string  — body with command lines removed and trailing blanks trimmed
+ *   'status'        => string|null — validated status slug (e.g. 'closed') or null
+ *   'priority_slug' => string|null — lowercase priority name (e.g. 'high') or null
+ */
+function parseEmailCommands(string $body): array
+{
+    $statusMap = [
+        'open'                   => 'open',
+        'close'                  => 'closed',
+        'closed'                 => 'closed',
+        'resolve'                => 'resolved',
+        'resolved'               => 'resolved',
+        'pending'                => 'pending',
+        'in_progress'            => 'in_progress',
+        'inprogress'             => 'in_progress',
+        'waiting_on_customer'    => 'waiting_on_customer',
+        'waitingoncustomer'      => 'waiting_on_customer',
+        'waiting_on_third_party' => 'waiting_on_third_party',
+        'waitingonthirdparty'    => 'waiting_on_third_party',
+    ];
+    $prioritySlugs = ['low', 'medium', 'high', 'critical'];
+
+    // Max non-blank non-command trailing lines to skip before giving up.
+    // Sized to cover typical corporate email signatures (name / title / company /
+    // phone / email / website = ~6 lines) plus a small buffer.
+    $maxSigLines = 8;
+
+    $body  = str_replace(["\r\n", "\r"], "\n", $body);
+    $lines = explode("\n", $body);
+
+    // Walk backward looking for command-only lines.
+    // - Before any command is found: skip up to $maxSigLines non-blank non-command lines
+    //   (the email signature that appears after the command in the raw body).
+    // - Once a command is found: stop immediately at the next non-blank non-command line
+    //   (that's where the real message body starts).
+    $commandIdx    = [];
+    $trailingCount = 0;
+
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        $trimmed = trim($lines[$i]);
+        if ($trimmed === '') {
+            continue; // blank lines never count
+        }
+        if (preg_match('/^(#[a-z_]+\s*)+$/i', $trimmed)) {
+            $commandIdx[]  = $i;
+            $trailingCount = 0; // reset — keep looking for more commands going upward
+        } else {
+            if (!empty($commandIdx)) {
+                break; // already found commands; this is real body text — stop
+            }
+            $trailingCount++;
+            if ($trailingCount > $maxSigLines) {
+                break; // too many trailing non-command lines; give up
+            }
+        }
+    }
+
+    if (empty($commandIdx)) {
+        return ['body' => $body, 'status' => null, 'priority_slug' => null];
+    }
+
+    $status       = null;
+    $prioritySlug = null;
+    foreach ($commandIdx as $idx) {
+        preg_match_all('/#([a-z_]+)/i', $lines[$idx], $m);
+        foreach ($m[1] as $tag) {
+            $tag = strtolower($tag);
+            if (isset($statusMap[$tag])) {
+                $status = $statusMap[$tag];
+            } elseif (in_array($tag, $prioritySlugs, true)) {
+                $prioritySlug = $tag;
+            }
+        }
+        unset($lines[$idx]);
+    }
+
+    // Trim trailing blank lines from remaining body
+    $lines = array_values($lines);
+    while (!empty($lines) && trim(end($lines)) === '') {
+        array_pop($lines);
+    }
+
+    return [
+        'body'          => implode("\n", $lines),
+        'status'        => $status,
+        'priority_slug' => $prioritySlug,
+    ];
+}
+
+/**
+ * Email the new assignee when a ticket is manually escalated to them.
+ *
+ * Mirrors notifyAssignedAgent() but uses the ticket_escalated_agent
+ * template and includes escalation-specific context (who escalated it,
+ * which level, optional reason, who it moved from).
+ */
+function notifyEscalation(
+    PDO $db,
+    int $ticketId,
+    int $toUserId,
+    int $escalatedById,
+    int $stepOrder,
+    ?string $stepLabel,
+    ?string $reason,
+    ?int $fromUserId
+): void {
+    if (!emailNotifyEnabled('agent_escalated')) {
+        return;
+    }
+
+    $uStmt = $db->prepare(
+        'SELECT id, first_name, last_name, email, role, notify_assigned_to_me
+         FROM users WHERE id = ?'
+    );
+    $uStmt->execute([$toUserId]);
+    $agent = $uStmt->fetch();
+    if (!$agent || !(bool) ($agent['notify_assigned_to_me'] ?? 1)) {
+        return;
+    }
+
+    $tStmt = $db->prepare(
+        'SELECT t.subject, t.description, t.type_id, t.priority_id, t.created_by
+         FROM tickets t WHERE t.id = ?'
+    );
+    $tStmt->execute([$ticketId]);
+    $ticket = $tStmt->fetch();
+    if (!$ticket) {
+        return;
+    }
+
+    $byStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    $byStmt->execute([$escalatedById]);
+    $by = $byStmt->fetch();
+    $escalatedByName = $by ? trim($by['first_name'] . ' ' . $by['last_name']) : 'An agent';
+
+    $fromName = '';
+    if ($fromUserId) {
+        $fStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+        $fStmt->execute([$fromUserId]);
+        $f = $fStmt->fetch();
+        $fromName = $f ? trim($f['first_name'] . ' ' . $f['last_name']) : '';
+    }
+
+    $submitterName = '';
+    if ($ticket['created_by']) {
+        $sStmt = $db->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+        $sStmt->execute([$ticket['created_by']]);
+        $s = $sStmt->fetch();
+        $submitterName = $s ? trim($s['first_name'] . ' ' . $s['last_name']) : '';
+    }
+
+    $typeName = $priorityName = '';
+    if ($ticket['type_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_types WHERE id = ?');
+        $s->execute([$ticket['type_id']]);
+        $typeName = $s->fetchColumn() ?: '';
+    }
+    if ($ticket['priority_id']) {
+        $s = $db->prepare('SELECT name FROM ticket_priorities WHERE id = ?');
+        $s->execute([$ticket['priority_id']]);
+        $priorityName = $s->fetchColumn() ?: '';
+    }
+
+    $rolePrefix = match ($agent['role']) {
+        'admin' => '/admin',
+        default => '/agent',
+    };
+    $appUrl    = env('APP_URL', 'http://localhost:8000');
+    $ticketUrl = $appUrl . $rolePrefix . '/tickets/' . $ticketId;
+
+    $tpl = getEmailTpl('ticket_escalated_agent', [
+        'ticket_id'         => $ticketId,
+        'subject'           => $ticket['subject'],
+        'type'              => $typeName,
+        'priority'          => $priorityName,
+        'submitter'         => $submitterName,
+        'user_name'         => $agent['first_name'] . ' ' . $agent['last_name'],
+        'first_name'        => $agent['first_name'],
+        'last_name'         => $agent['last_name'],
+        'escalated_by_name' => $escalatedByName,
+        'step_order'        => $stepOrder,
+        'step_label'        => (string) ($stepLabel ?? ''),
+        'from_agent_name'   => $fromName,
+        'reason'            => (string) ($reason ?? ''),
+    ]);
+
+    $emailHtml = renderEmail('ticket-escalated', [
+        'ticketId'        => $ticketId,
+        'subject'         => $ticket['subject'],
+        'typeName'        => $typeName,
+        'priorityName'    => $priorityName,
+        'submitterName'   => $submitterName,
+        'escalatedByName' => $escalatedByName,
+        'stepOrder'       => $stepOrder,
+        'stepLabel'       => (string) ($stepLabel ?? ''),
+        'fromAgentName'   => $fromName,
+        'reason'          => (string) ($reason ?? ''),
+        'ticketUrl'       => $ticketUrl,
+        'introText'       => $tpl['intro'],
+        'buttonLabel'     => $tpl['button'],
+        'footerText'      => $tpl['footer'],
+    ]);
+
+    sendMail(
+        $agent['email'],
+        $agent['first_name'] . ' ' . $agent['last_name'],
+        $tpl['subject'],
+        $emailHtml,
+        '',
+        $ticketId
+    );
+}
+
+/**
+ * Look up the next escalation step for a ticket, returning metadata
+ * needed to perform the escalation. Skips steps whose target user no
+ * longer exists or where the target is the current actor (per design:
+ * can't escalate to yourself — jump to the next step).
+ *
+ * If the ticket's current assignee appears in the escalation matrix,
+ * their step_order is treated as a floor so that escalation jumps to
+ * the step *after* them (you never "escalate" sideways or downward to
+ * someone already on the ticket).
+ *
+ * Returns null if no further step exists.
+ *
+ * @return array{user_id:int, step_order:int, label:?string, user_name:string}|null
+ */
+function nextEscalationStep(PDO $db, int $ticketTypeId, int $currentLevel, int $actorId, ?int $currentAssigneeId = null): ?array
+{
+    $effectiveLevel = $currentLevel;
+    if ($currentAssigneeId) {
+        $aStmt = $db->prepare(
+            'SELECT step_order FROM ticket_escalation_steps
+             WHERE ticket_type_id = ? AND user_id = ?
+             ORDER BY step_order DESC LIMIT 1'
+        );
+        $aStmt->execute([$ticketTypeId, $currentAssigneeId]);
+        $assigneeStep = $aStmt->fetchColumn();
+        if ($assigneeStep !== false && (int) $assigneeStep > $effectiveLevel) {
+            $effectiveLevel = (int) $assigneeStep;
+        }
+    }
+
+    $stmt = $db->prepare(
+        "SELECT s.user_id, s.step_order, s.label,
+                CONCAT(u.first_name, ' ', u.last_name) AS user_name
+         FROM ticket_escalation_steps s
+         JOIN users u ON s.user_id = u.id
+         WHERE s.ticket_type_id = ? AND s.step_order > ?
+         ORDER BY s.step_order ASC"
+    );
+    $stmt->execute([$ticketTypeId, $effectiveLevel]);
+    while ($row = $stmt->fetch()) {
+        if ((int) $row['user_id'] === $actorId) {
+            continue; // skip self
+        }
+        return [
+            'user_id'    => (int) $row['user_id'],
+            'step_order' => (int) $row['step_order'],
+            'label'      => $row['label'] !== null && $row['label'] !== '' ? $row['label'] : null,
+            'user_name'  => $row['user_name'],
+        ];
+    }
+    return null;
+}
+
+/**
+ * Group-based ticket visibility override: an agent who is the current
+ * assignee, an explicit watcher, a CC, or was @mentioned on a ticket should
+ * always be able to open it, even if the ticket's group is outside their group
+ * memberships. Escalation, manual assignment, CC automations and @mentions can
+ * point someone outside the group at a ticket; without this exemption they'd
+ * get the notification but a 403 on the link. Callers check confidential
+ * tickets first, so none of this ever opens a confidential ticket.
+ */
+function ticketAccessExempt(PDO $db, int $userId, ?int $ticketId): bool
+{
+    if (!$userId || !$ticketId) {
+        return false;
+    }
+
+    $s = $db->prepare('SELECT 1 FROM tickets WHERE id = ? AND assigned_to = ?');
+    $s->execute([$ticketId, $userId]);
+    if ($s->fetchColumn()) {
+        return true;
+    }
+
+    $s = $db->prepare(
+        "SELECT 1 FROM ticket_watchers WHERE ticket_id = ? AND user_id = ?
+         UNION ALL
+         SELECT 1 FROM ticket_cc WHERE ticket_id = ? AND user_id = ?
+         UNION ALL
+         SELECT 1 FROM notifications WHERE ticket_id = ? AND user_id = ? AND type = 'mention'"
+    );
+    $s->execute([$ticketId, $userId, $ticketId, $userId, $ticketId, $userId]);
+    return (bool) $s->fetchColumn();
+}
+
+/**
+ * True if the ticket's type is flagged confidential. Used to gate watcher and
+ * merge behaviour (confidential tickets get neither watchers nor cross-type
+ * merges). Returns false for a missing ticket or a ticket with no type.
+ */
+function ticketIsConfidential(PDO $db, int $ticketId): bool
+{
+    if ($ticketId <= 0) {
+        return false;
+    }
+    $s = $db->prepare(
+        'SELECT COALESCE(tt.is_confidential, 0)
+         FROM tickets t
+         LEFT JOIN ticket_types tt ON t.type_id = tt.id
+         WHERE t.id = ?'
+    );
+    $s->execute([$ticketId]);
+    return (int) $s->fetchColumn() === 1;
+}
+
+/**
+ * The set of group IDs a user belongs to (ints). Request-cached per user.
+ */
+function userGroupIds(PDO $db, int $userId): array
+{
+    static $cache = [];
+    if (array_key_exists($userId, $cache)) {
+        return $cache[$userId];
+    }
+    $stmt = $db->prepare('SELECT group_id FROM group_user_map WHERE user_id = ?');
+    $stmt->execute([$userId]);
+    return $cache[$userId] = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Build the SQL predicate limiting which tickets the CURRENT staff user may see
+ * in a list/count query. Self-contained: it references only the tickets alias
+ * ($t) plus correlated subqueries on ticket_types / ticket_watchers, so it can
+ * be ANDed into any query shaped `FROM tickets $t ...`.
+ *
+ * Visibility rules (staff context, fail-closed):
+ *   - Confidential ticket types are visible ONLY to members of the type's
+ *     confidential group, or the ticket's creator. `tickets.view_all` does NOT
+ *     reveal confidential tickets.
+ *   - Non-confidential tickets are visible to holders of `tickets.view_all`, or
+ *     if the ticket is in one of the user's groups, or is group-less and the
+ *     user belongs to at least one group, or is assigned to / created by /
+ *     watched by / CC'd to them.
+ *   - A staff user with no group and no `tickets.view_all` sees only the tickets
+ *     they are assigned to / created / watch / are CC'd on.
+ *   - $withMentions also admits tickets they were @mentioned on. Only the agent
+ *     ticket list opts in; dashboards, kanban and counts leave it off, because
+ *     mentions never expire and would pile up there with no badge to explain them.
+ *
+ * Admins are unrestricted (returns `1=1`): they reach confidential tickets via
+ * the audited re-auth flow on the detail page, and lists redact confidential
+ * content in the template. Returns ['sql' => '(...)', 'params' => [...]].
+ *
+ * Pass the acting user explicitly ($userId + role slug) so this works for both
+ * the session web context (Auth::id()/Auth::role()) and token API callers.
+ */
+/**
+ * Point-in-time "who else has this ticket open" map for a ticket-list render.
+ *
+ * Given the ticket ids on the current list page, returns
+ *   [ ticket_id => ['name' => 'Chris Jasztrab', 'replying' => bool], ... ]
+ * for every ticket that another staff member (not $excludeUserId) currently
+ * has open — i.e. whose `ticket_presence` heartbeat is within the same 45s
+ * staleness window the detail-page poll uses. Tickets nobody else is viewing
+ * are simply absent from the map.
+ *
+ * This is a snapshot taken at render time, not a live feed: the list shows who
+ * was viewing when the page loaded. If two people are viewing, the most recent
+ * heartbeat wins (and a 'replying' viewer is always preferred over a plain
+ * viewer), which keeps the single-line list blurb unambiguous.
+ */
+function ticketListPresenceMap(PDO $db, array $ticketIds, int $excludeUserId): array
+{
+    $ids = array_values(array_unique(array_map('intval', $ticketIds)));
+    if (empty($ids)) {
+        return [];
+    }
+
+    $ph   = implode(',', array_fill(0, count($ids), '?'));
+    // Order so the row we keep per ticket is the one we want to show: a
+    // 'replying' viewer first, then the freshest heartbeat.
+    $stmt = $db->prepare(
+        "SELECT tp.ticket_id, tp.activity,
+                CONCAT(u.first_name, ' ', u.last_name) AS name
+         FROM ticket_presence tp
+         JOIN users u ON u.id = tp.user_id
+         WHERE tp.ticket_id IN ($ph)
+           AND tp.user_id != ?
+           AND tp.last_seen >= DATE_SUB(NOW(), INTERVAL 45 SECOND)
+         ORDER BY (tp.activity = 'replying') DESC, tp.last_seen DESC"
+    );
+    $stmt->execute(array_merge($ids, [$excludeUserId]));
+
+    $map = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $tid = (int) $row['ticket_id'];
+        if (isset($map[$tid])) {
+            continue; // first row per ticket already wins via ORDER BY
+        }
+        $map[$tid] = [
+            'name'     => $row['name'],
+            'replying' => $row['activity'] === 'replying',
+        ];
+    }
+    return $map;
+}
+
+function ticketStaffVisibilitySql(PDO $db, int $userId, ?string $role, string $t = 't', bool $withMentions = false): array
+{
+    if (roleIsAdmin($role)) {
+        return ['sql' => '1=1', 'params' => []];
+    }
+
+    $groups    = userGroupIds($db, $userId);
+    $hasGroups = !empty($groups);
+    $seeAll    = roleCan($role, 'tickets.view_all');
+    $groupPh   = $hasGroups ? implode(',', array_fill(0, count($groups), '?')) : '';
+
+    $isConfidential =
+        "EXISTS (SELECT 1 FROM ticket_types ct WHERE ct.id = {$t}.type_id AND ct.is_confidential = 1)";
+
+    $params = [];
+
+    // ── Confidential branch: confidential-group member OR creator only ───────
+    $confVis = [];
+    if ($hasGroups) {
+        $confVis[] = "EXISTS (SELECT 1 FROM ticket_types cm WHERE cm.id = {$t}.type_id "
+                   . "AND cm.is_confidential = 1 AND cm.group_id IS NOT NULL AND cm.group_id IN ($groupPh))";
+    }
+    $confVis[] = "{$t}.created_by = ?";
+    $confClause = "($isConfidential AND (" . implode(' OR ', $confVis) . '))';
+
+    // ── Non-confidential branch ──────────────────────────────────────────────
+    if ($seeAll) {
+        $nonConfClause = "(NOT $isConfidential)";
+    } else {
+        $nc = [];
+        if ($hasGroups) {
+            $nc[] = "{$t}.group_id IN ($groupPh)";
+            $nc[] = "{$t}.group_id IS NULL";
+        }
+        $nc[] = "{$t}.assigned_to = ?";
+        $nc[] = "{$t}.created_by = ?";
+        $nc[] = "{$t}.id IN (SELECT ticket_id FROM ticket_watchers WHERE user_id = ?)";
+        $nc[] = "{$t}.id IN (SELECT ticket_id FROM ticket_cc WHERE user_id = ?)";
+        if ($withMentions) {
+            $nc[] = "{$t}.id IN (SELECT ticket_id FROM notifications WHERE user_id = ? AND type = 'mention')";
+        }
+        $nonConfClause = "(NOT $isConfidential AND (" . implode(' OR ', $nc) . '))';
+    }
+
+    // ── Assemble params in the same order the clauses appear in the SQL ──────
+    if ($hasGroups) { foreach ($groups as $g) { $params[] = $g; } } // confVis member
+    $params[] = $userId;                                            // confVis creator
+    if (!$seeAll) {
+        if ($hasGroups) { foreach ($groups as $g) { $params[] = $g; } } // nonConf group IN
+        $params[] = $userId; // nonConf assigned
+        $params[] = $userId; // nonConf created
+        $params[] = $userId; // nonConf watcher
+        $params[] = $userId; // nonConf CC
+        if ($withMentions) {
+            $params[] = $userId; // nonConf @mention
+        }
+    }
+
+    return ['sql' => "($confClause OR $nonConfClause)", 'params' => $params];
+}
+
+/**
+ * Which of these list rows the user can see ONLY because they were @mentioned
+ * (outside their groups, not assigned / created / watched / CC'd). Drives the
+ * "@Mentioned" badge on the agent ticket list. Returns [ticket_id => true].
+ */
+function mentionOnlyTicketIds(PDO $db, array $ticketIds, int $userId, ?string $role): array
+{
+    $base = ticketStaffVisibilitySql($db, $userId, $role, 't');
+    if (!$ticketIds || $base['sql'] === '1=1') {
+        return [];
+    }
+    $ids = array_map('intval', $ticketIds);
+    $ph  = implode(',', array_fill(0, count($ids), '?'));
+    // IS NOT TRUE, not NOT: a NULL column (e.g. unassigned) can make the base
+    // predicate NULL, and NOT NULL would wrongly drop the row.
+    $stmt = $db->prepare("SELECT t.id FROM tickets t WHERE t.id IN ($ph) AND ({$base['sql']}) IS NOT TRUE");
+    $stmt->execute(array_merge($ids, $base['params']));
+    return array_fill_keys(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
+}
+
+/**
+ * Human labels and help text for the SLA reopen behaviours.
+ *
+ * Single source for the ticket-type form, the Type Settings Matrix and the
+ * global default on the SLA Policies page, so the four options can't drift into
+ * describing themselves differently in three places. Keys match
+ * Sla::REOPEN_BEHAVIORS.
+ *
+ * @return array<string, array{label: string, help: string, short: string}>
+ */
+function slaReopenBehaviorLabels(): array
+{
+    return [
+        'keep' => [
+            'label' => 'Keep the original due dates',
+            'short' => 'Keep original',
+            'help'  => 'The reopened ticket goes back under the targets it already had. '
+                     . 'A ticket closed long ago is likely to be breached immediately.',
+        ],
+        'resume' => [
+            'label' => 'Resume — credit the time it spent closed',
+            'short' => 'Resume',
+            'help'  => 'Both due dates move out by the business hours the ticket spent closed, '
+                     . 'so the agent gets back whatever working time was left when it closed.',
+        ],
+        'restart' => [
+            'label' => 'Restart both clocks',
+            'short' => 'Restart both',
+            'help'  => 'A fresh window measured from the reopen, and a new first response is '
+                     . 'required — the previous response time is recorded in the ticket history.',
+        ],
+        'restart_resolution' => [
+            'label' => 'Restart the resolution clock only',
+            'short' => 'Restart resolution',
+            'help'  => 'A fresh resolution window measured from the reopen, but the first '
+                     . 'response already given still counts, so that target does not re-apply.',
+        ],
+    ];
+}
+
+/* ── Ticket reminders (Settings → Ticket Reminders) ─────────────── */
+
+/**
+ * Email ticket owners about tickets that need them. Rides the 5-minute SLA
+ * cron (public/sla-cron.php). Two independent reminders, both off by default:
+ *
+ *   ticket_overdue     once per due date, the day after it passes while the
+ *                      ticket is still open: "you're late, tell the customer"
+ *   ticket_update_due  when the customer hasn't had a public reply from staff
+ *                      in ticket_update_due_days; repeats every that-many days
+ *                      for as long as the silence lasts
+ *
+ * Waiting on Customer tickets are skipped — the ball is in their court. Each
+ * send writes an internal timeline row, which doubles as the dedup record.
+ *
+ * @return array{overdue: int, update: int} tickets reminded about
+ */
+function processTicketReminders(PDO $db): array
+{
+    $sent      = ['overdue' => 0, 'update' => 0];
+    $overdueOn = emailNotifyEnabled('ticket_overdue');
+    $updateOn  = emailNotifyEnabled('ticket_update_due');
+    if (!$overdueOn && !$updateOn) {
+        return $sent;
+    }
+
+    $where  = [ticketStatusSqlIn(array_values(array_diff(ticketOpenBucketSlugs(), ['waiting_on_customer'])), 't.status')];
+    $params = [];
+    // "New tickets only" coverage: tickets created after the cutoff stamped
+    // when the admin saved that mode, so switching reminders on never mails
+    // about the existing backlog. No cutoff yet means nothing is in scope.
+    if (getSetting('ticket_reminders_scope', 'new') !== 'all') {
+        $cutoff = getSetting('ticket_reminders_scope_cutoff', '');
+        if ($cutoff === '') {
+            return $sent;
+        }
+        $where[]  = 't.created_at >= ?';
+        $params[] = $cutoff;
+    }
+    $base = implode(' AND ', $where);
+
+    if ($overdueOn) {
+        // A reminder logged after this due date passed means it was sent.
+        // Moving the due date later re-arms it for the new date.
+        $stmt = $db->prepare(
+            "SELECT t.* FROM tickets t
+              WHERE {$base} AND t.due_date < CURDATE()
+                AND NOT EXISTS (SELECT 1 FROM ticket_timeline r
+                                 WHERE r.ticket_id = t.id AND r.action = 'overdue_reminder_sent'
+                                   AND r.created_at >= t.due_date + INTERVAL 1 DAY)"
+        );
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll() as $ticket) {
+            $sent['overdue'] += sendTicketReminder($db, $ticket, 'ticket_overdue') ? 1 : 0;
+        }
+    }
+
+    if ($updateOn) {
+        $days = max(1, (int) getSetting('ticket_update_due_days', '15'));
+        $stmt = $db->prepare(
+            "SELECT x.* FROM (
+                 SELECT t.*, " . ticketLastContactSql('t') . " AS last_contact_at
+                   FROM tickets t WHERE {$base}
+             ) x
+             WHERE COALESCE(x.last_contact_at, x.created_at) < NOW() - INTERVAL ? DAY
+               AND NOT EXISTS (SELECT 1 FROM ticket_timeline r
+                                WHERE r.ticket_id = x.id AND r.action = 'update_reminder_sent'
+                                  AND r.created_at > NOW() - INTERVAL ? DAY)"
+        );
+        $stmt->execute(array_merge($params, [$days, $days]));
+        foreach ($stmt->fetchAll() as $ticket) {
+            $sent['update'] += sendTicketReminder($db, $ticket, 'ticket_update_due') ? 1 : 0;
+        }
+    }
+
+    return $sent;
+}
+
+/**
+ * SQL for the last time staff replied publicly on ticket alias $t — a
+ * customer-visible comment by anyone on staff other than the requester.
+ */
+function ticketLastContactSql(string $t): string
+{
+    return "(SELECT MAX(lc.created_at) FROM ticket_timeline lc JOIN users lcu ON lcu.id = lc.user_id
+              WHERE lc.ticket_id = {$t}.id AND lc.action = 'comment' AND lc.is_internal = 0
+                AND lc.user_id <> {$t}.created_by AND " . staffRoleSqlIn('lcu.role') . ')';
+}
+
+/**
+ * Email one reminder ($tpl: ticket_overdue / ticket_update_due) to the
+ * ticket's owner and log it on the timeline. An unassigned ticket goes to its
+ * group's managers when ticket_reminders_managers is on, otherwise to nobody.
+ * Returns false when nobody was emailed — no row is written, so the ticket is
+ * picked up once it has an owner.
+ */
+function sendTicketReminder(PDO $db, array $ticket, string $tpl): bool
+{
+    $ticketId = (int) $ticket['id'];
+    $toOwner  = !empty($ticket['assigned_to']);
+
+    if ($toOwner) {
+        $s = $db->prepare('SELECT id, first_name, last_name, email, role, notify_assigned_to_me FROM users WHERE id = ?');
+        $s->execute([(int) $ticket['assigned_to']]);
+        $recipients = array_filter([$s->fetch() ?: null], fn ($u) => $u && (bool) ($u['notify_assigned_to_me'] ?? 1));
+    } elseif (getSetting('ticket_reminders_managers', '0') === '1' && !empty($ticket['group_id'])) {
+        $s = $db->prepare(
+            'SELECT u.id, u.first_name, u.last_name, u.email, u.role
+               FROM group_user_map gum JOIN users u ON u.id = gum.user_id
+              WHERE gum.group_id = ? AND gum.is_manager = 1'
+        );
+        $s->execute([(int) $ticket['group_id']]);
+        $recipients = $s->fetchAll();
+    } else {
+        $recipients = [];
+    }
+    if (!$recipients) {
+        return false;
+    }
+
+    $s = $db->prepare(
+        "SELECT CONCAT(r.first_name, ' ', r.last_name) AS requester, g.name AS group_name,
+                " . ticketLastContactSql('t') . " AS last_contact_at
+           FROM tickets t
+           LEFT JOIN users r ON r.id = t.created_by
+           LEFT JOIN `groups` g ON g.id = t.group_id
+          WHERE t.id = ?"
+    );
+    $s->execute([$ticketId]);
+    $info = $s->fetch() ?: [];
+
+    $lastContact = $info['last_contact_at'] ?? null;
+    $daysSilent  = intdiv(max(0, time() - strtotime($lastContact ?: $ticket['created_at'])), 86400);
+    $dueDate     = !empty($ticket['due_date']) ? date('M j, Y', strtotime($ticket['due_date'])) : '';
+    $slaDue      = !empty($ticket['resolution_due_at']) ? date('M j, Y g:i A', strtotime($ticket['resolution_due_at'])) : '';
+    $requester   = trim((string) ($info['requester'] ?? '')) ?: 'the requester';
+    $groupName   = (string) ($info['group_name'] ?? '');
+    $appUrl      = env('APP_URL', 'http://localhost:8000');
+
+    $names = [];
+    foreach ($recipients as $u) {
+        $parts = getEmailTpl($tpl, [
+            'ticket_id'          => $ticketId,
+            'subject'            => $ticket['subject'],
+            'requester'          => $requester,
+            'due_date'           => $dueDate,
+            'days_since_contact' => (string) $daysSilent,
+            'group'              => $groupName,
+            'user_name'          => $u['first_name'] . ' ' . $u['last_name'],
+            'first_name'         => $u['first_name'],
+            'last_name'          => $u['last_name'],
+        ]);
+        $html = renderEmail('ticket-owner-reminder', [
+            'badge'       => $tpl === 'ticket_overdue' ? 'OVERDUE' : 'UPDATE DUE',
+            'ticketId'    => $ticketId,
+            'subject'     => $ticket['subject'],
+            'introText'   => $parts['intro'],
+            'rows'        => array_filter([
+                'Requester'              => $requester,
+                'Due date'               => $dueDate,
+                'SLA resolution target'  => $slaDue,
+                'Last reply to customer' => $lastContact ? date('M j, Y', strtotime($lastContact)) . " ({$daysSilent} days ago)" : 'None yet',
+                'Status'                 => ticketStatusLabel((string) $ticket['status']),
+                'Group'                  => $groupName,
+            ]),
+            'managerNote' => $toOwner ? '' : "You're getting this because you manage " . ($groupName ?: 'this group') . ' and the ticket has no owner.',
+            'ticketUrl'   => $appUrl . ($u['role'] === 'admin' ? '/admin' : '/agent') . '/tickets/' . $ticketId,
+            'buttonLabel' => $parts['button'],
+            'footerText'  => $parts['footer'],
+        ]);
+        sendMail($u['email'], $u['first_name'] . ' ' . $u['last_name'], $parts['subject'], $html, '', $ticketId);
+        $names[] = $u['first_name'] . ' ' . $u['last_name'];
+    }
+
+    $why = $tpl === 'ticket_overdue'
+        ? "the ticket is past its due date of {$dueDate}"
+        : "the customer hasn't had a reply in {$daysSilent} days";
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+    )->execute([
+        $ticketId,
+        $tpl === 'ticket_overdue' ? 'overdue_reminder_sent' : 'update_reminder_sent',
+        'Reminder emailed to ' . implode(', ', $names) . ": {$why}.",
+    ]);
+    return true;
+}
+
+/**
+ * Apply a due-date edit from a ticket page's Update form. Returns true when
+ * the date changed.
+ *
+ * The edit can carry a customer reply (`due_date_reply`), written in the modal
+ * the form shows when the new date is past the SLA resolution date. It goes
+ * out as an ordinary public reply. The change itself is logged internally:
+ * the portal shows every public timeline row, and a bare "due date moved" with
+ * no explanation is exactly what the reply is for.
+ */
+function applyTicketDueDateChange(PDO $db, array $ticket, array $in, int $uid): bool
+{
+    if (!array_key_exists('due_date', $in) || !Auth::can('tickets.set_due_date')) {
+        return false;
+    }
+    $new = trim((string) $in['due_date']);
+    if ($new !== '') {
+        $d = DateTimeImmutable::createFromFormat('!Y-m-d', $new);
+        if (!$d || $d->format('Y-m-d') !== $new) {
+            flash('error', 'Due date was not changed: that is not a valid date.');
+            return false;
+        }
+    }
+    $new = $new !== '' ? $new : null;
+    $old = !empty($ticket['due_date']) ? (string) $ticket['due_date'] : null;
+    if ($new === $old) {
+        return false;
+    }
+
+    $ticketId = (int) $ticket['id'];
+    $fmt      = static fn (?string $d): string => $d !== null ? date('M j, Y', strtotime($d)) : 'none';
+    $db->prepare('UPDATE tickets SET due_date = ? WHERE id = ?')->execute([$new, $ticketId]);
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 1)'
+    )->execute([$ticketId, $uid, 'due_date_changed', 'Due date changed from ' . $fmt($old) . ' to ' . $fmt($new) . '.']);
+
+    $reply = trim((string) ($in['due_date_reply'] ?? ''));
+    if ($reply !== '') {
+        $db->prepare(
+            'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 0)'
+        )->execute([$ticketId, $uid, 'comment', $reply]);
+        notifyTicketCreator($db, $ticketId, $reply, Auth::fullName());
+        notifyCcUsers($db, $ticketId, $reply, Auth::fullName());
+        notifyWatchers($db, $ticketId, $reply, Auth::fullName());
+    }
+    return true;
+}
+
+/**
+ * Route open tickets that somehow have no group into the default group.
+ *
+ * Every creation path calls resolveTicketGroup(), so this normally finds
+ * nothing. When it does, a path forgot — each swept ticket says so on its
+ * timeline. Rides the SLA cron; it used to ride the stale-ticket job.
+ *
+ * @return int tickets swept
+ */
+function sweepNoGroupTickets(PDO $db): int
+{
+    $defaultGroupId = (int) (getSetting('default_group_id', '') ?: 0);
+    $exists = $db->prepare('SELECT 1 FROM `groups` WHERE id = ?');
+    $exists->execute([$defaultGroupId]);
+    if ($defaultGroupId <= 0 || !$exists->fetchColumn()) {
+        return 0;
+    }
+
+    $orphans = $db->query(
+        "SELECT id FROM tickets WHERE group_id IS NULL AND status NOT IN ('resolved','closed','merged')"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    $update = $db->prepare('UPDATE tickets SET group_id = ? WHERE id = ?');
+    $note   = $db->prepare(
+        "INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal)
+         VALUES (?, NULL, 'group_set_from_default', ?, 1)"
+    );
+    foreach ($orphans as $orphanId) {
+        $update->execute([$defaultGroupId, (int) $orphanId]);
+        $note->execute([
+            (int) $orphanId,
+            "Found with no group and routed to the default group (#{$defaultGroupId}). "
+            . 'Investigate which creation path produced a NULL group_id — every supported path should call resolveTicketGroup().',
+        ]);
+    }
+    return count($orphans);
+}
+
+/* ── Task tickets ─────────────────────────────────────────────── */
+
+/**
+ * Whether a user may create a ticket of this type. A type flagged
+ * restrict_create_to_group can only be created by members of its own group
+ * (e.g. New Employee → HR); every other type is open to everyone. There is no
+ * admin bypass on purpose — an admin who needs to file one joins the group.
+ */
+function userCanCreateTicketType(PDO $db, ?int $typeId, int $userId): bool
+{
+    if (!$typeId) {
+        return true;
+    }
+    $s = $db->prepare('SELECT restrict_create_to_group, group_id FROM ticket_types WHERE id = ?');
+    $s->execute([$typeId]);
+    $t = $s->fetch();
+    return !$t || creatableTicketTypes($db, [$t], $userId) !== [];
+}
+
+/** Drop the types this user may not create from a list of ticket_types rows. */
+function creatableTicketTypes(PDO $db, array $types, int $userId): array
+{
+    $mine = userGroupIds($db, $userId);
+    return array_values(array_filter(
+        $types,
+        static fn(array $t) => empty($t['restrict_create_to_group'])
+            || ($t['group_id'] !== null && in_array((int) $t['group_id'], $mine, true))
+    ));
+}
+
+/**
+ * A ticket's custom-field values as display text, in the form's order, keyed by
+ * label: "Start Date" => "2026-11-02", "Direct Supervisor" => "Jane Doe (jane@…)".
+ * Blank fields are left out. Mirrors the Custom Fields panel's per-type rendering.
+ *
+ * @param int[]|null $fieldIds only these fields; null for all of the type's fields
+ * @return array<string,string>
+ */
+function ticketFieldValuesForDisplay(PDO $db, int $ticketId, int $typeId, ?array $fieldIds = null): array
+{
+    if ($fieldIds === []) {
+        return [];
+    }
+    $in = $fieldIds === null ? '' : ' AND f.id IN (' . implode(',', array_map('intval', $fieldIds)) . ')';
+    // Form order where the type has a layout row for the field, else by id.
+    $vs = $db->prepare(
+        "SELECT f.id, f.field_type, COALESCE(NULLIF(l.label_override, ''), f.label) AS label, v.value
+         FROM ticket_field_values v
+         JOIN ticket_form_fields f ON f.id = v.field_id AND f.deleted_at IS NULL
+         LEFT JOIN ticket_type_form_layout l
+           ON l.type_id = ? AND l.field_kind = 'custom' AND CAST(l.field_key AS UNSIGNED) = f.id
+         WHERE v.ticket_id = ?{$in}
+         ORDER BY l.sort_order IS NULL, l.sort_order, f.id"
+    );
+    $vs->execute([$typeId, $ticketId]);
+    $opts = $db->prepare('SELECT id, label FROM ticket_form_field_options WHERE field_id = ?');
+
+    $out = [];
+    foreach ($vs->fetchAll() as $f) {
+        $val  = (string) ($f['value'] ?? '');
+        $text = '';
+        switch ($f['field_type']) {
+            case 'checkbox':
+                $text = $val === '1' ? 'Yes' : 'No';
+                break;
+            case 'user_picker':
+                $p    = userPickerDisplay($db, $val);
+                $text = $p ? $p['name'] . ($p['email'] !== '' ? ' (' . $p['email'] . ')' : '') : '';
+                break;
+            case 'dropdown':
+            case 'dependent':
+                $opts->execute([$f['id']]);
+                $labels = $opts->fetchAll(PDO::FETCH_KEY_PAIR);
+                $ids    = $f['field_type'] === 'dropdown' ? [$val] : array_values(json_decode($val, true) ?: []);
+                $parts  = [];
+                foreach ($ids as $id) {
+                    if ($id !== '' && isset($labels[(int) $id])) $parts[] = $labels[(int) $id];
+                }
+                $text = implode(' › ', $parts);
+                break;
+            case 'date_range':
+                $dr   = json_decode($val, true) ?: [];
+                $text = trim(($dr['from'] ?? '') . ' — ' . ($dr['to'] ?? ''), ' —');
+                break;
+            default:
+                $text = $val;
+        }
+        if ($text !== '') {
+            $out[$f['label']] = $text;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Fill a ticket's due date from the date field its type names (Admin → Ticket
+ * Types → Edit → "Due date comes from"), and pass it down to its task tickets.
+ * No-op for a type without that setting, or when the field is blank or not a
+ * date. Call after the ticket's custom-field values are saved.
+ */
+function syncDueDateFromTypeField(PDO $db, int $ticketId): void
+{
+    $s = $db->prepare(
+        'SELECT v.value FROM tickets t
+         JOIN ticket_types tt ON tt.id = t.type_id AND tt.due_date_field_id IS NOT NULL
+         LEFT JOIN ticket_field_values v ON v.ticket_id = t.id AND v.field_id = tt.due_date_field_id
+         WHERE t.id = ?'
+    );
+    $s->execute([$ticketId]);
+    $row = $s->fetch();
+    if (!$row) {
+        return;
+    }
+    $date = (string) ($row['value'] ?? '');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        return;
+    }
+    $db->prepare('UPDATE tickets SET due_date = ? WHERE id = ? OR parent_ticket_id = ?')->execute([$date, $ticketId, $ticketId]);
+}
+
+/**
+ * Create the task tickets a ticket's type is set up to spawn (Admin → Ticket
+ * Types → Edit → Task tickets). Each task ticket:
+ *   - lands in its own type's default group, so each team works it from its queue;
+ *   - carries only the custom-field values picked for that task — the payroll
+ *     task gets the wage, IT's task does not;
+ *   - keeps the parent's requester, so a reply on it reaches whoever filed the parent.
+ * The requester's "ticket created" email is skipped — they already got one for
+ * the parent. Call only after the parent's custom-field values are saved.
+ *
+ * @return int[] the new task ticket ids
+ */
+function spawnTicketTypeTasks(PDO $db, int $parentId): array
+{
+    $ps = $db->prepare(
+        'SELECT t.id, t.subject, t.type_id, t.created_by, t.submitted_by, t.location_id, t.priority_id, t.due_date, l.name AS location_name
+         FROM tickets t LEFT JOIN locations l ON l.id = t.location_id WHERE t.id = ?'
+    );
+    $ps->execute([$parentId]);
+    $parent = $ps->fetch();
+    if (!$parent || !$parent['type_id']) {
+        return [];
+    }
+
+    $ts = $db->prepare(
+        'SELECT tk.child_type_id, tk.field_ids, tk.link_person_assets, ct.name AS child_type_name
+         FROM ticket_type_tasks tk
+         JOIN ticket_types ct ON ct.id = tk.child_type_id
+         WHERE tk.type_id = ?
+         ORDER BY tk.sort_order, tk.id'
+    );
+    $ts->execute([(int) $parent['type_id']]);
+    $tasks = $ts->fetchAll();
+    if (!$tasks) {
+        return [];
+    }
+
+    $insert = $db->prepare(
+        'INSERT INTO tickets (subject, description, created_by, submitted_by, type_id, location_id, status, priority_id, group_id, parent_ticket_id, due_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $timeline = $db->prepare('INSERT INTO ticket_timeline (ticket_id, user_id, action, details) VALUES (?, NULL, ?, ?)');
+
+    $childIds = [];
+    foreach ($tasks as $task) {
+        $typeId   = (int) $task['child_type_id'];
+        $fieldIds = array_values(array_filter(array_map('intval', (array) json_decode((string) $task['field_ids'], true))));
+        $priId    = $parent['priority_id'] !== null ? (int) $parent['priority_id'] : null;
+        if (!priorityAllowedForType($db, $typeId, $priId)) {
+            $priId = getDefaultPriorityId($db);
+        }
+
+        // The handed-over details go into the description as a tight two-column
+        // table, so the new-ticket emails carry them and not just the Custom
+        // Fields panel. The values are copied to the task's own fields below too.
+        $details = ($parent['location_name'] ? ['Location' => $parent['location_name']] : [])
+            + ticketFieldValuesForDisplay($db, $parentId, (int) $parent['type_id'], $fieldIds);
+        $rows = '';
+        foreach ($details as $label => $text) {
+            $rows .= '<tr><td style="padding:1px 12px 1px 0;color:#64748b;white-space:nowrap;vertical-align:top;">' . e($label)
+                . '</td><td style="padding:1px 0;">' . nl2br(e($text)) . '</td></tr>';
+        }
+
+        $insert->execute([
+            mb_substr($task['child_type_name'] . ': ' . $parent['subject'], 0, 255),
+            '<p>Task for ticket #' . $parentId . '.</p>'
+                . ($rows ? '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tbody>' . $rows . '</tbody></table>' : ''),
+            (int) $parent['created_by'], $parent['submitted_by'], $typeId, $parent['location_id'],
+            ticketDefaultNewStatusSlug(), $priId, resolveTicketGroup($db, null, $typeId), $parentId, $parent['due_date'],
+        ]);
+        $childId    = (int) $db->lastInsertId();
+        $childIds[] = $childId;
+
+        if ($fieldIds) {
+            $ph = implode(',', array_fill(0, count($fieldIds), '?'));
+            $db->prepare(
+                "INSERT INTO ticket_field_values (ticket_id, field_id, value)
+                 SELECT ?, field_id, value FROM ticket_field_values WHERE ticket_id = ? AND field_id IN ($ph)"
+            )->execute(array_merge([$childId, $parentId], $fieldIds));
+        }
+
+        $timeline->execute([$childId, 'created', 'Task ticket created from ticket #' . $parentId . '.']);
+
+        // "Link the person's devices": everything checked out to whoever is picked
+        // in the task's person field — e.g. the leaver's laptop on the IT offboarding task.
+        if ((int) $task['link_person_assets'] === 1 && $fieldIds) {
+            $pv = $db->prepare(
+                "SELECT v.value FROM ticket_field_values v
+                 JOIN ticket_form_fields f ON f.id = v.field_id AND f.field_type = 'user_picker'
+                 WHERE v.ticket_id = ? AND v.field_id IN ($ph) ORDER BY v.field_id LIMIT 1"
+            );
+            $pv->execute(array_merge([$parentId], $fieldIds));
+            if ($personId = validUserPickerId($db, $pv->fetchColumn() ?: null)) {
+                require_once __DIR__ . '/Assets.php';
+                Assets::linkUserDevices($db, $childId, $personId);
+            }
+        }
+
+        $assignedTo = runPostTicketCreateHooks($db, $childId);
+        if ($priId) {
+            Sla::initializeForTicket($db, $childId, $priId, $typeId);
+        }
+        notifyGroupMembers($db, $childId);
+        if ($assignedTo !== null) {
+            notifyAssignedAgent($db, $childId, $assignedTo);
+        }
+    }
+
+    $timeline->execute([$parentId, 'tasks_created', 'Task tickets created: #' . implode(', #', $childIds) . '.']);
+    return $childIds;
+}
+
+/**
+ * What the ticket page shows about task tickets: the parent this ticket is a
+ * task of (id only — the parent may be confidential to this viewer), and the
+ * task tickets this one spawned.
+ */
+function ticketTaskLinks(PDO $db, array $ticket): array
+{
+    $s = $db->prepare(
+        "SELECT t.id, t.subject, t.status, g.name AS group_name,
+                CONCAT(a.first_name, ' ', a.last_name) AS agent_name
+         FROM tickets t
+         LEFT JOIN `groups` g ON g.id = t.group_id
+         LEFT JOIN users a    ON a.id = t.assigned_to
+         WHERE t.parent_ticket_id = ?
+         ORDER BY t.id"
+    );
+    $s->execute([(int) $ticket['id']]);
+    return [
+        'parent_id' => !empty($ticket['parent_ticket_id']) ? (int) $ticket['parent_ticket_id'] : null,
+        'tasks'     => $s->fetchAll(),
+    ];
+}
+
+/**
+ * Resolve each parent ticket whose task tickets are all closed, and send its
+ * requester the usual status-change email. Rides the 5-minute sla-cron. Fires
+ * at most once per parent — the tasks_completed timeline row marks it — so a
+ * parent someone reopens afterwards stays open.
+ */
+function resolveParentsWithClosedTasks(PDO $db): int
+{
+    $parentOpen = ticketStatusSqlIn(ticketOpenBucketSlugs(), 'p.status');
+    $taskOpen   = ticketStatusSqlIn(ticketOpenBucketSlugs(), 'c.status');
+    $parents = $db->query(
+        "SELECT p.id, p.status FROM tickets p
+         WHERE {$parentOpen}
+           AND EXISTS (SELECT 1 FROM tickets c WHERE c.parent_ticket_id = p.id)
+           AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_ticket_id = p.id AND {$taskOpen})
+           AND NOT EXISTS (SELECT 1 FROM ticket_timeline tl WHERE tl.ticket_id = p.id AND tl.action = 'tasks_completed')"
+    )->fetchAll();
+
+    $resolved = ticketDefaultResolvedStatusSlug();
+    $update   = $db->prepare('UPDATE tickets SET status = ? WHERE id = ?');
+    $note     = $db->prepare("INSERT INTO ticket_timeline (ticket_id, user_id, action, details) VALUES (?, NULL, 'tasks_completed', ?)");
+    foreach ($parents as $p) {
+        $id = (int) $p['id'];
+        $update->execute([$resolved, $id]);
+        $note->execute([$id, 'All task tickets are closed. Status changed from '
+            . ticketStatusLabel($p['status']) . ' to ' . ticketStatusLabel($resolved) . '.']);
+        Sla::onStatusChanged($db, $id, $p['status'], $resolved);
+        notifyRequesterStatusChanged($db, $id, $resolved, false);
+    }
+    return count($parents);
+}
+
+/* ── Status Banners ───────────────────────────────────────────── */
+
+/**
+ * Fetch banners that should be shown to the current user right now.
+ *
+ * Visibility rules:
+ *   - is_active = 1
+ *   - within the optional starts_at / expires_at window (NULL bounds
+ *     mean "no bound on that side")
+ *   - location-scoped: a banner targets the branches listed in
+ *     status_banner_locations (no rows = global). Portal users only see
+ *     global banners or ones targeting their users.location_id;
+ *     agents/admins/power_users see every active banner regardless of
+ *     branch so they always know what's posted.
+ *
+ * Returns rows ordered by severity (critical first) then most-recent
+ * first, with `posted_by_name` joined in for the byline.
+ */
+function getActiveBanners(): array
+{
+    if (!Auth::check()) {
+        return [];
+    }
+    $db   = Database::connect();
+    $role = Auth::role();
+
+    $where  = ['b.is_active = 1'];
+    $where[] = '(b.starts_at IS NULL OR b.starts_at <= NOW())';
+    $where[] = '(b.expires_at IS NULL OR b.expires_at > NOW())';
+    $params = [];
+
+    // Portal users only see global banners or ones at their location.
+    if (!roleIsStaff($role)) {
+        $userLoc = (int) ($_SESSION['user']['location_id'] ?? 0);
+        if (!$userLoc) {
+            // Hydrate location_id lazily — older sessions may not have it.
+            $stmt = $db->prepare('SELECT location_id FROM users WHERE id = ?');
+            $stmt->execute([Auth::id()]);
+            $userLoc = (int) ($stmt->fetchColumn() ?: 0);
+            $_SESSION['user']['location_id'] = $userLoc;
+        }
+        if ($userLoc > 0) {
+            $where[]  = '(NOT EXISTS (SELECT 1 FROM status_banner_locations sbl WHERE sbl.banner_id = b.id)
+                          OR EXISTS (SELECT 1 FROM status_banner_locations sbl WHERE sbl.banner_id = b.id AND sbl.location_id = ?))';
+            $params[] = $userLoc;
+        } else {
+            $where[] = 'NOT EXISTS (SELECT 1 FROM status_banner_locations sbl WHERE sbl.banner_id = b.id)';
+        }
+    }
+
+    $sql = 'SELECT b.*,
+                   (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ", ")
+                      FROM status_banner_locations sbl
+                      JOIN locations l ON l.id = sbl.location_id
+                     WHERE sbl.banner_id = b.id) AS location_names,
+                   CONCAT(u.first_name, " ", u.last_name) AS posted_by_name
+            FROM status_banners b
+            LEFT JOIN users     u ON u.id = COALESCE(b.updated_by, b.created_by)
+            WHERE ' . implode(' AND ', $where) . '
+            ORDER BY FIELD(b.severity, "critical", "warning", "info"),
+                     b.updated_at DESC';
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    // Per-session dismissal: writes to $_SESSION['dismissed_banners'][$key]
+    // by POST /api/banners/{id}/dismiss. Key includes updated_at so editing
+    // a banner re-surfaces it for users who'd dismissed the older copy.
+    $dismissed = $_SESSION['dismissed_banners'] ?? [];
+    if ($dismissed) {
+        $rows = array_values(array_filter($rows, static function ($b) use ($dismissed) {
+            $key = (int) $b['id'] . '_' . strtotime($b['updated_at']);
+            return empty($dismissed[$key]);
+        }));
+    }
+    return $rows;
+}
+
+/**
+ * Sanitize banner body HTML (CKEditor output) before it is echoed raw into
+ * every authenticated page — staff *and* portal patrons see banners, so this
+ * is a hard stored-XSS boundary, not just defence-in-depth.
+ *
+ * Allowlist-by-construction via DOMDocument: we parse the markup, keep only a
+ * small set of formatting tags, and on those keep only a tiny set of
+ * attributes — so *every* event handler (on*) is dropped regardless of
+ * quoting/casing/whitespace, and unknown tags are unwrapped (text preserved)
+ * while script/style/iframe/svg-style tags are discarded outright. Links may
+ * only carry http/https/mailto (or relative) URLs; javascript:/data: are
+ * rejected structurally, so the old regex's reassembly bypass can't happen.
+ * Unparseable input yields '' rather than passing raw HTML through.
+ */
+/**
+ * Shared HTML allowlist sanitizer (DOMDocument-based). Parses the markup and
+ * keeps only the tags in $allowed, and on those only the listed attributes — so
+ * every event handler (on*) is dropped regardless of quoting/casing/whitespace,
+ * unknown tags are unwrapped (text preserved), and the $dropSubtree tags
+ * (script/style/iframe/svg/…) are discarded outright. Attributes named in
+ * $urlAttrs (href/src) are scheme-checked against $okSchemes — relative URLs are
+ * always allowed; javascript:/data:/etc. are rejected structurally. When
+ * $filterStyle is true a permitted `style` attribute is property-filtered via
+ * sanitizeStyleAttr(). Unparseable input yields '' rather than passing through.
+ *
+ * @param array<string,string[]> $allowed     tag => allowed attribute names
+ * @param string[]               $dropSubtree tags whose entire subtree is discarded
+ * @param string[]               $urlAttrs    attributes validated against $okSchemes
+ * @param string[]               $okSchemes   permitted URL schemes (relative always allowed)
+ */
+function sanitizeHtmlAllowlist(string $html, array $allowed, array $dropSubtree, array $urlAttrs, array $okSchemes, bool $filterStyle = false): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+    $drop = array_flip($dropSubtree);
+
+    $dom = new DOMDocument();
+    $prev = libxml_use_internal_errors(true);
+    // Wrap in a marked div + force UTF-8 so multibyte text survives intact.
+    $ok = $dom->loadHTML(
+        '<meta http-equiv="Content-Type" content="text/html; charset=utf-8"><div id="__ld_root__">' . $html . '</div>',
+        LIBXML_NOERROR | LIBXML_NOWARNING
+    );
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    if (!$ok) {
+        return '';
+    }
+
+    $xp   = new DOMXPath($dom);
+    $root = $xp->query('//*[@id="__ld_root__"]')->item(0);
+    if (!$root instanceof DOMElement) {
+        return '';
+    }
+
+    $clean = function (DOMNode $node) use (&$clean, $allowed, $drop, $urlAttrs, $okSchemes, $filterStyle): void {
+        // Snapshot children first: we mutate the live NodeList as we go.
+        foreach (iterator_to_array($node->childNodes) as $child) {
+            if ($child instanceof DOMText) {
+                continue; // text is serialized with entity-encoding — safe
+            }
+            if (!$child instanceof DOMElement) {
+                $node->removeChild($child); // comments, PIs, CDATA → gone
+                continue;
+            }
+
+            $tag = strtolower($child->localName ?? $child->nodeName);
+
+            if (isset($drop[$tag])) {
+                $node->removeChild($child);
+                continue;
+            }
+
+            if (!isset($allowed[$tag])) {
+                // Unknown-but-benign tag: clean its subtree, then unwrap it so
+                // any legitimate text content is preserved.
+                $clean($child);
+                while ($child->firstChild) {
+                    $node->insertBefore($child->firstChild, $child);
+                }
+                $node->removeChild($child);
+                continue;
+            }
+
+            // Allowed tag: drop every attribute not on its own allowlist. This
+            // is what kills on*= handlers (quoted, unquoted, or weirdly spaced).
+            $allowAttrs = $allowed[$tag];
+            foreach (iterator_to_array($child->attributes) as $attr) {
+                $an = strtolower($attr->nodeName);
+                if (!in_array($an, $allowAttrs, true)) {
+                    $child->removeAttribute($attr->nodeName);
+                    continue;
+                }
+                if (in_array($an, $urlAttrs, true)) {
+                    // Decode entities, strip control/whitespace chars, then
+                    // enforce the scheme allowlist (relative URLs are fine).
+                    $val = html_entity_decode((string) $attr->nodeValue, ENT_QUOTES | ENT_HTML5);
+                    $val = preg_replace('/[\x00-\x20]+/', '', $val) ?? '';
+                    if (preg_match('#^([a-z][a-z0-9+.\-]*):#i', $val, $m)
+                        && !in_array(strtolower($m[1]), $okSchemes, true)) {
+                        $child->removeAttribute($attr->nodeName);
+                    }
+                } elseif ($an === 'style' && $filterStyle) {
+                    $safe = sanitizeStyleAttr((string) $attr->nodeValue);
+                    if ($safe === '') {
+                        $child->removeAttribute('style');
+                    } else {
+                        $child->setAttribute('style', $safe);
+                    }
+                }
+            }
+            // Any link that opens a new tab must not leak window.opener.
+            if ($tag === 'a' && $child->hasAttribute('target')) {
+                $child->setAttribute('target', '_blank');
+                $child->setAttribute('rel', 'noopener noreferrer nofollow');
+            }
+
+            $clean($child); // recurse into the kept element
+        }
+    };
+
+    $clean($root);
+
+    $out = '';
+    foreach (iterator_to_array($root->childNodes) as $c) {
+        $out .= $dom->saveHTML($c);
+    }
+    return trim($out);
+}
+
+/**
+ * Filter a CSS `style` attribute down to a small allowlist of presentational
+ * properties with script-free values. Preserves common CKEditor output (table
+ * borders, image sizing, text alignment) while dropping anything that could
+ * carry a script vector (url(), expression(), @import, backslash escapes).
+ */
+function sanitizeStyleAttr(string $css): string
+{
+    static $allowedProps = [
+        'text-align', 'width', 'height', 'max-width', 'min-width',
+        'background-color', 'background', 'color', 'border', 'border-color',
+        'border-width', 'border-style', 'border-collapse', 'padding', 'margin',
+        'vertical-align', 'font-weight', 'font-style', 'text-decoration', 'float',
+    ];
+    $out = [];
+    foreach (explode(';', $css) as $decl) {
+        if (strpos($decl, ':') === false) {
+            continue;
+        }
+        [$prop, $val] = explode(':', $decl, 2);
+        $prop = strtolower(trim($prop));
+        $val  = trim($val);
+        if ($val === '' || !in_array($prop, $allowedProps, true)) {
+            continue;
+        }
+        // Reject any value that could smuggle script/resource loads.
+        if (preg_match('/url\s*\(|expression|javascript:|@import|<|\\\\/i', $val)) {
+            continue;
+        }
+        // Allow only a safe character set (covers rgb()/rgba()/hsl() colours).
+        if (!preg_match('/^[#a-z0-9 .,%()\-]+$/i', $val)) {
+            continue;
+        }
+        $out[] = $prop . ': ' . $val;
+    }
+    return implode('; ', $out);
+}
+
+/**
+ * Sanitize the restrictive set of formatting allowed in status banners.
+ */
+function sanitizeBannerHtml(string $html): string
+{
+    $allowed = [
+        'p' => [], 'br' => [], 'strong' => [], 'b' => [], 'em' => [], 'i' => [],
+        'u' => [], 's' => [], 'span' => [], 'div' => [], 'ul' => [], 'ol' => [],
+        'li' => [], 'h3' => [], 'h4' => [], 'h5' => [], 'h6' => [], 'blockquote' => [],
+        'code' => [], 'pre' => [],
+        'a' => ['href', 'title', 'target', 'rel'],
+    ];
+    $drop = [
+        'script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template',
+        'noscript', 'form', 'input', 'button', 'textarea', 'select', 'option',
+        'link', 'meta', 'base', 'frame', 'frameset', 'applet', 'audio', 'video', 'source',
+    ];
+    return sanitizeHtmlAllowlist($html, $allowed, $drop, ['href'], ['http', 'https', 'mailto'], false);
+}
+
+/**
+ * Sanitize rich CKEditor content for ticket descriptions, timeline comments,
+ * and KB article bodies. This is a hard stored-XSS boundary applied at render
+ * time — it neutralises any malicious markup that may already be in the
+ * database, not just new writes. The allowlist covers the tag/attribute set the
+ * WYSIWYG editor actually emits (headings, lists, tables, images, links).
+ */
+function sanitizeRichHtml(string $html): string
+{
+    $allowed = [
+        'p' => ['class', 'style'], 'br' => [], 'hr' => [],
+        'strong' => [], 'b' => [], 'em' => [], 'i' => [], 'u' => [], 's' => [],
+        'sub' => [], 'sup' => [], 'mark' => [], 'small' => [], 'del' => [], 'ins' => [], 'abbr' => ['title'],
+        'span' => ['class', 'style'], 'div' => ['class', 'style'],
+        'ul' => ['class'], 'ol' => ['class', 'start', 'type'], 'li' => ['class'],
+        'h1' => ['class'], 'h2' => ['class'], 'h3' => ['class'], 'h4' => ['class'],
+        'h5' => ['class'], 'h6' => ['class'],
+        'blockquote' => ['class'], 'code' => ['class'], 'pre' => ['class'],
+        'a' => ['href', 'title', 'target', 'rel', 'class'],
+        'img' => ['src', 'alt', 'title', 'width', 'height', 'class', 'style'],
+        'figure' => ['class', 'style'], 'figcaption' => ['class'],
+        'table' => ['class', 'style', 'border', 'cellpadding', 'cellspacing'],
+        'thead' => ['class'], 'tbody' => ['class'], 'tfoot' => ['class'],
+        'tr' => ['class', 'style'],
+        'th' => ['class', 'style', 'colspan', 'rowspan', 'scope'],
+        'td' => ['class', 'style', 'colspan', 'rowspan'],
+        'caption' => ['class'],
+    ];
+    $drop = [
+        'script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template',
+        'noscript', 'form', 'input', 'button', 'textarea', 'select', 'option',
+        'link', 'meta', 'base', 'frame', 'frameset', 'applet', 'audio', 'video', 'source',
+    ];
+    return sanitizeHtmlAllowlist($html, $allowed, $drop, ['href', 'src'], ['http', 'https', 'mailto', 'tel'], true);
+}
+
+/* ── Ticket status helpers ───────────────────────────────────────────────────
+ *
+ * All ticket statuses now come from the `ticket_statuses` lookup table
+ * (see migration 041_ticket_statuses.php). These helpers read once per
+ * request and cache the result in a static, so callers can use them as
+ * cheaply as a constant lookup.
+ *
+ * Naming convention:
+ *   - "ActiveSlugs"  → only is_active=1 (use for accepting new writes / dropdowns)
+ *   - "BucketSlugs"  → all states, active and inactive (use for SQL filters that
+ *                      need to bucket historical rows whose slug may have been
+ *                      deactivated since)
+ *   - Label/color/meta helpers also accept inactive slugs so historical tickets
+ *     still render their badge.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Roles & granular permissions (migration 042)
+ *
+ * Roles live in the `roles` table; each role grants a set of permission keys
+ * via `role_permissions`. These resolvers are keyed by role *slug* (the value
+ * stored in users.role) so both the session-based Auth class and the
+ * token-based REST API (`_apiIsStaff` etc.) can share one source of truth.
+ *
+ * The whole map is loaded once per request and memoised — at helpdesk scale
+ * that single indexed query is negligible, and resolving fresh each request
+ * means an admin's permission change takes effect on the user's next request
+ * (no stale-until-logout window from snapshotting perms into the session).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Internal: load every role with its granted permission keys, indexed by slug.
+ * Cached for the request. Returns [] if the tables are missing (paranoid guard
+ * for code paths that somehow run before migration 042 applies — callers then
+ * fail closed: no perms, not staff, not admin).
+ */
+function _rolesCache(bool $refresh = false): array
+{
+    static $cache = null;
+    if ($cache !== null && !$refresh) {
+        return $cache;
+    }
+    try {
+        $db    = Database::connect();
+        $roles = $db->query(
+            "SELECT id, slug, name, is_admin, is_staff, landing
+             FROM roles ORDER BY sort_order, id"
+        )->fetchAll(PDO::FETCH_ASSOC);
+        $perms = $db->query(
+            "SELECT role_id, perm_key FROM role_permissions"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\Throwable $e) {
+        return $cache = [];
+    }
+    $cache  = [];
+    $idToSlug = [];
+    foreach ($roles as $r) {
+        $cache[$r['slug']] = [
+            'id'       => (int) $r['id'],
+            'slug'     => (string) $r['slug'],
+            'name'     => (string) $r['name'],
+            'is_admin' => (int) $r['is_admin'] === 1,
+            'is_staff' => (int) $r['is_staff'] === 1,
+            'landing'  => (string) $r['landing'],
+            'perms'    => [],
+        ];
+        $idToSlug[(int) $r['id']] = $r['slug'];
+    }
+    foreach ($perms as $p) {
+        $slug = $idToSlug[(int) $p['role_id']] ?? null;
+        if ($slug !== null) {
+            $cache[$slug]['perms'][(string) $p['perm_key']] = true;
+        }
+    }
+    return $cache;
+}
+
+/** The full role record for a slug, or null if the role is unknown/deleted. */
+function roleRecord(?string $slug): ?array
+{
+    if ($slug === null || $slug === '') {
+        return null;
+    }
+    return _rolesCache()[$slug] ?? null;
+}
+
+/**
+ * Does this role slug grant a permission? Admin roles (is_admin) grant
+ * everything; an unknown/deleted slug grants nothing (fail closed).
+ */
+function roleCan(?string $slug, string $perm): bool
+{
+    $r = roleRecord($slug);
+    if ($r === null) {
+        return false;
+    }
+    return $r['is_admin'] || isset($r['perms'][$perm]);
+}
+
+/** Is this role a full-access admin role? */
+function roleIsAdmin(?string $slug): bool
+{
+    $r = roleRecord($slug);
+    return $r !== null && $r['is_admin'];
+}
+
+/**
+ * Ticket view URL for the current staff user: admins get the admin view,
+ * every other staff role gets the agent view (which requireStaff() allows).
+ * Reports are gated by reports.view, which non-admin roles can hold, so
+ * report links must not hard-code /admin/tickets/.
+ */
+function staffTicketUrl(int $ticketId): string
+{
+    return (Auth::isAdmin() ? '/admin/tickets/' : '/agent/tickets/') . $ticketId;
+}
+
+/** Is this role a staff (agent-interface) role? */
+function roleIsStaff(?string $slug): bool
+{
+    $r = roleRecord($slug);
+    return $r !== null && $r['is_staff'];
+}
+
+/**
+ * May the current user create and manage emailed report schedules?
+ *
+ * Anyone who can read a report can schedule it — a schedule is just that same
+ * report on a timer, so gating it separately only produced buttons that 403'd.
+ * Automation managers keep access for the case where they configure the jobs
+ * without reading the reports themselves.
+ *
+ * Keep in step with the `Auth::requirePermission()` calls on the
+ * /admin/settings/scheduled-reports routes.
+ */
+function canScheduleReports(): bool
+{
+    return Auth::can('reports.view') || Auth::can('automations.manage');
+}
+
+/**
+ * May the current user open/edit/delete this one scheduled report?
+ *
+ * A schedule is personal: its creator manages it, admins manage everyone's.
+ * An ownerless row (`created_by` NULL — a schedule whose creator's account was
+ * deleted) is admin-only, so it can be reassigned or retired deliberately
+ * rather than being adopted by whoever finds it.
+ */
+function canManageScheduledReport(array $report): bool
+{
+    if (Auth::isAdmin()) {
+        return true;
+    }
+    $owner = $report['created_by'] ?? null;
+    return $owner !== null && (int) $owner === (int) Auth::id();
+}
+
+/** Where the home route ('/') should send this role. Unknown → portal. */
+function roleLandingPath(?string $slug): string
+{
+    $r = roleRecord($slug);
+    return match ($r['landing'] ?? 'portal') {
+        'admin' => '/admin',
+        'agent' => '/agent',
+        default => '/portal',
+    };
+}
+
+/** The permission catalog grouped by category, for the role-edit matrix UI. */
+function rolePermissionCatalog(): array
+{
+    try {
+        $rows = Database::connect()->query(
+            "SELECT perm_key, label, category, description FROM permissions ORDER BY sort_order, id"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\Throwable $e) {
+        return [];
+    }
+    $byCategory = [];
+    foreach ($rows as $r) {
+        $byCategory[$r['category']][] = $r;
+    }
+    return $byCategory;
+}
+
+/** Flat list of every valid permission key — used to validate posted grants. */
+function rolePermissionKeys(): array
+{
+    try {
+        return Database::connect()
+            ->query('SELECT perm_key FROM permissions')
+            ->fetchAll(PDO::FETCH_COLUMN);
+    } catch (\Throwable $e) {
+        return [];
+    }
+}
+
+/** Human-readable name for a role slug (falls back to a prettified slug). */
+function roleLabel(?string $slug): string
+{
+    $r = roleRecord($slug);
+    if ($r !== null) {
+        return $r['name'];
+    }
+    return ucwords(str_replace('_', ' ', (string) $slug));
+}
+
+/** Ordered [slug => display name] of every role — for user-form dropdowns. */
+function roleChoices(): array
+{
+    $out = [];
+    foreach (_rolesCache() as $slug => $r) {
+        $out[$slug] = $r['name'];
+    }
+    return $out;
+}
+
+/** Does a role slug exist? Used to validate role values on user writes. */
+function roleExists(?string $slug): bool
+{
+    return roleRecord($slug) !== null;
+}
+
+/**
+ * May a user holding $actorSlug assign $targetSlug to someone? Admins may assign
+ * any level; everyone else only a level whose capabilities are a subset of their
+ * own — so a non-admin with users.manage can never grant a permission they don't
+ * themselves hold, and never the admin level. Closes privilege escalation via
+ * the user editor. A role is always assignable by itself (equal set) and 'user'
+ * (empty set) is assignable by anyone staff.
+ */
+function roleAssignableBy(?string $actorSlug, ?string $targetSlug): bool
+{
+    $actor = roleRecord($actorSlug);
+    if ($actor === null) {
+        return false;
+    }
+    if ($actor['is_admin']) {
+        return true;
+    }
+    $target = roleRecord($targetSlug);
+    if ($target === null || $target['is_admin']) {
+        return false;
+    }
+    foreach (array_keys($target['perms'] ?? []) as $perm) {
+        if (!isset($actor['perms'][$perm])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/** [slug => name] of the roles $actorSlug may assign — for user-form dropdowns. */
+function assignableRoleChoices(?string $actorSlug): array
+{
+    $out = [];
+    foreach (roleChoices() as $slug => $name) {
+        if (roleAssignableBy($actorSlug, $slug)) {
+            $out[$slug] = $name;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Slugs of every staff role (is_staff=1). Replaces the hardcoded
+ * ['agent','admin','power_user'] lists scattered through the app. Falls back to
+ * the three built-in staff slugs if the table can't be read.
+ */
+function staffRoleSlugs(): array
+{
+    $out = [];
+    foreach (_rolesCache() as $slug => $r) {
+        if ($r['is_staff']) {
+            $out[] = $slug;
+        }
+    }
+    return $out ?: ['admin', 'agent', 'power_user'];
+}
+
+/**
+ * A safe SQL `IN (...)` predicate of quoted staff-role slugs for a column, e.g.
+ *   staffRoleSqlIn('u.role')  →  "u.role IN ('admin','agent','power_user')"
+ *
+ * Slugs originate only from the roles table (never user input) and are scrubbed
+ * to the slug charset here, so inlining them is injection-safe and avoids
+ * threading variadic placeholders through the ~40 existing "staff" queries.
+ */
+function staffRoleSqlIn(string $column): string
+{
+    $quoted = array_map(static function (string $s): string {
+        return "'" . preg_replace('/[^a-z0-9_]/i', '', $s) . "'";
+    }, staffRoleSlugs());
+    return $column . ' IN (' . implode(',', $quoted) . ')';
+}
+
+/**
+ * Internal: fetch all status rows, indexed by slug, ordered by sort_order.
+ * Cached for the request. Pass $refresh=true after writing to the table
+ * within the same request to re-query (the admin settings save handler uses
+ * this so its own POST-then-redirect cycle reflects fresh data if it ever
+ * needs to read back within the same script).
+ *
+ * Returns [] if the table is missing (paranoid guard for code paths that
+ * somehow run before migration 041 applies).
+ */
+function _ticketStatusCache(bool $refresh = false): array
+{
+    static $cache = null;
+    if ($cache !== null && !$refresh) {
+        return $cache;
+    }
+    try {
+        $rows = Database::connect()
+            ->query(
+                "SELECT id, slug, label, bucket, pauses_sla, sort_order, color,
+                        is_default_new, is_default_resolved, is_default_closed,
+                        is_system, is_active
+                 FROM ticket_statuses
+                 ORDER BY sort_order, id"
+            )
+            ->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\Throwable $e) {
+        return $cache = [];
+    }
+    $cache = [];
+    foreach ($rows as $r) {
+        $cache[$r['slug']] = [
+            'id'                  => (int) $r['id'],
+            'slug'                => (string) $r['slug'],
+            'label'               => (string) $r['label'],
+            'bucket'              => (string) $r['bucket'],
+            'pauses_sla'          => (int) $r['pauses_sla'] === 1,
+            'sort_order'          => (int) $r['sort_order'],
+            'color'               => (string) $r['color'],
+            'is_default_new'      => (int) $r['is_default_new'] === 1,
+            'is_default_resolved' => (int) $r['is_default_resolved'] === 1,
+            'is_default_closed'   => (int) $r['is_default_closed'] === 1,
+            'is_system'           => (int) $r['is_system'] === 1,
+            'is_active'           => (int) $r['is_active'] === 1,
+        ];
+    }
+    return $cache;
+}
+
+/** All status rows (active + inactive), ordered by sort_order. */
+function ticketStatuses(): array
+{
+    return array_values(_ticketStatusCache());
+}
+
+/** Active status rows only, ordered. Use for dropdowns and admin pickers. */
+function ticketActiveStatuses(): array
+{
+    return array_values(array_filter(
+        _ticketStatusCache(),
+        static fn(array $s) => $s['is_active']
+    ));
+}
+
+/** All slugs (active + inactive). Use for "does this slug exist?" checks. */
+function ticketStatusSlugs(): array
+{
+    return array_keys(_ticketStatusCache());
+}
+
+/** Active slugs only. Use for validating incoming status writes. */
+function ticketActiveStatusSlugs(): array
+{
+    return array_map(static fn(array $s) => $s['slug'], ticketActiveStatuses());
+}
+
+/**
+ * Slugs in the "open" bucket — replaces the hardcoded
+ * `IN ('open','in_progress','pending')` filters scattered through the codebase.
+ * Includes inactive rows so historical tickets keep counting.
+ */
+function ticketOpenBucketSlugs(): array
+{
+    return array_values(array_map(
+        static fn(array $s) => $s['slug'],
+        array_filter(_ticketStatusCache(), static fn(array $s) => $s['bucket'] === 'open')
+    ));
+}
+
+/**
+ * "Resolved today" predicate: closed-bucket tickets (Resolved AND Closed) last
+ * updated today, minus duplicate / won't-fix / no-response closes. Shared by
+ * every "Resolved today" card, filter and count so they agree. The date range
+ * is the sargable form — DATE(updated_at) would defeat the index.
+ */
+function ticketResolvedTodaySql(string $t = 't'): string
+{
+    return ticketStatusSqlIn(ticketClosedBucketSlugs(), "{$t}.status")
+         . " AND {$t}.close_reason IS NULL"
+         . " AND {$t}.updated_at >= CURDATE() AND {$t}.updated_at < CURDATE() + INTERVAL 1 DAY";
+}
+
+/**
+ * Slugs in the "closed" bucket — replaces hardcoded `IN ('resolved','closed')`
+ * and `NOT IN ('resolved','closed')` filters.
+ */
+function ticketClosedBucketSlugs(): array
+{
+    return array_values(array_map(
+        static fn(array $s) => $s['slug'],
+        array_filter(_ticketStatusCache(), static fn(array $s) => $s['bucket'] === 'closed')
+    ));
+}
+
+/**
+ * Record what happened when a ticket type with `require_resolution_on_close`
+ * is closed from the ticket page. Called only from the /update handlers when the
+ * submitted status lands in the closed bucket. Writes an INTERNAL timeline note
+ * (so it documents troubleshooting steps for staff without emailing the
+ * requester): either the resolution note the owner typed, or — if they chose to
+ * close without one — the reason they picked. A no-op if both are empty.
+ */
+function recordCloseResolution(PDO $db, int $ticketId, int $userId, string $note, string $reason): void
+{
+    $note   = trim($note);
+    $reason = trim($reason);
+    if ($note !== '') {
+        $details = $note;
+    } elseif ($reason !== '') {
+        $details = 'Closed without a resolution note. Reason: ' . $reason;
+    } else {
+        return;
+    }
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 1)'
+    )->execute([$ticketId, $userId, 'comment', $details]);
+}
+
+/* ── Close split-button (ticket page) ─────────────────────────── */
+
+/**
+ * The Close button's dropdown options (v2.183.0). Every option rides the normal
+ * /update submit, so the optimistic lock, resolution-note gate, SLA, automations
+ * and timeline behave exactly like a sidebar close; the form just adds a
+ * `close_mode`. The plain Close button and "Close and notify" send no mode, so
+ * they ARE the sidebar close. Merge has no mode — it opens the merge modal.
+ *
+ * Returns the mode when the submit is a Close-menu close into a closed-bucket
+ * status, else null (= the ordinary update path, notifications as before).
+ */
+function ticketCloseMode(array $post, string $newStatus): ?string
+{
+    $mode = (string) ($post['close_mode'] ?? '');
+    $modes = ['silent', 'feedback', 'duplicate', 'wont_fix', 'no_response', 'kb', 'reopen_on_reply', 'followup'];
+    return in_array($mode, $modes, true) && in_array($newStatus, ticketClosedBucketSlugs(), true) ? $mode : null;
+}
+
+/** Header badge text for a closed ticket's close_reason. */
+function ticketCloseReasonLabel(string $reason): string
+{
+    return ['duplicate' => 'Duplicate', 'wont_fix' => "Won't fix", 'no_response' => 'No response'][$reason] ?? $reason;
+}
+
+/**
+ * What the Close modal's "Email the requester" box + message turn into:
+ * a message is a public reply (emailed) or, unticked, an internal note; with
+ * no message the requester gets the standard "ticket closed" email or nothing.
+ */
+function closeNotifyAction(bool $notify, string $message): string
+{
+    if (trim($message) !== '') {
+        return $notify ? 'reply' : 'note';
+    }
+    return $notify ? 'closed_email' : 'none';
+}
+
+/**
+ * Parse the follow-up modal's <input type="datetime-local"> value. Must be a
+ * real time in the future and within a year. Returns 'Y-m-d H:i:s' in PHP's
+ * timezone (the cron compares in PHP too), or null.
+ */
+function followupDueAt(string $input, int $now): ?string
+{
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $input);
+    if (!$dt || $dt->format('Y-m-d\TH:i') !== $input) {
+        return null;
+    }
+    $ts = $dt->getTimestamp();
+    if ($ts <= $now || $ts > $now + 366 * 86400) {
+        return null;
+    }
+    return date('Y-m-d H:i:s', $ts);
+}
+
+/**
+ * Do the mode-specific part of a Close-menu close. Called by both /update
+ * handlers AFTER the status change (Sla::onStatusChanged clears the previous
+ * close's metadata, so the order matters). Returns a redirect URL to use
+ * instead of the ticket page, or null.
+ */
+function applyTicketCloseMode(PDO $db, int $ticketId, string $status, string $mode, array $in): ?string
+{
+    $uid      = (int) Auth::id();
+    $notify   = !empty($in['close_notify']);
+    $message  = trim((string) ($in['close_message'] ?? ''));
+    $redirect = null;
+    $note     = static function (string $text, int $onTicket) use ($db, $uid): void {
+        $db->prepare(
+            'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 1)'
+        )->execute([$onTicket, $uid, 'comment', $text]);
+    };
+
+    switch ($mode) {
+        case 'silent':
+            return null;
+
+        case 'feedback':
+            // The survey email IS the requester's notice. sendCsatSurvey no-ops
+            // when surveys are off or this ticket was already surveyed.
+            sendCsatSurvey($db, $ticketId);
+            return null;
+
+        case 'kb':
+            $notify  = true; // otherwise a plain Close: standard closed email
+            $message = '';
+            if (Auth::can('kb.articles.manage')) {
+                flashInput(ticketKbDraft($db, $ticketId));
+                $redirect = '/admin/kb/articles/create';
+            }
+            break;
+
+        case 'duplicate':
+            $origId = (int) ($in['duplicate_of'] ?? 0);
+            $o = $db->prepare('SELECT id FROM tickets WHERE id = ? AND id <> ?');
+            $o->execute([$origId, $ticketId]);
+            if (!$o->fetchColumn()) {
+                flash('error', 'Ticket closed, but the original ticket was not found, so it was not linked as a duplicate.');
+                break;
+            }
+            $db->prepare("UPDATE tickets SET close_reason = 'duplicate', duplicate_of_ticket_id = ? WHERE id = ?")
+               ->execute([$origId, $ticketId]);
+            // The original inherits the duplicate's linked assets (the duplicate keeps its own record).
+            $db->prepare(
+                'INSERT IGNORE INTO ticket_asset_map (ticket_id, asset_id, linked_by)
+                 SELECT ?, asset_id, linked_by FROM ticket_asset_map WHERE ticket_id = ?'
+            )->execute([$origId, $ticketId]);
+            $note("Closed as a duplicate of #{$origId}.", $ticketId);
+            $note("Ticket #{$ticketId} was closed as a duplicate of this ticket.", $origId);
+            break;
+
+        case 'wont_fix':
+        case 'no_response':
+            $db->prepare('UPDATE tickets SET close_reason = ? WHERE id = ?')->execute([$mode, $ticketId]);
+            $note('Closed as ' . strtolower(ticketCloseReasonLabel($mode)) . '.', $ticketId);
+            break;
+
+        case 'reopen_on_reply':
+            $days = max(1, min(90, (int) ($in['reopen_days'] ?? 7)));
+            $until = date('Y-m-d H:i:s', time() + $days * 86400);
+            $db->prepare('UPDATE tickets SET reopen_on_reply_until = ? WHERE id = ?')->execute([$until, $ticketId]);
+            $note('Will reopen automatically if the requester replies before ' . date('M j, Y g:i A', strtotime($until)) . '.', $ticketId);
+            break;
+
+        case 'followup':
+            $due = followupDueAt((string) ($in['followup_at'] ?? ''), time());
+            if ($due === null) {
+                flash('error', 'Ticket closed, but the follow-up time was missing or in the past, so no reminder was set.');
+                break;
+            }
+            $fuNote = mb_substr(trim((string) ($in['followup_note'] ?? '')), 0, 500);
+            $db->prepare('INSERT INTO ticket_followups (ticket_id, user_id, due_at, note, created_at) VALUES (?, ?, ?, ?, ?)')
+               ->execute([$ticketId, $uid, $due, $fuNote, date('Y-m-d H:i:s')]);
+            $note('Follow-up reminder set for ' . date('M j, Y g:i A', strtotime($due)) . ($fuNote !== '' ? ": {$fuNote}" : '.'), $ticketId);
+            break;
+    }
+
+    switch (closeNotifyAction($notify, $message)) {
+        case 'reply':
+            $db->prepare(
+                'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 0)'
+            )->execute([$ticketId, $uid, 'comment', $message]);
+            notifyTicketCreator($db, $ticketId, $message, Auth::fullName());
+            break;
+        case 'note':
+            $note($message, $ticketId);
+            break;
+        case 'closed_email':
+            notifyRequesterStatusChanged($db, $ticketId, $status, false);
+            break;
+    }
+    return $redirect;
+}
+
+/**
+ * Prefill for "Close and create KB article": the ticket's subject, its
+ * description as the problem, and the resolution — the marked solution, else
+ * the latest public staff reply, else the latest staff note. Shaped for
+ * flashInput() so the KB create form's old() picks it up.
+ */
+function ticketKbDraft(PDO $db, int $ticketId): array
+{
+    $t = $db->prepare('SELECT subject, description, solution_timeline_id FROM tickets WHERE id = ?');
+    $t->execute([$ticketId]);
+    $ticket = $t->fetch();
+    if (!$ticket) {
+        return [];
+    }
+    $r = $db->prepare(
+        "SELECT tl.details FROM ticket_timeline tl
+         JOIN users u ON u.id = tl.user_id
+         WHERE tl.ticket_id = ? AND tl.action = 'comment' AND " . staffRoleSqlIn('u.role') . "
+         ORDER BY (tl.id = ?) DESC, tl.is_internal ASC, tl.created_at DESC LIMIT 1"
+    );
+    $r->execute([$ticketId, (int) ($ticket['solution_timeline_id'] ?? 0)]);
+    $resolution = (string) ($r->fetchColumn() ?: '');
+
+    $html = static fn(string $s): string => ($s !== '' && ltrim($s)[0] === '<') ? sanitizeRichHtml($s) : '<p>' . nl2br(e($s)) . '</p>';
+    return [
+        'title'         => $ticket['subject'],
+        'status'        => 'draft',
+        'body_markdown' => '<h2>Problem</h2>' . $html((string) $ticket['description'])
+                         . '<h2>Resolution</h2>' . $html($resolution),
+    ];
+}
+
+/**
+ * "Close and reopen on reply": a closed ticket whose reopen_on_reply_until has
+ * not passed goes back to the default new status when its requester replies.
+ * Called from every requester reply path (portal, email, API) before the reply
+ * is stored. Returns true if it reopened.
+ */
+function reopenOnRequesterReply(PDO $db, int $ticketId, int $userId): bool
+{
+    $s = $db->prepare('SELECT status, created_by, reopen_on_reply_until FROM tickets WHERE id = ?');
+    $s->execute([$ticketId]);
+    $t = $s->fetch();
+    if (!$t || $t['reopen_on_reply_until'] === null || (int) $t['created_by'] !== $userId
+        || strtotime($t['reopen_on_reply_until']) < time()
+        || !in_array($t['status'], ticketClosedBucketSlugs(), true)) {
+        return false;
+    }
+    $newStatus = ticketDefaultNewStatusSlug();
+    $db->prepare('UPDATE tickets SET status = ? WHERE id = ?')->execute([$newStatus, $ticketId]);
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, ?, ?, ?, 0)'
+    )->execute([$ticketId, $userId, 'status_changed', "Status changed from {$t['status']} to {$newStatus} (reopened: the requester replied)"]);
+    notifyAgentStatusChanged($db, $ticketId, $t['status'], $newStatus, $userId);
+    Sla::onStatusChanged($db, $ticketId, $t['status'], $newStatus); // also clears the window
+    return true;
+}
+
+/**
+ * Fire due "Close and schedule follow-up" reminders as in-app (and push)
+ * notifications to the agent who set them. Run by the SLA cron. Each row is
+ * claimed before notifying, so overlapping runs can't double-send.
+ */
+function processDueTicketFollowups(PDO $db): int
+{
+    $due = $db->prepare('SELECT id, ticket_id, user_id, note FROM ticket_followups WHERE sent_at IS NULL AND due_at <= ? ORDER BY due_at LIMIT 200');
+    $due->execute([date('Y-m-d H:i:s')]);
+    $claim = $db->prepare('UPDATE ticket_followups SET sent_at = ? WHERE id = ? AND sent_at IS NULL');
+    $sent  = 0;
+    foreach ($due->fetchAll() as $f) {
+        $claim->execute([date('Y-m-d H:i:s'), $f['id']]);
+        if ($claim->rowCount() === 0) {
+            continue;
+        }
+        createNotification($db, (int) $f['user_id'], (int) $f['ticket_id'], 'followup',
+            $f['note'] !== '' ? $f['note'] : 'Time to follow up on this ticket.');
+        $sent++;
+    }
+    return $sent;
+}
+
+/**
+ * Merge moves the conversation, not just a link (v2.183.0). The source's
+ * replies, notes and forwards — with their attachments — are re-parented onto
+ * the target, and its original description lands there as a reply dated when
+ * it was written. Rows keep their created_at, so they interleave by time.
+ * System events (created, assigned, SLA, ...) stay on the source. Call inside
+ * the merge transaction, before the 'merged' timeline entries are written.
+ */
+function moveTicketThread(PDO $db, int $sourceId, int $targetId): void
+{
+    $s = $db->prepare('SELECT subject, description, created_by, created_at FROM tickets WHERE id = ?');
+    $s->execute([$sourceId]);
+    $src = $s->fetch();
+    if (!$src) {
+        return;
+    }
+
+    $desc    = (string) $src['description'];
+    $intro   = "Original request from merged ticket #{$sourceId} ({$src['subject']})";
+    $details = ($desc !== '' && ltrim($desc)[0] === '<')
+        ? '<p><em>' . e($intro) . '</em></p>' . $desc
+        : $intro . ":\n\n" . $desc;
+    $db->prepare(
+        'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal, created_at) VALUES (?, ?, ?, ?, 0, ?)'
+    )->execute([$targetId, $src['created_by'], 'comment', $details, $src['created_at']]);
+    $descRowId = (int) $db->lastInsertId();
+
+    // Description attachments (no timeline row) follow the description.
+    $db->prepare('UPDATE ticket_attachments SET ticket_id = ?, timeline_id = ? WHERE ticket_id = ? AND timeline_id IS NULL')
+       ->execute([$targetId, $descRowId, $sourceId]);
+    $db->prepare(
+        "UPDATE ticket_attachments ta JOIN ticket_timeline tl ON tl.id = ta.timeline_id
+         SET ta.ticket_id = ? WHERE ta.ticket_id = ? AND tl.action IN ('comment', 'forwarded')"
+    )->execute([$targetId, $sourceId]);
+    $db->prepare("UPDATE ticket_timeline SET ticket_id = ? WHERE ticket_id = ? AND action IN ('comment', 'forwarded')")
+       ->execute([$targetId, $sourceId]);
+    // A marked solution would now point at a row on another ticket.
+    $db->prepare('UPDATE tickets SET solution_timeline_id = NULL WHERE id = ?')->execute([$sourceId]);
+    // Linked assets are copied, not moved, the same as a duplicate-close: the source keeps its own record.
+    $db->prepare(
+        'INSERT IGNORE INTO ticket_asset_map (ticket_id, asset_id, linked_by)
+         SELECT ?, asset_id, linked_by FROM ticket_asset_map WHERE ticket_id = ?'
+    )->execute([$targetId, $sourceId]);
+}
+
+/** Slugs that pause SLA timers — replaces the inline $pausingStatuses arrays. */
+function ticketSlaPausingSlugs(): array
+{
+    return array_values(array_map(
+        static fn(array $s) => $s['slug'],
+        array_filter(_ticketStatusCache(), static fn(array $s) => $s['pauses_sla'])
+    ));
+}
+
+/**
+ * Slug assigned to new tickets. Replaces hardcoded `'open'` fallbacks.
+ * Always returns a slug; falls back to the original 'open' if the flag was
+ * somehow cleared (defensive — guardrails prevent this in normal use).
+ */
+function ticketDefaultNewStatusSlug(): string
+{
+    foreach (_ticketStatusCache() as $s) {
+        if ($s['is_default_new']) {
+            return $s['slug'];
+        }
+    }
+    return 'open';
+}
+
+/** Slug that fires the "ticket resolved" email template. */
+function ticketDefaultResolvedStatusSlug(): string
+{
+    foreach (_ticketStatusCache() as $s) {
+        if ($s['is_default_resolved']) {
+            return $s['slug'];
+        }
+    }
+    return 'resolved';
+}
+
+/** Slug that fires the "ticket closed" email template. */
+function ticketDefaultClosedStatusSlug(): string
+{
+    foreach (_ticketStatusCache() as $s) {
+        if ($s['is_default_closed']) {
+            return $s['slug'];
+        }
+    }
+    return 'closed';
+}
+
+/**
+ * Friendly label for a status slug. Falls back to a humanized version of the
+ * slug if the row doesn't exist (so an orphan `tickets.status` value still
+ * renders something readable instead of "" or a 500).
+ */
+function ticketStatusLabel(string $slug): string
+{
+    $row = _ticketStatusCache()[$slug] ?? null;
+    if ($row !== null) {
+        return $row['label'];
+    }
+    return ucwords(str_replace('_', ' ', $slug));
+}
+
+/** Hex color for a status slug. Falls back to a neutral gray for orphans. */
+function ticketStatusColor(string $slug): string
+{
+    return _ticketStatusCache()[$slug]['color'] ?? '#6c757d';
+}
+
+/**
+ * Full row for a slug (or null). Use when a template needs more than just the
+ * label/color — e.g., the bucket or pauses_sla flag.
+ */
+function ticketStatusMeta(string $slug): ?array
+{
+    return _ticketStatusCache()[$slug] ?? null;
+}
+
+/**
+ * Re-query the lookup table from disk and replace the request-scoped cache.
+ * Call after writing to ticket_statuses inside the same request.
+ */
+function ticketStatusCacheRefresh(): void
+{
+    _ticketStatusCache(true);
+}
+
+/**
+ * Find every place a status slug is referenced, so the admin settings UI can
+ * block destructive actions (delete / deactivate) on still-referenced rows.
+ *
+ * Returns an array keyed by reference kind:
+ *   [
+ *     'tickets'         => int,                                  // count of rows
+ *     'automations'     => [['id'=>int,'name'=>string], ...],    // names for the error UI
+ *     'escalation_rules'=> [['id'=>int,'name'=>string], ...],
+ *     'csat_trigger'    => bool,                                 // csat_trigger_status setting points here
+ *     'is_default_new'      => bool,
+ *     'is_default_resolved' => bool,
+ *     'is_default_closed'   => bool,
+ *   ]
+ *
+ * Automations and escalation_rules store their conditions/actions as JSON
+ * strings in longtext columns, so we walk the parsed structure rather than
+ * relying on LIKE — that's both correct (no false positives from substrings
+ * inside other field names) and resilient to future schema additions.
+ */
+function ticketStatusReferences(string $slug): array
+{
+    $db = Database::connect();
+
+    $refs = [
+        'tickets'              => 0,
+        'automations'          => [],
+        'escalation_rules'     => [],
+        'csat_trigger'         => false,
+        'is_default_new'       => false,
+        'is_default_resolved'  => false,
+        'is_default_closed'    => false,
+    ];
+
+    // 1. Tickets currently holding this slug
+    $s = $db->prepare('SELECT COUNT(*) FROM tickets WHERE status = ?');
+    $s->execute([$slug]);
+    $refs['tickets'] = (int) $s->fetchColumn();
+
+    // 2. Default flags on the row itself
+    $s = $db->prepare(
+        'SELECT is_default_new, is_default_resolved, is_default_closed
+         FROM ticket_statuses WHERE slug = ?'
+    );
+    $s->execute([$slug]);
+    if ($row = $s->fetch(PDO::FETCH_ASSOC)) {
+        $refs['is_default_new']      = (int) $row['is_default_new']      === 1;
+        $refs['is_default_resolved'] = (int) $row['is_default_resolved'] === 1;
+        $refs['is_default_closed']   = (int) $row['is_default_closed']   === 1;
+    }
+
+    // 3. CSAT trigger setting
+    if (getSetting('csat_trigger_status', '') === $slug) {
+        $refs['csat_trigger'] = true;
+    }
+
+    // 4. Automations — walk conditions + actions JSON looking for status refs
+    foreach (['automations', 'escalation_rules'] as $table) {
+        $rows = $db->query("SELECT id, name, conditions, actions FROM `{$table}`")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            $conds   = json_decode((string) $r['conditions'], true) ?: [];
+            $actions = json_decode((string) $r['actions'],    true) ?: [];
+            if (_statusAppearsInRules($conds, $slug) || _statusAppearsInRules($actions, $slug)) {
+                $refs[$table][] = ['id' => (int) $r['id'], 'name' => (string) $r['name']];
+            }
+        }
+    }
+
+    return $refs;
+}
+
+/**
+ * Internal: does a parsed conditions/actions array reference the given slug
+ * as a status value? Match shapes:
+ *   [{"field":"status","value":"<slug>"}, ...]   (conditions)
+ *   [{"action":"set_status","value":"<slug>"}, ...]   (actions)
+ */
+function _statusAppearsInRules(array $rules, string $slug): bool
+{
+    foreach ($rules as $rule) {
+        if (!is_array($rule)) {
+            continue;
+        }
+        $value = (string) ($rule['value'] ?? '');
+        if ($value !== $slug) {
+            continue;
+        }
+        $isStatusCondition = ($rule['field']  ?? '') === 'status';
+        $isStatusAction    = ($rule['action'] ?? '') === 'set_status';
+        if ($isStatusCondition || $isStatusAction) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Build a SQL `<col> IN (...)` (or `NOT IN (...)`) fragment from a slug array,
+ * with each value PDO-quoted so it's safe to string-concatenate into a query.
+ * Replaces the hardcoded `status IN ('open','in_progress','pending')` patterns
+ * scattered through the codebase. If $slugs is empty the fragment evaluates to
+ * a safe false (or true, for negate=true) so callers don't have to special-case
+ * the empty list.
+ */
+function ticketStatusSqlIn(array $slugs, string $col = 'status', bool $negate = false): string
+{
+    if (empty($slugs)) {
+        return $negate ? '1=1' : '1=0';
+    }
+    $pdo = Database::connect();
+    $quoted = array_map(static fn(string $s) => $pdo->quote($s), array_values($slugs));
+    $op = $negate ? 'NOT IN' : 'IN';
+    return "{$col} {$op} (" . implode(',', $quoted) . ")";
+}
+
+/**
+ * Pick a readable text color (black or white) for the given hex background.
+ * Uses ITU-R BT.601 luma; the 140 threshold is the same one Bootstrap uses
+ * internally for its `text-bg-*` utility classes, so admin-picked colors look
+ * consistent with the built-in ones.
+ */
+function ticketStatusTextColor(string $hex): string
+{
+    $hex = ltrim($hex, '#');
+    if (strlen($hex) === 3) {
+        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+    }
+    if (strlen($hex) !== 6 || !ctype_xdigit($hex)) {
+        return '#ffffff';
+    }
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+    $luma = 0.299 * $r + 0.587 * $g + 0.114 * $b;
+    return $luma > 140 ? '#000000' : '#ffffff';
+}
+
+/**
+ * Slug → label map for active statuses, in sort_order. Use in template
+ * dropdown loops that previously iterated an inline $statusLabels array.
+ */
+function ticketStatusLabelMap(): array
+{
+    $map = [];
+    foreach (ticketActiveStatuses() as $s) {
+        $map[$s['slug']] = $s['label'];
+    }
+    return $map;
+}
+
+/**
+ * `style=""` attribute value for a status badge — background + auto-contrast
+ * text color. Use directly in templates that need a custom label (e.g., portal
+ * uses friendlier names than the slug suggests). When the label is the default,
+ * prefer `ticketStatusBadgeHtml()` instead.
+ */
+function ticketStatusBadgeStyle(string $slug): string
+{
+    $bg = ticketStatusColor($slug);
+    $fg = ticketStatusTextColor($bg);
+    return sprintf(
+        'background-color: %s; color: %s',
+        htmlspecialchars($bg, ENT_QUOTES),
+        $fg
+    );
+}
+
+/**
+ * Render the full status badge HTML for a slug. Replaces the per-template
+ * `$statusColors[$slug]` / `$statusLabels[$slug]` lookup tables. Uses inline
+ * style so admin-picked colors render without requiring CSS regeneration.
+ */
+function ticketStatusBadgeHtml(string $slug, string $extraClass = ''): string
+{
+    $bg = ticketStatusColor($slug);
+    $fg = ticketStatusTextColor($bg);
+    $label = ticketStatusLabel($slug);
+    $class = trim('badge ' . $extraClass);
+    return sprintf(
+        '<span class="%s" style="background-color: %s; color: %s">%s</span>',
+        htmlspecialchars($class, ENT_QUOTES),
+        htmlspecialchars($bg, ENT_QUOTES),
+        $fg,
+        htmlspecialchars($label, ENT_QUOTES)
+    );
+}
+
+/**
+ * The users-table columns that hold a person's email-notification opt-outs.
+ * An explicit allow-list, so a posted field name can never pick an arbitrary
+ * column.
+ */
+function notifyPrefColumns(): array
+{
+    return [
+        'notify_ticket_created', 'notify_ticket_updated', 'notify_ticket_cc',
+        'notify_ticket_merged', 'notify_escalation', 'notify_csat',
+        'notify_group_new_ticket', 'notify_assigned_to_me', 'notify_assigned_to_group',
+        'notify_requester_replied', 'notify_note_added', 'notify_ticket_solved',
+        'notify_ticket_closed', 'notify_ticket_assigned', 'notify_mention',
+    ];
+}
+
+/**
+ * Save the notification switches from a form that rendered the notify-prefs
+ * partial. Only the columns listed in `_notify_fields` are touched, so a
+ * switch that wasn't shown for this role is never silently zeroed; a rendered
+ * but unchecked box is absent from $post and resolves to 0.
+ *
+ * @return array{0: array, 1: array} [before, after] for the touched columns
+ */
+function saveNotifyPrefsFromPost(PDO $db, int $userId, array $post): array
+{
+    $cols = array_values(array_intersect(
+        array_filter(array_map('trim', explode(',', (string) ($post['_notify_fields'] ?? '')))),
+        notifyPrefColumns()
+    ));
+    if (!$cols) {
+        return [[], []];
+    }
+
+    $stmt = $db->prepare('SELECT ' . implode(', ', $cols) . ' FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $before = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    $after = [];
+    foreach ($cols as $c) {
+        $after[$c] = isset($post[$c]) ? 1 : 0;
+    }
+    $setSql = implode(', ', array_map(static fn($c) => "$c = ?", $cols));
+    $db->prepare("UPDATE users SET $setSql WHERE id = ?")->execute([...array_values($after), $userId]);
+
+    return [$before, $after];
+}
+
+/**
+ * May this user see / act on this ticket? One rule for every non-HTML surface
+ * (REST API, Teams bot). Mirrors _agentRequireTicketAccess():
+ *   - admin  → yes
+ *   - user   → only tickets they created
+ *   - confidential type → only the type's confidential-group members or the creator
+ *   - otherwise → view_all holders; group members (and group-less tickets); the
+ *     creator; or an assignee / watcher (ticketAccessExempt)
+ * Only $ticket['id'] is trusted for staff; group/type/creator are re-fetched.
+ */
+function userCanAccessTicket(PDO $db, array $user, array $ticket): bool
+{
+    if (roleIsAdmin($user['role'] ?? null)) {
+        return true;
+    }
+    $userId = (int) ($user['id'] ?? 0);
+    if (!roleIsStaff($user['role'] ?? null)) {
+        return (int) ($ticket['created_by'] ?? 0) === $userId;
+    }
+
+    $ticketId       = (int) ($ticket['id'] ?? 0);
+    $groupId        = array_key_exists('group_id', $ticket) ? $ticket['group_id'] : null;
+    $createdBy      = (int) ($ticket['created_by'] ?? 0);
+    $isConfidential = false;
+    $confGroupId    = null;
+    if ($ticketId > 0) {
+        $meta = $db->prepare(
+            'SELECT t.group_id, t.created_by, tt.is_confidential, tt.group_id AS conf_group_id
+             FROM tickets t LEFT JOIN ticket_types tt ON t.type_id = tt.id WHERE t.id = ?'
+        );
+        $meta->execute([$ticketId]);
+        if ($row = $meta->fetch()) {
+            $groupId        = $row['group_id'];
+            $createdBy      = (int) $row['created_by'];
+            $isConfidential = (int) ($row['is_confidential'] ?? 0) === 1;
+            $confGroupId    = $row['conf_group_id'] !== null ? (int) $row['conf_group_id'] : null;
+        }
+    }
+
+    $userGroups = userGroupIds($db, $userId);
+    if ($isConfidential) {
+        return ($confGroupId !== null && in_array($confGroupId, $userGroups, true)) || $createdBy === $userId;
+    }
+    if (roleCan($user['role'] ?? null, 'tickets.view_all')) {
+        return true;
+    }
+    $gid = $groupId !== null ? (int) $groupId : null;
+    if (!empty($userGroups) && ($gid === null || in_array($gid, $userGroups, true))) {
+        return true;
+    }
+    return $createdBy === $userId || ticketAccessExempt($db, $userId, $ticketId);
+}
