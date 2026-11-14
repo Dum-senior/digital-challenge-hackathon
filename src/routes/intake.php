@@ -339,7 +339,7 @@ $intakeConfirm = static function (array $p): void {
     // Only reached for the FIRST successful confirmation. The row lock above
     // prevents duplicate tickets, SLA initialisation, and notification attempts.
     try {
-        $picked = runPostTicketCreateHooks($db, $ticketId);
+        runPostTicketCreateHooks($db, $ticketId, classify: false);
         $last = $db->prepare('SELECT assigned_to FROM tickets WHERE id = ?');
         $last->execute([$ticketId]);
         $assignee = $last->fetchColumn();

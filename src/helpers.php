@@ -2440,10 +2440,12 @@ function _autoAssignByAiSkill(PDO $db, array $members, int $ticketId): ?int
  * automation side-effects (timeline entries per action) happen inside
  * runAutomations().
  */
-function runPostTicketCreateHooks(PDO $db, int $ticketId): ?int
+function runPostTicketCreateHooks(PDO $db, int $ticketId, bool $classify = true): ?int
 {
-    aiRouteTicketToGroup($ticketId);
-    classifyTicketWithAI($ticketId);
+    if ($classify) {
+        aiRouteTicketToGroup($ticketId);
+        classifyTicketWithAI($ticketId);
+    }
     runAutomations($db, $ticketId, 'ticket_created');
     backfillTicketGroupFromDefault($db, $ticketId);
     return autoAssignTicket($db, $ticketId);

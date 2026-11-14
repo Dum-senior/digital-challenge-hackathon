@@ -36,14 +36,14 @@ jobs:
         run: |
           docker compose up -d app
           curl --retry 20 --retry-connrefused --retry-delay 1 --fail --silent --show-error http://127.0.0.1:8085/health
-          docker compose exec -T app vendor/bin/phpunit --filter 'AttachmentAccessIntegrationTest|ApiSecurityIntegrationTest|EngineerAssistant|FormBuilderCsrfTest|CsrfKbFeedbackTest|AttachmentImagePreviewTest|AuthTest'
+          docker compose exec -T app vendor/bin/phpunit --filter 'AttachmentAccessIntegrationTest|ApiSecurityIntegrationTest|DispatcherIntake|EngineerAssistant|FormBuilderCsrfTest|CsrfKbFeedbackTest|AttachmentImagePreviewTest|AuthTest'
       - name: Check repeat migrations and app restart
         run: |
           docker compose exec -T app php database/migrate.php
           docker compose exec -T app php database/migrate.php
           docker compose restart app
           curl --retry 20 --retry-connrefused --retry-delay 1 --fail --silent --show-error http://127.0.0.1:8085/health
-          docker compose exec -T app vendor/bin/phpunit --filter 'AttachmentAccessIntegrationTest|ApiSecurityIntegrationTest|EngineerAssistantHttpTest'
+          docker compose exec -T app vendor/bin/phpunit --filter 'AttachmentAccessIntegrationTest|ApiSecurityIntegrationTest|DispatcherIntake|EngineerAssistantHttpTest'
       - name: Audit locked dependencies
         if: success() || failure()
         run: docker compose run --rm -T app composer audit --locked
