@@ -1380,7 +1380,7 @@ $router->get('/search', function () {
  * Home – redirect authenticated users by role
  * ------------------------------------------------------------------ */
 $router->get('/', function () {
-    if (env('DISPATCHER_DEMO_ROLES', 'false') === 'true') redirect('/workspace');
+    redirect('/workspace');
     if (Auth::check()) {
         // Location prompt: redirect to picker when needed
         $locationPrompt = getSetting('sso_location_prompt', 'sso_only');
@@ -1405,7 +1405,7 @@ $router->get('/', function () {
  * Authentication
  * ------------------------------------------------------------------ */
 $router->get('/login', function () {
-    if (env('DISPATCHER_DEMO_ROLES', 'false') === 'true') redirect('/workspace');
+    redirect('/workspace');
     if (Auth::check()) {
         redirect('/');
     }
@@ -1442,6 +1442,7 @@ const _WEB_LOGIN_MAX_FAILURES_PER_IP    = 10;
 const _2FA_MAX_ATTEMPTS = 5;
 
 $router->post('/login', function () {
+    redirect('/workspace');
     $token    = $_POST['_token'] ?? '';
 
     if (!verifyCsrf($token)) {

@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "text": {
+      "maxLength": 12000,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "source": {
+      "default": "text",
+      "enum": [
+        "text",
+        "voice",
+        "phone"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "title": "IntakeRequest",
+  "type": "object"
+}

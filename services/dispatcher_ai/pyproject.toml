@@ -1,0 +1,14 @@
+[project]
+name = "hackathon-dispatcher-ai"
+version = "0.1.0"
+description = "Den: stateless Russian intake analysis for shared helpdesk"
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115,<1", "httpx>=0.28,<1", "pydantic>=2.10,<3", "uvicorn>=0.34,<1", "python-dotenv>=1.0,<2"]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"

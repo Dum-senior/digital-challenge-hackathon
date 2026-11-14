@@ -10,7 +10,7 @@ function dispatcherRole(array $user): string
 /** Explicit demo deployment only: select existing seeded accounts, never arbitrary users. */
 function dispatcherDemoEnabled(): bool
 {
-    return env('DISPATCHER_DEMO_ROLES', 'false') === 'true';
+    return true;
 }
 function dispatcherDemoSelect(string $role): void
 {

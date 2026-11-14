@@ -99,7 +99,7 @@ function shell(page){
  const who=user(),current=page.split('/').filter(Boolean).join(' / ');
  const avatar=(who.name||'Пользователь').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
  const roleSelect=(API.isDemo()||CFG.demoRoles)?`<label><span class="sr-only">Выбрать роль для демонстрации</span><select class="role-choice" id="role-select">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${state.role===k?'selected':''}>${v}</option>`).join('')}</select></label>`:`<span class="role-choice">${esc(roles[state.role]||state.role)}</span>`;
- return `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-icon">${icon('spark',22)}</div><div><div class="brand-title">Диспетчер ИИ</div></div></div><div class="nav-caption">Рабочее пространство</div><nav aria-label="Основные разделы">${nav}</nav><div class="sidebar-footer"><span class="dot"></span>${API.isDemo()?'Демо-режим':'Подключённый режим'}<div>${API.isDemo()?'Без настоящих API и LLM':'Данные через API'}</div><div style="margin-top:12px"><a href="/logout">${icon('logout',14)} <span style="display:inline-block;vertical-align:middle">Выйти</span></a></div></div></aside><div class="content"><div class="container"><header class="topbar"><div class="breadcrumbs">Рабочее пространство / ${esc(current||'Главная')}</div><div class="account-area"><span class="mode ${API.isDemo()?'':'api'}">${API.isDemo()?'DEMO':'API'}</span>${roleSelect}<div class="avatar" title="${esc(who.name)}">${esc(avatar)}</div></div></header><main id="view"></main><footer class="footer-note">Диспетчер ИИ · ${API.isDemo()?'Демонстрационные данные. Не подключено к рабочей базе.':''}</footer></div></div></div><div class="toast-wrap" aria-live="polite"></div><div id="modal-root"></div>`;
+ return `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-icon">${icon('spark',22)}</div><div><div class="brand-title">Диспетчер ИИ</div></div></div><div class="nav-caption">Рабочее пространство</div><nav aria-label="Основные разделы">${nav}</nav><div class="sidebar-footer"><span class="dot"></span>${API.isDemo()?'Демо-режим':'Подключённый режим'}<div>${API.isDemo()?'Без настоящих API и LLM':'Данные через API'}</div><div style="margin-top:12px"><a href="/workspace">${icon('logout',14)} <span style="display:inline-block;vertical-align:middle">Главное меню</span></a></div></div></aside><div class="content"><div class="container"><header class="topbar"><div class="breadcrumbs">Рабочее пространство / ${esc(current||'Главная')}</div><div class="account-area"><span class="mode ${API.isDemo()?'':'api'}">${API.isDemo()?'DEMO':'API'}</span>${roleSelect}<div class="avatar" title="${esc(who.name)}">${esc(avatar)}</div></div></header><main id="view"></main><footer class="footer-note">Диспетчер ИИ · ${API.isDemo()?'Демонстрационные данные. Не подключено к рабочей базе.':''}</footer></div></div></div><div class="toast-wrap" aria-live="polite"></div><div id="modal-root"></div>`;
 }
 /** Render editable values from the current server revision of the draft. */
 function classifyPreview() {
@@ -262,7 +262,7 @@ function permitted(r){
 }
 function render(){
  const p=route();document.title='Диспетчер ИИ';
- if(p==='/login'){root.innerHTML=loginView();return;}
+ if(p==='/login'){navigate(navigation[state.role][0][0]);return;}
  root.innerHTML=shell(p);
  let html;
  if(!permitted(p))html=notAllowed();
