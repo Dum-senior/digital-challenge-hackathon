@@ -370,8 +370,11 @@ def resolve(incident: Incident):
     for step in result.steps:
         prose = technical.sub("", step)
         if not re.search(r"[А-Яа-яЁё]", prose) or re.search(r"[A-Za-z]", prose):
-            fallback = clarification()
-            return {**fallback, "status": "sources_only", "sources": cited}
+            # Prefer the reviewed Russian checks to an unverified translation.
+            steps = source_actions(cited[0])
+            if steps:
+                return {"status": "suggested", "steps": steps, "sources": cited[:1]}
+            return clarification()
     return {"status": "suggested", "steps": result.steps, "sources": cited}
 
 
