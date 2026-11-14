@@ -290,7 +290,7 @@ final class IntakeDispatcher
                 JOIN `groups` g ON g.id = m.group_id AND g.is_confidential = 0
                 LEFT JOIN agent_oof_status o ON o.user_id = u.id
                 LEFT JOIN tickets t ON t.assigned_to = u.id AND $active
-                WHERE u.is_available = 1 AND COALESCE(o.is_oof,0) = 0 AND " . staffRoleSqlIn('u.role') . "
+                WHERE u.is_available = 1 AND u.role NOT IN ('admin','dispatcher') AND COALESCE(o.is_oof,0) = 0 AND " . staffRoleSqlIn('u.role') . "
                 GROUP BY u.id, g.id ORDER BY workload, u.id, g.id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
             return $choice
                 ? ['group_id' => (int) $choice['group_id'], 'assignee_id' => (int) $choice['id'],
