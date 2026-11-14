@@ -48,6 +48,7 @@ assert engineers and engineers[0]["competencies"]
 
 text = "В корпусе Б в кабинете 214 из принтера идёт дым."
 draft = request(dispatcher, "/intake/analyze", {"text": text}, csrf, expected=201)
+assert draft["extracted"]["analysis_mode"] == "private_llm", draft["extracted"].get("model_error")
 assert draft["extracted"]["priority"] == "critical"
 assert draft["extracted"]["location"]["name"] == "Корпус Б"
 assert draft["approved"]["assigned_to"] == engineers[0]["id"]
@@ -66,6 +67,10 @@ endpoint = f"/workspace/api/tickets/{ticket}/update"
 request(engineer, endpoint, {"status": "resolved"}, eng_csrf, expected=409)
 request(engineer, endpoint, {"status": "in_progress"}, eng_csrf)
 request(engineer, endpoint, {"status": "resolved"}, eng_csrf)
+solution = request(engineer, f"/workspace/api/tickets/{ticket}/assist", {}, eng_csrf)
+assert solution.get("status") == "suggested" and solution.get("sources"), solution
+source = request(engineer, "/workspace/api/articles/" + solution["sources"][0]["id"])
+assert source["content"]
 report = request(admin, "/workspace/api/reports")
 assert report["critical"] >= 1 and report["resolved"] >= 1
 assert request(admin, "/workspace/api/audit")
