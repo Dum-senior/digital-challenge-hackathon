@@ -1903,3 +1903,25 @@ $router->post('/api/v1/push/unregister', function () {
     removePushToken(Database::connect(), (int) $user['id'], $token);
     _apiJson(['ok' => true]);
 });
+
+$router->post('/api/v1/intake/transcriptions', function () {
+    _apiAuth();
+    $upload = $_FILES['audio'] ?? [];
+    $error = $upload['error'] ?? null;
+    if (in_array($error, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+        || (empty($_FILES) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > TranscriptionService::MAX_BYTES + 65536)) {
+        _apiJson(['error' => 'Audio must be at most 20 MiB'], 413);
+    }
+    $path = $upload['tmp_name'] ?? null;
+    $source = $_POST['source'] ?? 'upload';
+    if ($error !== UPLOAD_ERR_OK || !is_string($path) || !is_uploaded_file($path) || !is_string($source)) {
+        _apiJson(['error' => 'An audio upload is required'], 400);
+    }
+    session_write_close();
+    try {
+        $result = TranscriptionService::transcribe($path, $source);
+    } catch (RuntimeException $e) {
+        _apiJson(['error' => $e->getMessage()], $e->getCode() ?: 503);
+    }
+    _apiJson($result);
+});
