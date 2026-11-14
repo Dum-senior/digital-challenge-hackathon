@@ -31,6 +31,8 @@ function dispatcherTickets(PDO $db, ?int $engineer = null, bool $activeOnly = fa
     $zone = Sla::storageTimezone();
     return array_map(static function (array $t) use ($zone): array {
         $t['priority'] = ['Низкий'=>'low','Средний'=>'medium','Авария'=>'critical'][$t['priority']] ?? null;
+        $t['subject']=html_entity_decode($t['subject'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $t['description']=html_entity_decode($t['description'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $t['createdAt'] = (new DateTimeImmutable($t['created_at'], $zone))->format(DATE_ATOM);
         $t['responseDueAt'] = $t['first_response_due_at'] ? (new DateTimeImmutable($t['first_response_due_at'], $zone))->format(DATE_ATOM) : null;
         $t['notes'] = [];
@@ -112,6 +114,10 @@ $router->post('/workspace/api/tickets/{id}/update', static function (array $p): 
                 updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$next,$ticket['id']]);
             if ($next !== 'in_progress') Sla::markClosed($db, (int)$ticket['id']);
+            else {
+                $ticket['first_responded_at'] ??= gmdate('Y-m-d H:i:s');
+                $db->prepare('UPDATE tickets SET sla_state=? WHERE id=?')->execute([Sla::computeSlaState($ticket),$ticket['id']]);
+            }
         } else {
             $subject=$input['subject']??null;
             $description=$input['description']??null;
@@ -197,7 +203,6 @@ $router->post('/workspace/api/tickets/{id}/assist', static function (array $p): 
     $result=dispatcherInference('resolve',['text'=>mb_substr(html_entity_decode(strip_tags($t['description'])),0,6000)]);
     foreach ($result['sources']??[] as $i=>$source) {
         $result['sources'][$i]['title']=$source['section'];
-        $result['sources'][$i]['url']='/workspace/kb/'.rawurlencode($source['id']);
     }
     _apiJson($result);
 });
