@@ -150,8 +150,20 @@ $router->get('/workspace/api/reports', static function (): void {
         $where[]="t.created_at $op ?";
         $params[]=$key==='to' ? (new DateTimeImmutable($day))->modify('+1 day')->format('Y-m-d') : $day;
     }
+    // Match the SLA engine's 80% warning threshold for running clocks.
+    $active=ticketStatusSqlIn(ticketClosedBucketSlugs(),'t.status',true);
+    $response="(t.first_responded_at IS NULL AND t.first_response_due_at IS NOT NULL)";
+    $baseline="COALESCE(t.sla_started_at,t.created_at)";
+    $clock="CASE
+        WHEN t.sla_exempt=1 OR NOT ($active) OR t.sla_paused_at IS NOT NULL THEN t.sla_state
+        WHEN ($response AND UTC_TIMESTAMP()>t.first_response_due_at) OR UTC_TIMESTAMP()>t.resolution_due_at THEN 'breached'
+        WHEN ($response AND TIMESTAMPDIFF(SECOND,$baseline,t.first_response_due_at)>0
+            AND TIMESTAMPDIFF(SECOND,$baseline,UTC_TIMESTAMP())>=0.8*TIMESTAMPDIFF(SECOND,$baseline,t.first_response_due_at))
+            OR (TIMESTAMPDIFF(SECOND,$baseline,t.resolution_due_at)>0
+            AND TIMESTAMPDIFF(SECOND,$baseline,UTC_TIMESTAMP())>=0.8*TIMESTAMPDIFF(SECOND,$baseline,t.resolution_due_at)) THEN 'warning'
+        ELSE t.sla_state END";
     $stmt=$db->prepare("SELECT t.status,p.name AS priority,COUNT(*) AS total,
-        SUM(t.sla_state='warning') AS atRisk,SUM(t.sla_state='breached') AS breached
+        SUM(($clock)='warning') AS atRisk,SUM(($clock)='breached') AS breached
         FROM tickets t LEFT JOIN ticket_types c ON c.id=t.type_id LEFT JOIN ticket_priorities p ON p.id=t.priority_id
         WHERE ".implode(' AND ',$where).' GROUP BY t.status,p.name');
     $stmt->execute($params);

@@ -12,7 +12,7 @@ COPY . .
 COPY docker/dispatcher.conf /etc/apache2/sites-enabled/000-default.conf
 RUN mkdir -p storage/attachments storage/logs public/uploads \
     && chown -R www-data:www-data storage public/uploads \
-    && printf 'upload_max_filesize=20M\npost_max_size=21M\n' > /usr/local/etc/php/conf.d/voice.ini
+    && printf 'upload_max_filesize=20M\npost_max_size=21M\nsession.name=DISPATCHRELEASESESSID\n' > /usr/local/etc/php/conf.d/voice.ini
 
 FROM web AS inference
 COPY --from=python /usr/local/bin/python* /usr/local/bin/
