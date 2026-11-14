@@ -101,11 +101,11 @@ final class IntakeDispatcher
                 'safety_warnings' => [], 'analysis_mode' => 'unavailable'];
         }
         $lower = mb_strtolower($text, 'UTF-8');
-        $danger = (bool) preg_match('/дым|задым|горит|пожар|искрит|запах гар[иья]|вымогател|шифровальщик|выкуп за файл|ransomware/u', $lower);
-        $mass = (bool) preg_match('/нескольк(?:их|о)\s+(?:скважин|отделов|пользователей)|во\s+вс[её]м\s+корпус|у\s+всех|массов|нескольких\s+скважин/u', $lower);
+        $riskText = preg_replace('/\b(?:нет|без|не было|не)\s+(?:дыма|дымит|задымления|пожара|горит|искрит)|(?:дым|запах гари|задымление)\s+(?:отсутствует|не обнаружен|нет)/u', '', $lower);
+        $danger = (bool) preg_match('/\bпожар\b|задымл|дымит|ид[её]т дым|искрит|запах гари|пахнет гарью|(?:принтер|щиток|проводка|оборудование|серверная)\s+(?:горит|загорел\w*)|(?:горит|загорел\w*)\s+(?:принтер|щиток|проводка|оборудование|серверная)|пахнет газом|запах газа|утечк\w* газа|сработал\w* [^.;]{0,30}газоанализатор|ударило током|поражени[ея] током|вымогател|шифровальщик|выкуп за файл|ransomware/u', $riskText);
+        $mass = (bool) preg_match('/(?:нескольк\w*|много|все|\b(?:[2-9]|\d{2,})\b)\s+(?:принтер|скважин|отдел|пользовател|компьютер|станци)|во\s+вс[её]м\s+корпус|у\s+всех|массов|на всей площадке|целый отдел/u', $lower);
         $category = $model['category'];
         $signals = [
-            'fire' => '/\bпожар\w*|\bзадымлен\w*|\bид[её]т дым\b|\bгорит\b/iu',
             'automation' => '/\b(?:opc|орс)\b|асу тп/iu',
             'telemetry' => '/сч[её]тчик|телеметр|показани/iu',
             'peripherals' => '/принтер|печата|печать/iu',
@@ -122,14 +122,19 @@ final class IntakeDispatcher
         if (preg_match('/^(?:у нас )?(?:ничего не работает|вс[её] упало)[.!\s]*$/iu', trim($text))) {
             $category = 'unknown';
         }
-        $danger = $danger || $category === 'fire';
+        if ($danger && preg_match('/пожар|дым|гар[иья]|искрит|горит|газ|током/u', $riskText)) {
+            $category = 'fire';
+        } elseif ($category === 'fire' && !$danger) {
+            $category = 'unknown';
+        }
         $priority = $danger ? 'critical' : ($category === 'unknown' ? null : 'medium');
         $reason = $danger ? 'Явный признак опасности; требуется немедленная проверка'
             : ($mass ? 'Затронуто несколько пользователей или объектов'
                 : ($priority === null ? 'Недостаточно сведений для оценки' : 'Работа нарушена, явных признаков аварии нет'));
-        if (!$danger && !$mass && $priority !== null && preg_match('/есть запасн|работа продолжается|не мешает работе|планов/u', $lower)) {
+        if (!$danger && !$mass && $priority !== null && (($category === 'peripherals'
+            && !preg_match('/остановил\w* процесс|критич|нет обход|срочн/u', $lower)) || preg_match('/есть запасн|работа продолжается|не мешает работе|планов|(?:один|одного) принтер|(?:кончил|законч)\w*[^.;]{0,30}(?:краск|тонер|чернил)|(?:краск|тонер|чернил)[^.;]{0,35}(?:кончил|законч)/u', $lower))) {
             $priority = 'low';
-            $reason = 'Работа продолжается или доступен обходной вариант';
+            $reason = 'Локальная неисправность или доступен обходной вариант';
         }
         if (preg_match('/(?<!\w)(?:с|после)\s+((?:[01]?\d|2[0-3]):[0-5]\d)(?!\d)/iu', $text, $start)) {
             $model['fields']['incident_time'] = str_pad($start[1], 5, '0', STR_PAD_LEFT);
@@ -174,6 +179,7 @@ final class IntakeDispatcher
             'incident_time' => $fields['incident_time'], 'affected_scope' => $fields['affected_scope'],
             'priority' => $priority, 'priority_id' => $priorityId,
             'severity_reason' => $reason,
+            'sla_profile' => $danger ? 'critical' : ($mass ? 'mass' : $priority),
             'is_potential_emergency' => $danger,
             'recommended_group_id' => $assignment['group_id'],
             'recommended_assignee_id' => ($failure && !$danger) ? null : $assignment['assignee_id'],
@@ -496,6 +502,35 @@ final class IntakeDispatcher
         return in_array((string) ($user['role'] ?? ''), $allowed, true);
     }
 
+    /** Demo targets in elapsed minutes. Customer regulations take precedence on deployment. */
+    public static function slaProfiles(): array
+    {
+        return json_decode(file_get_contents(ROOT_DIR . '/services/dispatcher-api/kb/sla-policy.json'),
+            true, 16, JSON_THROW_ON_ERROR);
+    }
+
+    public static function approvedSla(array $profile, mixed $input, bool $emergency, string $reason): array
+    {
+        $minutes = ['response_minutes' => $profile['response_minutes'],
+                    'resolution_minutes' => $profile['resolution_minutes']];
+        if ($input === null) {
+            return $minutes;
+        }
+        if (!is_array($input) || array_diff(array_keys($input), array_keys($minutes))
+            || !is_int($input['response_minutes'] ?? null) || !is_int($input['resolution_minutes'] ?? null)
+            || $input['response_minutes'] < 1 || $input['resolution_minutes'] > 10080
+            || $input['resolution_minutes'] < $input['response_minutes']) {
+            throw new InvalidArgumentException('Укажите целые минуты: от 1 до 10080, срок завершения не меньше срока реакции.');
+        }
+        if ($emergency && $input['response_minutes'] > $minutes['response_minutes']) {
+            throw new InvalidArgumentException('Для потенциальной аварии нельзя увеличить срок первой реакции.');
+        }
+        if ($input != $minutes && mb_strlen(trim($reason)) < 20) {
+            throw new InvalidArgumentException('Для изменения SLA укажите причину длиной от 20 символов.');
+        }
+        return $input;
+    }
+
     public static function publicResponse(array $row, array $user): array
     {
         $analysis = json_decode((string) $row['analysis_json'], true) ?: [];
@@ -513,6 +548,7 @@ final class IntakeDispatcher
                 'assignee_id' => $staff ? ($analysis['recommended_assignee_id'] ?? null) : null,
                 'reason' => $staff ? ($analysis['assignment_reason'] ?? '') : 'Назначение проверит диспетчер',
             ],
+            'sla' => $staff ? (self::slaProfiles()[$analysis['sla_profile'] ?? $analysis['priority'] ?? ''] ?? null) : null,
             'missing_fields' => $analysis['missing_fields'] ?? [], 'questions' => $analysis['questions'] ?? [],
             'approved' => $staff ? (json_decode((string) ($row['edited_json'] ?? '{}'), true) ?: []) : null,
             'requires_human_review' => $row['status'] !== 'created',

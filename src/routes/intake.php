@@ -251,7 +251,7 @@ $intakeConfirm = static function (array $p): void {
     if (!ctype_digit((string) $p['draft_id'])) _intakeReply(['error' => 'Invalid draft_id'], 422);
     $input = _intakeBody();
     if (!isset($input['revision']) || !is_int($input['revision']) || $input['revision'] < 1
-        || ($input['approve'] ?? null) !== true || array_diff(array_keys($input), ['revision', 'approve', 'approved', 'manual_review_reason']) !== []) {
+        || ($input['approve'] ?? null) !== true || array_diff(array_keys($input), ['revision', 'approve', 'approved', 'manual_review_reason', 'sla']) !== []) {
         _intakeReply(['error' => 'Explicit approval and revision required'], 422);
     }
     $manualReason = $input['manual_review_reason'] ?? '';
@@ -303,9 +303,16 @@ $intakeConfirm = static function (array $p): void {
         foreach ($approved['tag_ids'] as $tagId) {
             $db->prepare('INSERT IGNORE INTO ticket_tag_map (ticket_id, tag_id) VALUES (?, ?)')->execute([$ticketId, $tagId]);
         }
-        if ($approved['priority_id'] !== null) {
-            Sla::initializeForTicket($db, $ticketId, $approved['priority_id'], $approved['type_id']);
+        $emergency = ($analysis['is_potential_emergency'] ?? false) || $approved['priority_id'] === $priorityIds[2];
+        $profile = $emergency ? 'critical'
+            : ($approved['priority_id'] === $priorityIds[0] ? 'low'
+                : (($analysis['sla_profile'] ?? '') === 'mass' ? 'mass' : 'medium'));
+        if (!$emergency && ($analysis['sla_profile'] ?? '') === 'mass'
+            && $profile === 'low' && mb_strlen(trim($manualReason)) < 20) {
+            throw new InvalidArgumentException('Укажите причину снижения приоритета массового сбоя (от 20 символов).');
         }
+        $sla = IntakeDispatcher::approvedSla(IntakeDispatcher::slaProfiles()[$profile], $input['sla'] ?? null, $emergency, $manualReason);
+        Sla::initializeForIntake($db, $ticketId, $sla);
         $delta = [];
         foreach ($approved as $k => $v) if (($previous[$k] ?? null) !== $v) $delta[] = $k;
         $db->prepare('UPDATE ai_intake_drafts SET status = ?, confirmed_ticket_id = ?, confirmed_by = ?,
@@ -313,7 +320,7 @@ $intakeConfirm = static function (array $p): void {
            ->execute(['created', $ticketId, (int) $actor['id'], IntakeDispatcher::json($approved), (int) $row['id']]);
         $db->prepare('INSERT INTO audit_log (user_id, action, target_type, target_id, detail, ip_address)
             VALUES (?, ?, ?, ?, ?, ?)')->execute([(int) $actor['id'], 'ai_intake_confirm', 'ticket', $ticketId,
-            'draft_id=' . $row['id'] . '; changed_fields=' . implode(',', $delta) . '; reason=' . mb_substr($manualReason, 0, 180),
+            'draft_id=' . $row['id'] . '; changed_fields=' . implode(',', $delta) . '; sla_profile=' . $profile . '; sla_minutes=' . IntakeDispatcher::json($sla) . '; reason=' . mb_substr($manualReason, 0, 180),
             $_SERVER['REMOTE_ADDR'] ?? null]);
         $db->commit();
     } catch (InvalidArgumentException $e) {
@@ -404,11 +411,12 @@ $router->get('/intake/meta', static function (): void {
                   WHERE ' . staffRoleSqlIn('u.role') . ' ORDER BY u.first_name, u.last_name')->fetchAll(PDO::FETCH_ASSOC) : [];
     _intakeReply(['can_confirm' => $staff, 'types' => array_map(static fn($x) => ['id' => $x['id'], 'name' => $x['name']], $types),
         'priorities' => array_values(array_filter(array_map(static fn($level, $name) =>
-            ['id' => IntakeDispatcher::matchPriority($db, $level), 'name' => $name],
+            ['id' => IntakeDispatcher::matchPriority($db, $level), 'name' => $name, 'level' => $level],
             ['low','medium','critical'], ['Низкий','Средний','Авария']), static fn($priority) => $priority['id'] !== null)),
         'locations' => $db->query('SELECT id, name, address FROM locations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC),
         'tags' => $staff ? $db->query('SELECT id, name FROM ticket_tags ORDER BY name')->fetchAll(PDO::FETCH_ASSOC) : [],
         'groups' => $groups, 'agents' => $agents,
+        'sla_profiles' => $staff ? IntakeDispatcher::slaProfiles() : [],
         'ticket_url_prefix' => roleIsAdmin($actor['role'] ?? null) ? '/admin/tickets/' : (roleIsStaff($actor['role'] ?? null) ? '/agent/tickets/' : '/portal/tickets/')]);
 });
 

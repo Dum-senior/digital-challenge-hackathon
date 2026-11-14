@@ -62,6 +62,7 @@ function dispatcherTickets(PDO $db, ?int $engineer = null, bool $activeOnly = fa
         $t['description']=html_entity_decode($t['description'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $t['createdAt'] = (new DateTimeImmutable($t['created_at'], $zone))->format(DATE_ATOM);
         $t['responseDueAt'] = $t['first_response_due_at'] ? (new DateTimeImmutable($t['first_response_due_at'], $zone))->format(DATE_ATOM) : null;
+        $t['resolutionDueAt'] = $t['resolution_due_at'] ? (new DateTimeImmutable($t['resolution_due_at'], $zone))->format(DATE_ATOM) : null;
         $t['notes'] = [];
         return $t;
     }, $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -233,7 +234,8 @@ function dispatcherInference(string $operation, array $payload): array
 
 $router->post('/workspace/api/tickets/{id}/assist', static function (array $p): void {
     $actor=dispatcherActor(['engineer','dispatcher']);
-    $stmt=Database::connect()->prepare('SELECT t.description,t.assigned_to FROM tickets t LEFT JOIN ticket_types c
+    $stmt=Database::connect()->prepare('SELECT COALESCE(d.raw_text,t.description) AS description,t.assigned_to FROM tickets t
+        LEFT JOIN ai_intake_drafts d ON d.confirmed_ticket_id=t.id LEFT JOIN ticket_types c
         ON c.id=t.type_id WHERE t.id=? AND (c.id IS NULL OR c.is_confidential=0)');
     $stmt->execute([(int)$p['id']]);
     $t=$stmt->fetch(PDO::FETCH_ASSOC);
@@ -244,17 +246,14 @@ $router->post('/workspace/api/tickets/{id}/assist', static function (array $p): 
 $router->post('/workspace/api/drafts/{id}/assist', static function (array $p): void {
     $actor=dispatcherActor(['dispatcher']);
     $draft=_intakeFetch(Database::connect(), (int)$p['id'], $actor);
-    $edited=json_decode($draft['edited_json'],true);
-    dispatcherResolve($edited['description'] ?? $draft['raw_text']);
+    dispatcherResolve($draft['raw_text']);
 });
 
 function dispatcherResolve(string $text): never
 {
     session_write_close();
     $result=dispatcherInference('resolve',['text'=>mb_substr($text,0,6000)]);
-    foreach ($result['sources']??[] as $i=>$source) {
-        $result['sources'][$i]['title']=$source['section'];
-    }
+    unset($result['sources']);
     _apiJson($result);
 }
 

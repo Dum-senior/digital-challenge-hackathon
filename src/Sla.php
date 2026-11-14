@@ -584,6 +584,23 @@ class Sla
         return $due;
     }
 
+    /** Store the dispatcher-approved elapsed SLA, starting when the ticket is assigned. */
+    public static function initializeForIntake(PDO $db, int $ticketId, array $minutes): void
+    {
+        $now = new DateTimeImmutable('now', self::storageTimezone());
+        $response = $now->add(new DateInterval('PT' . $minutes['response_minutes'] . 'M'));
+        $resolution = $now->add(new DateInterval('PT' . $minutes['resolution_minutes'] . 'M'));
+        $db->prepare(
+            'UPDATE tickets SET sla_started_at = ?, first_response_due_at = ?, resolution_due_at = ?, sla_state = ? WHERE id = ?'
+        )->execute([$now->format('Y-m-d H:i:s'), $response->format('Y-m-d H:i:s'),
+            $resolution->format('Y-m-d H:i:s'), 'on_track', $ticketId]);
+        self::syncDueDate($db, $ticketId, null);
+        $db->prepare(
+            'INSERT INTO ticket_timeline (ticket_id, user_id, action, details, is_internal) VALUES (?, NULL, ?, ?, 1)'
+        )->execute([$ticketId, 'sla_set', sprintf('Подтверждён SLA: реакция %d мин, контроль завершения %d мин.',
+            $minutes['response_minutes'], $minutes['resolution_minutes'])]);
+    }
+
     /**
      * Initialize SLA for a newly created ticket.
      * Sets first_response_due_at and resolution_due_at based on the best-matching SLA policy.

@@ -69,13 +69,13 @@ function heading(text){return `<div class="section-heading"><h2>${esc(text)}</h2
 function responseDeadline(t){return t.responseDueAt||t.response_due_at||t.slaResponseDueAt||t.sla_response_due_at||null;}
 function isAwaitingAcceptance(t){return ['new','open'].includes(t.status);}
 function isCriticalUnaccepted(t){return t.priority==='critical'&&isAwaitingAcceptance(t);}
-function slaText(deadline){
+function slaText(deadline,label='реакцию'){
  if(!deadline)return 'Срок реакции не указан';
  const diff=new Date(deadline).getTime()-Date.now();
  if(!Number.isFinite(diff))return 'Срок реакции не указан';
  const absolute=Math.abs(diff),h=Math.floor(absolute/3600000),m=Math.floor((absolute%3600000)/60000),sec=Math.floor((absolute%60000)/1000);
  const time=h?`${h} ч ${String(m).padStart(2,'0')} мин`:`${m} мин ${String(sec).padStart(2,'0')} сек`;
- return diff<0?`SLA просрочен на ${time}`:`Осталось на реакцию: ${time}`;
+ return diff<0?`SLA просрочен на ${time}`:`Осталось на ${label}: ${time}`;
 }
 function deadlineHtml(t){
  if(!isAwaitingAcceptance(t))return '';
@@ -84,8 +84,24 @@ function deadlineHtml(t){
  const overdue=date.getTime()<Date.now();
  return `<span class="sla-text ${overdue?'overdue':''}" data-sla-deadline="${esc(date.toISOString())}" title="Срок реакции: ${esc(date.toLocaleString('ru-RU'))}">${esc(slaText(iso))}</span>`;
 }
+function ticketSlaHtml(ticket) {
+ const response = responseDeadline(ticket);
+ const resolution = ticket.resolutionDueAt;
+ if (!response && !resolution) return '';
+ const closed = ['resolved','closed'].includes(ticket.status);
+ const renderDeadline = (caption, iso, label) => {
+   if (!iso) return '';
+   const date = new Date(iso);
+   if (Number.isNaN(date.getTime())) return '';
+   const running = !closed && !ticket.sla_paused_at && !(label === 'реакцию' && ticket.first_responded_at);
+   return `<div><div class="field-label">${caption}</div><strong>${formatDate(iso)}</strong>${running
+     ? ` <span class="sla-text" data-sla-deadline="${esc(iso)}" data-sla-label="${label}">${esc(slaText(iso,label))}</span>` : ''}</div>`;
+ };
+ return `<div class="grid-2 top-gap">${renderDeadline('Реакция до',response,'реакцию')}
+   ${renderDeadline(ticket.priority==='critical'?'Контроль статуса до':'Решение до',resolution,'следующий контроль')}</div>`;
+}
 function refreshCountdowns(){
- root.querySelectorAll('[data-sla-deadline]').forEach(el=>{const deadline=el.dataset.slaDeadline;el.textContent=slaText(deadline);el.classList.toggle('overdue',new Date(deadline).getTime()<Date.now());});
+ root.querySelectorAll('[data-sla-deadline]').forEach(el=>{const deadline=el.dataset.slaDeadline;el.textContent=slaText(deadline,el.dataset.slaLabel);el.classList.toggle('overdue',new Date(deadline).getTime()<Date.now());});
  const timer=root.querySelector('[data-measurement-timer]');if(timer&&state.timerStarted!==null){timer.textContent=measurementTime(Date.now()-state.timerStarted);}
 }
 function measurementTime(ms){const t=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;}
@@ -110,6 +126,7 @@ function classifyPreview() {
    `<option value="${esc(item.id)}" ${String(item.id)===String(selected)?'selected':''}>${esc(item.name)}</option>`).join('');
  const adviceKey='draft:'+draft.draft_id+':'+draft.revision;
  const advice=state.assist[adviceKey];
+ const sla=draft.sla||{};
  const engineers=(meta.agents||[]).map(e=>({id:e.group_id+':'+e.id,name:e.first_name+' '+e.last_name}));
  const places=(meta.locations||[]).map(l=>({...l,name:l.address?l.name+' · '+l.address:l.name}));
  return `<div class="surface card"><h2>Проверка черновика №${esc(draft.draft_id)}</h2><div class="grid-2">
@@ -121,7 +138,14 @@ function classifyPreview() {
  ${draft.recommendation?.reason?`<p class="hint">${esc(draft.recommendation.reason)}</p>`:''}</div></div>
  <label class="form-field"><span>Тема</span><textarea id="confirm-subject" maxlength="255">${esc(a.subject||ex.subject)}</textarea></label>
  <label class="form-field"><span>Описание</span><textarea id="confirm-description">${esc(a.description||ex.description)}</textarea></label>
- <section class="top-gap"><h3>Предложенное решение</h3><div id="assist-container" data-assist-key="${esc(adviceKey)}">${advice?assistHtml(advice):'<p>Ищем решение в базе знаний…</p>'}</div></section>
+ <section class="top-gap"><h3>Предлагаемый SLA</h3>
+ <p class="hint" id="sla-profile-label">${esc(sla.label||'Выберите приоритет после ручной проверки.')}</p>
+ <div class="grid-2">
+ <label class="form-field"><span>Первая реакция, мин</span><input id="confirm-sla-response" type="number" min="1" max="10080" step="1" value="${esc(sla.response_minutes??'')}"></label>
+ <label class="form-field"><span>Контроль завершения, мин</span><input id="confirm-sla-resolution" type="number" min="1" max="10080" step="1" value="${esc(sla.resolution_minutes??'')}"></label>
+ </div><p class="hint">Отсчёт начинается при подтверждении заявки.</p>
+ <label class="form-field"><span>Причина правки сроков или приоритета</span><input id="confirm-sla-reason" maxlength="500"></label></section>
+ <section class="top-gap"><h3>План работ</h3><div id="assist-container" data-assist-key="${esc(adviceKey)}">${advice?assistHtml(advice):'<p>Подбираем план работ…</p>'}</div></section>
  ${btn('Подтвердить и создать заявку','confirm-draft','button primary',state.loading?'disabled':'')}</div>`;
 }
 function intakeView(){
@@ -157,7 +181,7 @@ function ticketsView(assigned=false){
  (isEngineer&&API.isDemo()?`<div class="demo-help">Демо: ${btn(icon('warning',13)+' Создать новую тревогу','demo-critical','button small soft')} ${btn(icon('refresh',13)+' Проверить обновления','refresh-queue','button small soft')}</div>`:isEngineer?`<div class="demo-help">${btn(icon('refresh',13)+' Проверить новые заявки','refresh-queue','button small soft')}</div>`:'')+
  `<div class="filters"><input id="ticket-search" type="search" placeholder="Поиск по номеру или тексту" value="${esc(state.ticketQuery)}"/><select id="ticket-filter-status"><option value="all">Все статусы</option>${Object.entries(statuses).filter(([k])=>k!=='needs_clarification').map(([k,v])=>`<option value="${k}" ${state.ticketStatus===k?'selected':''}>${v}</option>`).join('')}</select></div>
  <section class="surface"><div class="table-head"><strong>Список заявок</strong><small>${rows.length} из ${ticketsForRole().length}</small></div><div class="table-wrap"><table class="table"><thead><tr><th>№</th><th>Обращение</th><th>Приоритет</th><th>Статус</th>${isEngineer?'<th>Действия</th>':'<th>Исполнитель</th><th>Действие</th>'}</tr></thead><tbody>
- ${rows.length?rows.map(t=>`<tr class="${isEngineer&&isCriticalUnaccepted(t)?'urgent-ticket-row':''}" data-ticket-row="${esc(t.id)}"><td><button class="button link" data-action="open-ticket" data-id="${esc(t.id)}">#${esc(t.id)}</button></td><td><button class="ticket-title-link" data-action="open-ticket" data-id="${esc(t.id)}">${esc(t.subject)}</button><div class="small muted">${esc(t.location||'Место не указано')}</div>${isEngineer?`<div class="row-sla">${deadlineHtml(t)}</div>`:''}</td>${isEngineer&&isCriticalUnaccepted(t)?`<td colspan="3" class="urgent-only-cell">${controls(t)}</td>`:`<td>${pillPriority(t.priority)}</td><td>${isEngineer?engineerStateBadge(t):pillStatus(t.status)}</td>${isEngineer?`<td>${controls(t)}</td>`:`<td>${esc(t.assigneeName||'Не назначен')}</td><td>${btn(icon('file')+' Изменить','edit-ticket','button small soft','data-id="'+esc(t.id)+'"')}</td>`}`}</tr>`).join(''):`<tr><td colspan="${isEngineer?5:6}" class="muted" style="text-align:center;padding:30px">Нет подходящих заявок</td></tr>`}</tbody></table></div></section>`;
+ ${rows.length?rows.map(t=>`<tr class="${isEngineer&&isCriticalUnaccepted(t)?'urgent-ticket-row':''}" data-ticket-row="${esc(t.id)}"><td><button class="button link" data-action="open-ticket" data-id="${esc(t.id)}">#${esc(t.id)}</button></td><td><button class="ticket-title-link" data-action="open-ticket" data-id="${esc(t.id)}">${esc(t.subject)}</button><div class="small muted">${esc(t.location||'Место не указано')}</div>${ticketSlaHtml(t)}</td>${isEngineer&&isCriticalUnaccepted(t)?`<td colspan="3" class="urgent-only-cell">${controls(t)}</td>`:`<td>${pillPriority(t.priority)}</td><td>${isEngineer?engineerStateBadge(t):pillStatus(t.status)}</td>${isEngineer?`<td>${controls(t)}</td>`:`<td>${esc(t.assigneeName||'Не назначен')}</td><td>${btn(icon('file')+' Изменить','edit-ticket','button small soft','data-id="'+esc(t.id)+'"')}</td>`}`}</tr>`).join(''):`<tr><td colspan="${isEngineer?5:6}" class="muted" style="text-align:center;padding:30px">Нет подходящих заявок</td></tr>`}</tbody></table></div></section>`;
 }
 function ticketView(ticket){
  if(!ticket)return listIsEmpty('Заявка не найдена','Вернитесь к списку.');
@@ -166,20 +190,20 @@ function ticketView(ticket){
  const detailFields=`<div><div class="field-label">Статус</div>${isEngineer?engineerStateBadge(ticket):pillStatus(ticket.status)}</div>${isEngineer?'':`<div><div class="field-label">Исполнитель</div><div class="field-value">${esc(ticket.assigneeName||'Не назначен')}</div></div>`}<div><div class="field-label">Объект / кабинет</div><div class="field-value">${esc(ticket.location||'Не указан')}</div></div><div><div class="field-label">Категория</div><div class="field-value">${esc(ticket.category||'Не определена')}</div></div>`;
  const description=(ticket.description||'').split(/\r?\n\r?\nПолезная информация\r?\n/,1)[0];
  const editButton=isEngineer?'':btn(icon('file')+' Редактировать','edit-ticket','button soft','data-id="'+esc(ticket.id)+'"');
- const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h1 class="ticket-detail-title">${esc(ticket.subject)}</h1></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(description)}</div><div class="grid-2">${detailFields}</div>${editButton?`<div class="top-gap">${editButton}</div>`:''}</div>`;
- if(isEngineer)return `<button class="back" data-action="back-tickets">${icon('back',15)} Мои заявки</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Предложенное решение</h2></div><div id="assist-container" data-assist-key="${esc(ticket.id)}">${assist?assistHtml(assist):'<div class="notice"><span class="spinner"></span> Загружаем рекомендации и источники…</div>'}</div></div><p class="hint top-gap">Чтобы принять или завершить заявку, используйте кнопки напротив неё в списке «Мои заявки».</p></div>`;
+ const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h1 class="ticket-detail-title">${esc(ticket.subject)}</h1></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(description)}</div><div class="grid-2">${detailFields}</div>${ticketSlaHtml(ticket)}${editButton?`<div class="top-gap">${editButton}</div>`:''}</div>`;
+ if(isEngineer)return `<button class="back" data-action="back-tickets">${icon('back',15)} Мои заявки</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Предложенное решение</h2></div><div id="assist-container" data-assist-key="${esc(ticket.id)}">${assist?assistHtml(assist):'<div class="notice"><span class="spinner"></span> Загружаем план работ…</div>'}</div></div><p class="hint top-gap">Чтобы принять или завершить заявку, используйте кнопки напротив неё в списке «Мои заявки».</p></div>`;
  return `<button class="back" data-action="back-tickets">${icon('back',15)} К заявкам</button><div class="work-focus">${information}</div>`;
 }
 function assistHtml(a){
  if(a.error)return '<p class="notice danger">'+esc('Ошибка поиска: '+a.error)+'</p>';
  const steps=Array.isArray(a.steps)?a.steps:[];
- const sources=Array.isArray(a.sources)?a.sources:[];
- const title=['answered','suggested'].includes(a.status)?'Рекомендованные действия':a.status==='sources_only'?'Найденные источники':'Нет подтверждённого решения';
- return `<div class="advice ${a.emergency?'danger':''}"><h3>${icon('book',17)} ${esc(title)}</h3>${a.summary?`<p>${esc(a.summary)}</p>`:''}
- ${steps.length?`<ol>${steps.map(x=>`<li>${esc(typeof x==='string'?x:x.text||x.description||'')}</li>`).join('')}</ol>`:''}
- ${sources.length?`<div class="divider"></div><div class="field-label">Откуда взята информация</div>${sources.map(src=>`<div class="source-line">${icon('file',14)} <button class="button link" data-action="view-source" data-type="${esc(src.type||'kb')}" data-id="${esc(src.id??'')}" data-title="${esc(src.title||src.name||'Источник')}">${esc(src.title||src.name||'Источник')}</button></div>`).join('')}`:''}
- ${!steps.length&&!sources.length?'<p>Достоверных рекомендаций не найдено. Уточните информацию у ответственного специалиста.</p>':''}</div><p class="hint top-gap">Рекомендация носит справочный характер. Решение принимает инженер.</p>`;
+ const take=Array.isArray(a.take)?a.take:[];
+ const title=a.emergency?'Действовать немедленно':a.status==='suggested'?'План работ':'Что уточнить';
+ return `<div class="advice ${a.emergency?'danger':''}"><h3>${icon('book',17)} ${esc(title)}</h3>
+ ${steps.length?`<ol>${steps.map(x=>`<li>${esc(typeof x==='string'?x:x.text||x.description||'')}</li>`).join('')}</ol>`:'<p>Подходящий план не найден. Уточните симптомы и масштаб сбоя у заявителя.</p>'}
+ ${take.length?`<h4>Что взять</h4><ul>${take.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:''}</div>`;
 }
+
 function knowledgeView(){
  const docs=state.articles.filter(d=>((d.title||'')+' '+(d.description||'')+' '+(d.category||'')).toLowerCase().includes(state.kbQuery.toLowerCase()));
  return intro('База знаний','Инструкции для поиска решений.')+
@@ -320,6 +344,13 @@ async function analyze(){if(state.loading)return;const field=root.querySelector(
  state.submissionText=text;state.draft=null;setLoading(true);const out=root.querySelector('#analysis-result');if(out)out.innerHTML='<div class="surface card"><span class="spinner"></span> Анализируем обращение…</div>';
  try{state.draft=await API.analyze(text,state.intakeSource);render();toast('Черновик готов. Проверьте поля перед созданием.','success');}catch(e){toast('Анализ не выполнен: '+e.message,'error');render();}finally{setLoading(false);render();}}
 function previewText(key){const x={toner:'В принтере закончилась краска, нужно заменить картридж.',mass:'Одновременно перестали работать 100 принтеров в офисе.',smoke:'Принтер не печатает, из него идёт дым и пахнет гарью.'};state.submissionText=x[key]||'';state.pendingId=null;state.draft=null;state.intakeSource='text';render();root.querySelector('#intake-text')?.focus();}
+function selectedSlaProfile(draft, priorityId) {
+ const level=state.meta?.priorities?.find(p=>String(p.id)===String(priorityId))?.level;
+ if(!level) return null;
+ const key=draft.extracted?.is_potential_emergency?'critical':
+   level==='medium'&&draft.extracted?.sla_profile==='mass'?'mass':level;
+ return state.meta?.sla_profiles?.[key]||null;
+}
 async function confirmDraft() {
  const draft=state.draft;
  if(!draft||state.loading)return;
@@ -332,6 +363,18 @@ async function confirmDraft() {
   tag_ids:[]};
  const emergencyOverride=draft.extracted?.is_potential_emergency&&draft.recommendation?.priority_id!=null
   && Number(draft.recommendation.priority_id)!==approved.priority_id;
+ const profile=selectedSlaProfile(draft,approved.priority_id);
+ const sla={response_minutes:Number(value('sla-response')),resolution_minutes:Number(value('sla-resolution'))};
+ if(!Number.isInteger(sla.response_minutes)||!Number.isInteger(sla.resolution_minutes)
+    ||sla.response_minutes<1||sla.resolution_minutes<sla.response_minutes||sla.resolution_minutes>10080){
+   toast('Проверьте сроки SLA, указанные в минутах.','error');return;
+ }
+ const reason=value('sla-reason');
+ const override=profile&&(sla.response_minutes!==profile.response_minutes||sla.resolution_minutes!==profile.resolution_minutes);
+ const loweredMass=draft.extracted?.sla_profile==='mass'&&profile===state.meta?.sla_profiles?.low;
+ if((override||loweredMass||emergencyOverride)&&reason.length<20){
+   toast('Укажите причину правки SLA или приоритета от 20 символов.','error');return;
+ }
  const needsManualReview=draft.status!=='awaiting_review'||emergencyOverride;
  const reviewMessage=emergencyOverride
   ?'Подтверждаю изменение приоритета потенциальной аварии после ручной проверки.'
@@ -339,8 +382,8 @@ async function confirmDraft() {
  if(needsManualReview&&!window.confirm(reviewMessage))return;
  state.loading=true;
  try {
-  const result=await API.confirm(draft.draft_id,{revision:draft.revision,approve:true,approved,
-   ...(needsManualReview?{manual_review_reason:reviewMessage}:{})});
+  const result=await API.confirm(draft.draft_id,{revision:draft.revision,approve:true,approved,sla,
+   ...(reason||needsManualReview?{manual_review_reason:reason||reviewMessage}:{})});
   state.draft=null;state.submissionText='';await loadData();navigate('/tickets/'+result.ticket_id);toast('Заявка создана','success');
  } catch (error) {toast(error.message,'error');}
  finally {state.loading=false;}
@@ -463,6 +506,12 @@ function attach(){
    try{const response=await fetch('/workspace/api/demo-role',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':CFG.csrfToken},body:JSON.stringify({role:e.target.value})});if(!response.ok)throw new Error('Не удалось изменить роль');location.hash='';location.reload();}catch(err){toast(err.message,'error');render();}return;
   }
   if(e.target.id==='role-select'&&API.isDemo()){if(!roles[e.target.value])return;state.role=e.target.value;state.currentUser=null;state.ticketQuery='';state.kbQuery='';state.draft=null;navigate(navigation[state.role][0][0]);await loadData();}
+  if(e.target.id==='confirm-priority'&&state.draft){
+   const profile=selectedSlaProfile(state.draft,e.target.value);
+   root.querySelector('#confirm-sla-response').value=profile?.response_minutes??'';
+   root.querySelector('#confirm-sla-resolution').value=profile?.resolution_minutes??'';
+   root.querySelector('#sla-profile-label').textContent=profile?.label||'Выберите приоритет.';
+  }
   if(e.target.id==='ticket-filter-status'){state.ticketStatus=e.target.value;render();}
   if(e.target.id==='ticket-filter-priority'){state.ticketPriority=e.target.value;render();}
   if(e.target.id==='manual-action-count'||e.target.id==='ai-action-count'){const key=e.target.id==='manual-action-count'?'manual':'ai';state.metricCounts[key]=e.target.value;state.metricsOpen=true;render();}

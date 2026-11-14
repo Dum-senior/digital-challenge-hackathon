@@ -1,5 +1,6 @@
 """HTTP integration smoke test against an isolated release Compose project."""
 import concurrent.futures
+from datetime import datetime
 import http.cookiejar
 import json
 import os
@@ -67,10 +68,22 @@ for variable, path, field in (
         assert upload(dispatcher, path, field, os.environ[variable], csrf)["text"].strip()
         print("PASS", path, flush=True)
 
+for message, profile, elapsed, equipment in (
+    ("В корпусе Б в кабинете 214 кончилась краска в принтере.", "low", (120, 1440), "картридж"),
+    ("В корпусе Б 100 принтеров одновременно не печатают.", "mass", (15, 240), "ноутбук"),
+):
+    case = request(dispatcher, "/intake/analyze", {"text": message}, csrf, expected=201)
+    assert case["extracted"]["sla_profile"] == profile, case
+    assert (case["sla"]["response_minutes"], case["sla"]["resolution_minutes"]) == elapsed, case
+    procedure = request(dispatcher, f"/workspace/api/drafts/{case['draft_id']}/assist", {}, csrf)
+    assert procedure["steps"] and equipment in str(procedure["take"]).lower(), procedure
+    assert "sources" not in procedure
+
 text = "В корпусе Б в кабинете 214 из принтера идёт дым."
 draft = request(dispatcher, "/intake/analyze", {"text": text}, csrf, expected=201)
 assert draft["extracted"]["analysis_mode"] == "private_llm", draft["extracted"].get("model_error")
 assert draft["extracted"]["priority"] == "critical"
+assert draft["sla"]["response_minutes"] == 5
 assert draft["extracted"]["location"]["name"] == "Корпус Б"
 assert draft["approved"]["assigned_to"] == engineers[0]["id"]
 endpoint = f"/intake/drafts/{draft['draft_id']}/confirm"
@@ -79,19 +92,25 @@ args = {"revision": draft["revision"], "approve": True,
         "manual_review_reason": "Интеграционный тест на отдельной базе."}
 request(dispatcher, endpoint, {**args, "approved": {**approved, "priority_id": None}}, csrf, expected=422)
 request(engineer, endpoint, args, eng_csrf, expected=403)
+request(dispatcher, endpoint, {**args, "sla": {"response_minutes": 30, "resolution_minutes": 60}}, csrf, expected=422)
 approved["subject"] = "Проверенная заявка о дыме"
-created = request(dispatcher, endpoint, {**args, "approved": approved}, csrf, expected=201)
+created = request(dispatcher, endpoint, {**args, "approved": approved,
+                  "sla": {"response_minutes": 3, "resolution_minutes": 45}}, csrf, expected=201)
 ticket = created["ticket_id"]
 assert request(dispatcher, endpoint, args, csrf)["ticket_id"] == ticket
-assert any(t["id"] == ticket and t["subject"] == approved["subject"] for t in request(engineer, "/workspace/api/tickets"))
+for client in (dispatcher, engineer):
+    record = next(t for t in request(client, "/workspace/api/tickets") if t["id"] == ticket)
+    assert record["subject"] == approved["subject"]
+    response = datetime.fromisoformat(record["responseDueAt"])
+    resolution = datetime.fromisoformat(record["resolutionDueAt"])
+    assert (resolution - response).total_seconds() == 42 * 60, record
 endpoint = f"/workspace/api/tickets/{ticket}/update"
 request(engineer, endpoint, {"status": "resolved"}, eng_csrf, expected=409)
 request(engineer, endpoint, {"status": "in_progress"}, eng_csrf)
 request(engineer, endpoint, {"status": "resolved"}, eng_csrf)
 solution = request(engineer, f"/workspace/api/tickets/{ticket}/assist", {}, eng_csrf)
-assert solution.get("status") == "suggested" and solution.get("sources"), solution
-source = request(engineer, "/workspace/api/articles/" + solution["sources"][0]["id"])
-assert source["content"]
+assert solution.get("status") == "suggested" and solution.get("emergency"), solution
+assert solution["steps"] and not solution["take"] and "sources" not in solution, solution
 report = request(admin, "/workspace/api/reports")
 assert report["critical"] >= 1 and report["resolved"] >= 1
 assert request(admin, "/workspace/api/audit")
