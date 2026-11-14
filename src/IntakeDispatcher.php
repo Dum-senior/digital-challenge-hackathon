@@ -10,7 +10,7 @@ declare(strict_types=1);
 final class IntakeDispatcher
 {
     public const SOURCES = ['text', 'voice', 'phone'];
-    public const CATEGORIES = ['peripherals', 'telemetry', 'automation', 'network', 'security', 'access', 'database', 'fire', 'unknown'];
+    public const CATEGORIES = ['peripherals', 'telemetry', 'automation', 'network', 'security', 'access', 'database', 'fire', 'workstation', 'unknown'];
     public const EDITABLE = ['subject', 'description', 'type_id', 'location_id', 'priority_id', 'group_id', 'assigned_to', 'tag_ids', 'fields'];
 
     public static function json(array $value): string
@@ -109,6 +109,7 @@ final class IntakeDispatcher
             'automation' => '/\b(?:opc|орс)\b|асу тп/iu',
             'telemetry' => '/сч[её]тчик|телеметр|показани/iu',
             'peripherals' => '/принтер|печата|печать/iu',
+            'workstation' => '/\bмонитор\p{L}*\b|системный блок|рабочая станция/iu',
             'network' => '/пропала сеть|нет связи|wi-fi|wifi|\bvpn\b/iu',
             'access' => '/уч[её]тная запись|не могу войти|access denied|\bmfa\b/iu',
         ];
@@ -154,7 +155,9 @@ final class IntakeDispatcher
         $subject = mb_substr(preg_replace('/\s+/u', ' ', trim($text)), 0, 140);
         $modelSubject = $model['subject'] ?? null;
         $modelDescription = $model['description'] ?? null;
-        if (!$failure && is_string($modelSubject) && trim($modelSubject) !== '' && mb_strlen($modelSubject) <= 140) {
+        if (!$failure && is_string($modelSubject) && trim($modelSubject) !== '' && mb_strlen($modelSubject) <= 140
+            && preg_match('/[а-яё]/iu', $modelSubject)
+            && !in_array(mb_strtolower(trim($modelSubject)), self::CATEGORIES, true)) {
             $subject = preg_replace('/\s+/u', ' ', trim($modelSubject));
         }
         $description = !$failure && is_string($modelDescription) && trim($modelDescription) !== ''
@@ -256,7 +259,7 @@ final class IntakeDispatcher
     private static function categoryName(string $category): ?string
     {
         return ['peripherals'=>'Печать', 'telemetry'=>'Телеметрия', 'automation'=>'OPC', 'network'=>'Сеть',
-            'security'=>'ИБ', 'access'=>'Доступ', 'database'=>'База данных', 'fire'=>'Пожар'][$category] ?? null;
+            'security'=>'ИБ', 'access'=>'Доступ', 'database'=>'База данных', 'fire'=>'Пожар', 'workstation'=>'Рабочее место'][$category] ?? null;
     }
 
     private static function matchType(PDO $db, string $category): ?int
