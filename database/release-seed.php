@@ -5,7 +5,7 @@ define('ROOT_DIR', dirname(__DIR__));
 require ROOT_DIR.'/src/helpers.php';
 require ROOT_DIR.'/src/Database.php';
 $db=Database::connect();
-if ($db->query('SELECT 1 FROM users LIMIT 1')->fetchColumn()) exit(0);
+if ($db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='users'")->fetchColumn() && $db->query('SELECT 1 FROM users LIMIT 1')->fetchColumn()) exit(0);
 
 $roles=[
     ['admin','Администратор','admin','RELEASE_ADMIN_PASSWORD'],
@@ -15,6 +15,15 @@ $roles=[
 foreach ($roles as $role) {
     if (strlen(env($role[3]))<12) throw new RuntimeException($role[3].' requires at least 12 characters');
 }
+// The schema snapshot already contains historical migrations. Bootstrap its
+// catalog data, then mark the snapshot migrations before the incremental runner.
+(require __DIR__.'/migrations/001_create_all_tables.php')($db);
+(require __DIR__.'/migrations/041_ticket_statuses.php')($db);
+(require __DIR__.'/migrations/042_roles_permissions.php')($db);
+(require __DIR__.'/migrations/098_dispatcher_catalog.php')($db);
+$db->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, migration VARCHAR(255) NOT NULL UNIQUE,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)");
 $db->beginTransaction();
 try {
     $db->exec("INSERT IGNORE INTO roles (slug,name,is_system,is_staff,landing,sort_order)
@@ -42,6 +51,10 @@ try {
     $policy=$db->prepare('INSERT IGNORE INTO sla_policies (priority_id,first_response_minutes,resolution_minutes)
         SELECT id,?,? FROM ticket_priorities WHERE name=?');
     foreach ([[120,480,'Низкий'],[30,240,'Средний'],[10,60,'Авария']] as $row) $policy->execute($row);
+    $stamp=$db->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)');
+    foreach (glob(__DIR__.'/migrations/*.php') as $file) {
+        if (strcmp(basename($file), '098_dispatcher_catalog.php') <= 0) $stamp->execute([basename($file)]);
+    }
     $db->commit();
 } catch (Throwable $error) {
     $db->rollBack();

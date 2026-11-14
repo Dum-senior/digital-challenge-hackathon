@@ -27,7 +27,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: [sh, -ec, 'php database/migrate.php && php database/release-seed.php']
+    command: [sh, -ec, 'php database/release-seed.php && php database/migrate.php']
     environment:
       <<: *database
       RELEASE_ADMIN_PASSWORD: ${RELEASE_ADMIN_PASSWORD}
