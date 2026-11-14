@@ -115,9 +115,10 @@ function classifyPreview() {
  return `<div class="surface card"><h2>Проверка черновика №${esc(draft.draft_id)}</h2><div class="grid-2">
  <label class="form-field"><span>Категория</span><select id="confirm-category">${options(meta.types||[],a.type_id)}</select></label>
  <label class="form-field"><span>Приоритет *</span><select id="confirm-priority">${options(meta.priorities||[],a.priority_id)}</select></label>
- <label class="form-field"><span>Место</span><select id="confirm-location">${options(places,a.location_id)}</select></label>
- <label class="form-field"><span>Инженер</span><select id="confirm-assignee">${options(engineers,a.group_id+':'+a.assigned_to)}</select></label></div>
- <p>${esc(ex.severity_reason||'')} ${esc(draft.recommendation?.reason||'')}</p>
+ <div class="field-with-hint"><label class="form-field"><span>Место</span><select id="confirm-location">${options(places,a.location_id)}</select></label>
+ ${ex.severity_reason?`<p class="hint">${esc(ex.severity_reason)}</p>`:''}</div>
+ <div class="field-with-hint"><label class="form-field"><span>Инженер</span><select id="confirm-assignee">${options(engineers,a.group_id+':'+a.assigned_to)}</select></label>
+ ${draft.recommendation?.reason?`<p class="hint">${esc(draft.recommendation.reason)}</p>`:''}</div></div>
  <label class="form-field"><span>Тема</span><textarea id="confirm-subject" maxlength="255">${esc(a.subject||ex.subject)}</textarea></label>
  <label class="form-field"><span>Описание</span><textarea id="confirm-description">${esc(a.description||ex.description)}</textarea></label>
  <section class="top-gap"><h3>Предложенное решение</h3><div id="assist-container" data-assist-key="${esc(adviceKey)}">${advice?assistHtml(advice):'<p>Ищем решение в базе знаний…</p>'}</div></section>
@@ -163,9 +164,11 @@ function ticketView(ticket){
  const isEngineer=state.role==='engineer';
  const assist=state.assist[ticket.id];
  const detailFields=`<div><div class="field-label">Статус</div>${isEngineer?engineerStateBadge(ticket):pillStatus(ticket.status)}</div>${isEngineer?'':`<div><div class="field-label">Исполнитель</div><div class="field-value">${esc(ticket.assigneeName||'Не назначен')}</div></div>`}<div><div class="field-label">Объект / кабинет</div><div class="field-value">${esc(ticket.location||'Не указан')}</div></div><div><div class="field-label">Категория</div><div class="field-value">${esc(ticket.category||'Не определена')}</div></div>`;
- const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h2>${esc(ticket.subject)}</h2></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(ticket.description)}</div><div class="grid-2">${detailFields}</div>${ticket.extracted?.equipment||ticket.extracted?.ip||ticket.extracted?.tags?.length?`<details class="extract-details top-gap"><summary>Дополнительные данные заявки</summary><div class="grid-2 top-gap">${Object.entries(ticket.extracted).filter(([k,v])=>['equipment','ip','floor','room','object','serial_number','symptoms','tags'].includes(k)&&v).map(([k,v])=>`<div><span class="field-label">${esc(({equipment:'Оборудование',ip:'IP',floor:'Этаж',room:'Кабинет',object:'Объект',serial_number:'Серийный номер',symptoms:'Симптомы',tags:'Теги'})[k]||k)}</span><span class="field-value">${esc(Array.isArray(v)?v.join(', '):v)}</span></div>`).join('')}</div></details>`:''}</div>`;
+ const description=(ticket.description||'').split(/\r?\n\r?\nПолезная информация\r?\n/,1)[0];
+ const editButton=isEngineer?'':btn(icon('file')+' Редактировать','edit-ticket','button soft','data-id="'+esc(ticket.id)+'"');
+ const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h1 class="ticket-detail-title">${esc(ticket.subject)}</h1></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(description)}</div><div class="grid-2">${detailFields}</div>${editButton?`<div class="top-gap">${editButton}</div>`:''}</div>`;
  if(isEngineer)return `<button class="back" data-action="back-tickets">${icon('back',15)} Мои заявки</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Предложенное решение</h2></div><div id="assist-container" data-assist-key="${esc(ticket.id)}">${assist?assistHtml(assist):'<div class="notice"><span class="spinner"></span> Загружаем рекомендации и источники…</div>'}</div></div><p class="hint top-gap">Чтобы принять или завершить заявку, используйте кнопки напротив неё в списке «Мои заявки».</p></div>`;
- return `<button class="back" data-action="back-tickets">${icon('back',15)} К заявкам</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Описание заявки</h2>${btn(icon('file')+' Редактировать','edit-ticket','button soft','data-id="'+esc(ticket.id)+'"')}</div><p class="muted">Диспетчер может поправить формулировку, не меняя историю исполнения.</p></div></div>`;
+ return `<button class="back" data-action="back-tickets">${icon('back',15)} К заявкам</button><div class="work-focus">${information}</div>`;
 }
 function assistHtml(a){
  if(a.error)return '<p class="notice danger">'+esc('Ошибка поиска: '+a.error)+'</p>';

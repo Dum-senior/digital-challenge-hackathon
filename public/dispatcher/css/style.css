@@ -119,3 +119,5 @@ input[type=date]:focus,input[type=url]:focus{border-color:#82a7f3;box-shadow:0 0
 .engineer-no-tasks{background:#f8fafc;border:1px dashed #e1e7f0;color:#8191a6;font-size:12px;padding:18px;border-radius:9px;text-align:center}
 @media(max-width:700px){.engineer-summary{grid-template-columns:1fr 1fr}.engineer-card{padding:16px}.engineer-stat{padding:14px}.engineer-profile{align-items:flex-start}.engineer-workload{min-width:70px}.engineer-loadline{gap:8px;justify-content:space-between}}
 @media(max-width:430px){.engineer-summary{grid-template-columns:1fr}.engineer-profile{flex-wrap:wrap}.engineer-workload{margin-left:57px;text-align:left;flex-direction:row;gap:7px;align-items:baseline}.engineer-avatar{width:39px;height:39px;flex-basis:39px}.engineer-profile h2{font-size:14px}}
+
+.field-with-hint{min-width:0;overflow-wrap:anywhere}.field-with-hint p{margin:4px 0 0}.ticket-detail-title{font-size:clamp(24px,4vw,36px);line-height:1.2;margin:5px 0 0;overflow-wrap:anywhere}.ticket-head>div{min-width:0}

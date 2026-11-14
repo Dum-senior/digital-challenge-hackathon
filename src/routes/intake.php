@@ -291,23 +291,10 @@ $intakeConfirm = static function (array $p): void {
         }
         $groupId = resolveTicketGroup($db, $approved['group_id'], $approved['type_id']);
         $assignedTo = $approved['assigned_to'];
-        $extra = [];
-        $labels = ['object'=>'Название', 'meter_number'=>'Счётчик', 'started_at'=>'Начало',
-            'room'=>'Кабинет', 'useful_notes'=>'Важное'];
-        if (!isset($approved['fields']['started_at'])) $labels['incident_time'] = 'Начало';
-        foreach ($labels as $field => $label) {
-            $v = $approved['fields'][$field] ?? null;
-            if (is_array($v)) $v = implode(', ', $v);
-            if ($v !== null && trim((string) $v) !== '') {
-                $extra[] = $label . ': ' . htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            }
-        }
-        $ticketDescription = $approved['description'] . ($extra ? "\n\nПолезная информация\n" . implode("\n", $extra) : '');
-        if (mb_strlen($ticketDescription) > 10000) throw new InvalidArgumentException('Description with structured fields is too long');
         $stmt = $db->prepare('INSERT INTO tickets
             (subject, description, created_by, submitted_by, status, type_id, priority_id, location_id, group_id, assigned_to)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$approved['subject'], $ticketDescription, (int) $row['user_id'], (int) $actor['id'],
+        $stmt->execute([$approved['subject'], $approved['description'], (int) $row['user_id'], (int) $actor['id'],
             ticketDefaultNewStatusSlug(), $approved['type_id'], $approved['priority_id'], $approved['location_id'], $groupId, $assignedTo]);
         $ticketId = (int) $db->lastInsertId();
         $detail = 'AI intake draft #' . $row['id'] . ' reviewed by staff user #' . $actor['id'];
