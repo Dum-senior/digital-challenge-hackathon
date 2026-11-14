@@ -18,13 +18,13 @@ if ($kind !== null) {
 $kinds = ['models' => 'Models', 'categories' => 'Categories', 'manufacturers' => 'Manufacturers', 'suppliers' => 'Suppliers', 'statuses' => 'Statuses'];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h5 class="fw-bold mb-0"><i class="bi bi-pc-display me-1"></i>Inventory<?= $kind !== null ? ' · ' . e($spec['title']) : '' ?></h5>
+    <h5 class="fw-bold mb-0"><i class="bi bi-pc-display me-1"></i>Оборудование<?= $kind !== null ? ' · ' . e($spec['title']) : '' ?></h5>
     <a href="/inventory" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-up-right me-1"></i>Open inventory</a>
 </div>
 
@@ -60,7 +60,7 @@ $kinds = ['models' => 'Models', 'categories' => 'Categories', 'manufacturers' =>
                 <div class="form-text">Audit mode sets the next audit date this far ahead unless a date is typed. 0 leaves it unchanged.</div>
             </div>
             <div class="col-12">
-                <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i>Save</button>
+                <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i>Сохранить</button>
             </div>
         </form>
     </div>
@@ -100,7 +100,7 @@ $kinds = ['models' => 'Models', 'categories' => 'Categories', 'manufacturers' =>
                 A ClientID from your Lenovo account manager switches to Lenovo's official Warranty API.
             </div>
             <div class="col-12">
-                <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i>Save</button>
+                <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i>Сохранить</button>
             </div>
         </form>
     </div>
@@ -143,7 +143,7 @@ $kinds = ['models' => 'Models', 'categories' => 'Categories', 'manufacturers' =>
                     <?php endforeach; ?>
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i><?= $editing ? 'Save' : 'Add' ?></button>
-                        <?php if ($editing): ?><a href="/admin/settings/inventory/<?= $kind ?>" class="btn btn-sm btn-outline-secondary">Cancel</a><?php endif; ?>
+                        <?php if ($editing): ?><a href="/admin/settings/inventory/<?= $kind ?>" class="btn btn-sm btn-outline-secondary">Отмена</a><?php endif; ?>
                     </div>
                 </form>
             </div>

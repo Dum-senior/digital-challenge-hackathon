@@ -10,7 +10,7 @@ $hasFilters = $statusFilter !== '' || $ageFilter !== null;
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <h5 class="mb-0 fw-semibold"><i class="bi bi-list-ul me-2"></i>Unresolved Tickets</h5>
+            <h5 class="mb-0 fw-semibold"><i class="bi bi-list-ul me-2"></i>Нерешённые заявки</h5>
             <span class="badge bg-secondary bg-opacity-10 text-secondary"><?= number_format($totalFiltered) ?></span>
 
             <?php if ($statusFilter !== ''): ?>
@@ -55,10 +55,10 @@ $hasFilters = $statusFilter !== '' || $ageFilter !== null;
             <thead class="table-light">
                 <tr>
                     <th>ID</th>
-                    <th>Subject</th>
-                    <th>Status</th>
-                    <th>Priority</th>
-                    <th>Agent</th>
+                    <th>Тема</th>
+                    <th>Статус</th>
+                    <th>Приоритет</th>
+                    <th>Инженер</th>
                     <?php if (slaEnabled()): ?><th>SLA</th><?php endif; ?>
                     <th>Age</th>
                     <th>Created</th>

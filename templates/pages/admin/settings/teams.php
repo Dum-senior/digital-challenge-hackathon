@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -215,7 +215,7 @@ $breadcrumbs  = [
             <h6 class="fw-semibold"><i class="bi bi-info-circle me-2"></i>How to set up the bot</h6>
             <ol class="text-muted small mb-0">
                 <li>In the Azure portal create an <strong>Azure Bot</strong> resource. For <em>Type of app</em> choose <strong>Single Tenant</strong>; either let it create a Microsoft App ID or pick <em>Use existing app registration</em> and enter the SSO app's ID.</li>
-                <li>Create a client secret on that app registration (Entra ID &rarr; App registrations &rarr; Certificates &amp; secrets) and enter the App ID, tenant ID and secret above. Enable the bot and <strong>Save</strong>, then <strong>Check saved credentials</strong>.</li>
+                <li>Create a client secret on that app registration (Entra ID &rarr; App registrations &rarr; Certificates &amp; secrets) and enter the App ID, tenant ID and secret above. Enable the bot and <strong>Сохранить</strong>, then <strong>Check saved credentials</strong>.</li>
                 <li>In the bot's <strong>Configuration</strong>, set the Messaging endpoint to the URL above.</li>
                 <li>Under <strong>Channels</strong>, add <strong>Microsoft Teams</strong>.</li>
                 <li><strong>Download the Teams app package</strong> and upload it in Teams (<em>Apps &rarr; Manage your apps &rarr; Upload an app</em>), or have a Teams admin publish it to your organisation's app catalogue so anyone can add it.</li>

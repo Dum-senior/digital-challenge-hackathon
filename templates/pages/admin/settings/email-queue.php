@@ -10,7 +10,7 @@ $breadcrumbs  = [
 $mailDisabled = env('MAIL_ENABLED', 'true') === 'false';
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -52,7 +52,7 @@ $mailDisabled = env('MAIL_ENABLED', 'true') === 'false';
                 <label class="form-check-label small fw-semibold" for="mail_queue_delay_notice">Add a "this message was delayed" note to emails sent from the queue</label>
                 <div class="small text-muted">The note sits at the top of the email and says how long it waited in the queue, so the reader knows it may be out of date.</div>
             </div>
-            <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+            <button type="submit" class="btn btn-sm btn-outline-primary">Сохранить</button>
         </form>
         <?php if ($mailDisabled): ?>
         <div class="alert alert-warning rounded-0 border-0 mb-0">
@@ -70,8 +70,8 @@ $mailDisabled = env('MAIL_ENABLED', 'true') === 'false';
                     <tr>
                         <th>Queued</th>
                         <th>To</th>
-                        <th>Subject</th>
-                        <th>Ticket</th>
+                        <th>Тема</th>
+                        <th>Заявка</th>
                         <th>Reason</th>
                         <th class="text-end">Attempts</th>
                     </tr>

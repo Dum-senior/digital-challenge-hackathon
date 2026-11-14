@@ -79,7 +79,7 @@ $kpiCards   = [
                     <thead class="table-light">
                         <tr>
                             <th><?= $title ?></th>
-                            <th class="text-center">Tickets</th>
+                            <th class="text-center">Заявки</th>
                             <th class="text-end">Total</th>
                             <th class="text-end">Avg / Ticket</th>
                         </tr>
@@ -113,9 +113,9 @@ $kpiCards   = [
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Ticket</th>
+                    <th>Заявка</th>
                     <th>Type</th>
-                    <th>Agents</th>
+                    <th>Инженеры</th>
                     <th class="text-center">Entries</th>
                     <th class="text-end">Time</th>
                 </tr>

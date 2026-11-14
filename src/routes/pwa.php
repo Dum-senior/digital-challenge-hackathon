@@ -37,7 +37,7 @@ $router->get('/sw.js', function () {
     // JS context (defence-in-depth: VERSION is currently APP_VERSION + a hex
     // hash, but treat all injected values as untrusted data).
     $versionJs = json_encode($version, JSON_UNESCAPED_SLASHES);
-    $appNameJs = json_encode(getSetting('branding_app_name', 'OpenHelpDesk'), JSON_UNESCAPED_SLASHES);
+    $appNameJs = json_encode(getSetting('branding_app_name', 'Диспетчер ИИ'), JSON_UNESCAPED_SLASHES);
 
     // The service worker is plain JS — the only PHP-injected values are the
     // JSON literals below.
@@ -198,7 +198,7 @@ $router->get('/pwa/apple-touch-icon.png', function () {
 $router->get('/offline', function () {
     // Light-weight offline shell — no DB calls, no auth, no flash.
     header('Cache-Control: public, max-age=86400');
-    $appName    = getSetting('branding_app_name', 'OpenHelpDesk');
+    $appName    = getSetting('branding_app_name', 'Диспетчер ИИ');
     $primary    = getSetting('branding_primary_color', '#4f46e5');
     $startGrad  = getSetting('branding_navbar_start', '#1e1b4b');
     $endGrad    = getSetting('branding_navbar_end', '#312e81');

@@ -1606,7 +1606,7 @@ $router->post('/forgot', function () {
             )->execute([(int) $user['id'], $tokenHash, $expires, $ip]);
 
             $resetUrl   = appUrl() . '/reset?token=' . $rawToken;
-            $appName    = getSetting('branding_app_name', 'OpenHelpDesk');
+            $appName    = getSetting('branding_app_name', 'Диспетчер ИИ');
             $brandColor = getSetting('branding_primary_color', '#4f46e5');
             $footerText = getSetting('email_footer_text')
                 ?: 'This is an automated message from ' . $appName . '. If you did not request a password reset you can safely ignore this email.';

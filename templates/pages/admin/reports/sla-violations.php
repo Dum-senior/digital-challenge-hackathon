@@ -100,10 +100,10 @@ $breadcrumbs  = [
             <thead class="table-light">
                 <tr>
                     <th>ID</th>
-                    <th>Subject</th>
-                    <th>Status</th>
-                    <th>Priority</th>
-                    <th>Agent</th>
+                    <th>Тема</th>
+                    <th>Статус</th>
+                    <th>Приоритет</th>
+                    <th>Инженер</th>
                     <th>Breach</th>
                     <th class="text-end">Overdue By</th>
                     <th>Created</th>

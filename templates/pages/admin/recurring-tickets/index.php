@@ -34,7 +34,7 @@ $breadcrumbs  = [
                     <th>Last Run</th>
                     <th>Runs</th>
                     <th class="text-center">Active</th>
-                    <th style="width:160px">Actions</th>
+                    <th style="width:160px">Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -152,7 +152,7 @@ $breadcrumbs  = [
             <div class="modal-footer">
                 <form method="POST" id="runNowForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn text-white px-4" style="background:var(--ld-primary);">
                         <i class="bi bi-lightning-charge me-1"></i>Create Ticket
                     </button>
@@ -176,7 +176,7 @@ $breadcrumbs  = [
             <div class="modal-footer">
                 <form method="POST" id="deleteRecurringForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

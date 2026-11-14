@@ -25,10 +25,10 @@ $loc = label('location.singular');
             <div>
                 <strong>How rows are handled</strong>
                 <ul class="mb-0 mt-1">
-                    <li><strong>Model</strong> is the only required column. It is matched by name or model number; a model that is not in the catalog is created when the row also has a <strong>Category</strong> (and its Manufacturer, if given).</li>
+                    <li><strong>Model</strong> is the only required column. It is matched by name or model number; a model that is not in the catalog is created when the row also has a <strong>Категория</strong> (and its Manufacturer, if given).</li>
                     <li>A blank <strong>Asset tag</strong> gets the next automatic tag.</li>
                     <li>A tag that already exists is <strong>skipped</strong>, or — if you choose it on the next step — that asset is <strong>updated</strong> with the non-blank cells. Export the list as CSV, fill in the gaps, and import it back to fix many assets at once.</li>
-                    <li><strong>Status</strong> and <strong><?= e($loc) ?></strong> are matched by name. An unknown status falls back to a default you pick; an unknown <?= e(strtolower($loc)) ?> is left blank and flagged.</li>
+                    <li><strong>Статус</strong> and <strong><?= e($loc) ?></strong> are matched by name. An unknown status falls back to a default you pick; an unknown <?= e(strtolower($loc)) ?> is left blank and flagged.</li>
                     <li>New suppliers are created. Nothing is checked out by an import.</li>
                 </ul>
             </div>

@@ -48,7 +48,7 @@ $breadcrumbs  = [
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Status</th>
+                            <th>Статус</th>
                             <th class="text-center">Avg Duration</th>
                             <th class="text-center">Transitions</th>
                         </tr>
@@ -73,7 +73,7 @@ $breadcrumbs  = [
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Priority</th>
+                            <th>Приоритет</th>
                             <th class="text-center">Avg to First Response</th>
                             <th class="text-center">Avg to Resolution</th>
                         </tr>

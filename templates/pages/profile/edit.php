@@ -292,7 +292,7 @@ $breadcrumbs = [
                 <p class="mb-0">Are you sure you want to disable two-factor authentication? Your account will be less secure.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-danger px-4" id="confirmDisable2fa">
                     <i class="bi bi-shield-x me-1"></i>Disable 2FA
                 </button>

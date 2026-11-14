@@ -46,10 +46,10 @@ unset($__s);
             <thead class="table-light">
                 <tr>
                     <th style="width:60px;min-width:60px;white-space:nowrap;">#</th>
-                    <th style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Subject</th>
-                    <th>Status</th>
-                    <th>Priority</th>
-                    <th>Assigned To</th>
+                    <th style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Тема</th>
+                    <th>Статус</th>
+                    <th>Приоритет</th>
+                    <th>Исполнитель</th>
                     <th>Created</th>
                 </tr>
             </thead>

@@ -83,7 +83,7 @@ $renderLabelRow = function (string $key, string $defaultValue, ?string $where, a
 };
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -621,7 +621,7 @@ function copyJsonToClipboard() {
             <div class="modal-footer">
                 <form method="POST" action="/admin/settings/labels/reset">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Labels
                     </button>

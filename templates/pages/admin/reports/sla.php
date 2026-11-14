@@ -110,7 +110,7 @@ $breadcrumbs  = [
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Priority</th>
+                            <th>Приоритет</th>
                             <th class="text-center">Total</th>
                             <th class="text-center">Response Met</th>
                             <th class="text-center">Response Breached</th>
@@ -158,9 +158,9 @@ $breadcrumbs  = [
             <thead class="table-light">
                 <tr>
                     <th>ID</th>
-                    <th>Subject</th>
-                    <th>Priority</th>
-                    <th>Agent</th>
+                    <th>Тема</th>
+                    <th>Приоритет</th>
+                    <th>Инженер</th>
                     <th>Breach Type</th>
                     <th>Created</th>
                 </tr>

@@ -69,7 +69,7 @@ $breadcrumbs  = [
                     <th>#</th>
                     <th>Title</th>
                     <th>Category / Folder</th>
-                    <th>Status</th>
+                    <th>Статус</th>
                     <th>Body Preview</th>
                 </tr>
             </thead>

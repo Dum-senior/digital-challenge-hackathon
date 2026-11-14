@@ -18,7 +18,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-microsoft text-primary me-2"></i>What SSO Does</h5>
-<p class="text-muted mb-2">When SSO is enabled, the login page shows a <strong>Sign in with Microsoft 365</strong> button below the normal email/password form. The user is sent to Microsoft to sign in, and comes back to the helpdesk already logged in.</p>
+<p class="text-muted mb-2">When SSO is enabled, the login page shows a <strong>Войти через Microsoft 365</strong> button below the normal email/password form. The user is sent to Microsoft to sign in, and comes back to the helpdesk already logged in.</p>
 <ul class="text-muted mb-0">
     <li><strong>Password login stays available</strong> alongside SSO, so accounts without a Microsoft identity (and your break-glass admin) can still sign in.</li>
     <li>The helpdesk asks Microsoft only for the user's basic profile (<code>openid</code>, <code>email</code>, <code>profile</code>, <code>User.Read</code>): name, email address and account ID.</li>
@@ -83,7 +83,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <h5 class="fw-semibold mb-3"><i class="bi bi-info-circle text-primary me-2"></i>Good to Know</h5>
 <ul class="text-muted mb-0">
     <li><strong>Two-factor authentication.</strong> A Microsoft sign-in does not ask for the helpdesk's own 2FA code. Enforce multi-factor authentication on the Microsoft side (Entra ID security defaults or Conditional Access).</li>
-    <li><strong>No helpdesk password.</strong> Accounts created by SSO have no password, so <em>Forgot password?</em> does nothing for them. An admin can set a password on the account if password login is also needed.</li>
+    <li><strong>No helpdesk password.</strong> Accounts created by SSO have no password, so <em>Забыли пароль?</em> does nothing for them. An admin can set a password on the account if password login is also needed.</li>
     <li><strong>Secret expiry.</strong> Azure client secrets expire. When yours does, sign-in fails at the callback step: create a new secret in Azure and paste it into <strong>Client Secret</strong>.</li>
     <li><strong>Removing access.</strong> Permission changes and deletions take effect on the user's next page load. A deleted user who signs in with Microsoft again gets a new End User account, so block them in Entra ID if they should not have portal access either.</li>
 </ul>
@@ -98,8 +98,8 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <table class="table table-sm mb-0">
     <thead class="table-light"><tr><th style="width:38%;">Message</th><th>Likely cause</th></tr></thead>
     <tbody class="text-muted">
-        <tr><td>SSO is not currently enabled.</td><td>The enable switch is off. Turn it on and save.</td></tr>
-        <tr><td>Sign-in session expired. Please try again.</td><td>The round trip to Microsoft took too long or the browser lost its session cookie. Try again in one tab.</td></tr>
+        <tr><td>Единый вход отключён.</td><td>The enable switch is off. Turn it on and save.</td></tr>
+        <tr><td>Сеанс входа истёк. Попробуйте снова.</td><td>The round trip to Microsoft took too long or the browser lost its session cookie. Try again in one tab.</td></tr>
         <tr><td>Could not complete sign-in with Microsoft.</td><td>Wrong or expired client secret, or the redirect URI in Azure doesn't match <code>APP_URL</code>. The <a href="/admin/settings/sso/help">Setup Guide</a> lists the matching Azure error codes.</td></tr>
         <tr><td>Could not retrieve your account details from Microsoft.</td><td><code>User.Read</code> permission or admin consent is missing, or the account has no email address.</td></tr>
         <tr><td>Your organization is not authorized for single sign-on here.</td><td>The account belongs to a different tenant, or the tenant field is <code>common</code> and the account isn't linked yet.</td></tr>

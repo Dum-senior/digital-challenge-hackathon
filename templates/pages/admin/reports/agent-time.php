@@ -69,10 +69,10 @@ foreach ($staff as $s) {
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Agent</th>
+                    <th>Инженер</th>
                     <th class="text-end">Total</th>
                     <th style="min-width:140px;">Share</th>
-                    <th class="text-center">Tickets</th>
+                    <th class="text-center">Заявки</th>
                     <th class="text-center">Entries</th>
                     <th class="text-end">Avg / Ticket</th>
                     <th class="text-center">Days Logged</th>
@@ -116,7 +116,7 @@ foreach ($staff as $s) {
         <table class="table table-sm table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Agent</th>
+                    <th>Инженер</th>
                     <?php foreach (array_keys($typeTotals) as $typeName): ?>
                     <th class="text-end text-nowrap"><?= e($typeName) ?></th>
                     <?php endforeach; ?>
@@ -158,7 +158,7 @@ foreach ($staff as $s) {
             <thead class="table-light">
                 <tr>
                     <th>Date</th>
-                    <th>Ticket</th>
+                    <th>Заявка</th>
                     <th>Type</th>
                     <th>Note</th>
                     <th class="text-end">Time</th>

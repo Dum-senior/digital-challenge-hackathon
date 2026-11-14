@@ -17,7 +17,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2">Open <a href="/admin/settings/branding"><strong>Settings → Customization → Branding</strong></a>. A <strong>Live Preview</strong> beside the form shows the navbar, buttons and sign-in background as you change them. Nothing applies until you click <strong>Save Branding</strong>.</p>
 <div class="table-responsive mb-0">
 <table class="table table-sm mb-0">
-    <thead class="table-light"><tr><th style="width:190px;">Setting</th><th>Description</th></tr></thead>
+    <thead class="table-light"><tr><th style="width:190px;">Setting</th><th>Описание</th></tr></thead>
     <tbody class="text-muted">
         <tr><td class="fw-semibold">Logo</td><td>JPG, PNG, GIF, WEBP or SVG, up to 2 MB. It appears in the navbar and on the sign-in pages, so aim for 32&ndash;40px tall. SVG files are cleaned when uploaded (scripts, links and embedded content are removed), and single-colour SVG icons are made white so they show on the navbar. <strong>Remove logo</strong> goes back to the fallback icon.</td></tr>
         <tr><td class="fw-semibold">Fallback Icon</td><td>The icon shown beside the name in the navbar and on the sign-in pages when there is no logo: a <a href="https://icons.getbootstrap.com/" target="_blank" rel="noopener">Bootstrap Icon</a> such as <code>bi-building</code>, or a free <a href="https://fontawesome.com/search?ic=free" target="_blank" rel="noopener">Font Awesome</a> icon such as <code>fa-solid fa-house</code>.</td></tr>
@@ -48,7 +48,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4" id="labels">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-translate text-primary me-2"></i>Labels: Renaming On-Screen Terms</h5>
-<p class="text-muted mb-2"><a href="/admin/settings/labels"><strong>Settings → Customization → Labels</strong></a> changes the wording people see, for example <em>Location</em> to <em>Branch</em>, or the plain-English status names on the portal. The <strong>Current Label Values</strong> list is grouped by where each label appears:</p>
+<p class="text-muted mb-2"><a href="/admin/settings/labels"><strong>Settings → Customization → Labels</strong></a> changes the wording people see, for example <em>Площадка</em> to <em>Branch</em>, or the plain-English status names on the portal. The <strong>Current Label Values</strong> list is grouped by where each label appears:</p>
 <ul class="text-muted mb-3">
     <li><strong>Organisation</strong>: what you call a location, singular and plural. Used throughout ticket lists, forms, reports, emails and the portal.</li>
     <li><strong>Staff navigation</strong> and <strong>Portal navigation</strong>: names on the left rails and in the Settings menu.</li>

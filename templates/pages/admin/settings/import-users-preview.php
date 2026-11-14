@@ -10,7 +10,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -81,7 +81,7 @@ $breadcrumbs  = [
                         <th>Role</th>
                         <th>Phone</th>
                         <th><?= label('location.singular') ?></th>
-                        <th>Status</th>
+                        <th>Статус</th>
                     </tr>
                 </thead>
                 <tbody>

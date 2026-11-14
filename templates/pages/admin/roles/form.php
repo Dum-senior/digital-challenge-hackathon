@@ -15,7 +15,7 @@ $action = $isEdit ? "/admin/roles/{$editing['id']}/edit" : '/admin/roles/create'
 $granted = array_flip($grantedKeys ?? []);
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -44,7 +44,7 @@ $granted = array_flip($grantedKeys ?? []);
                         <?php endif; ?>
                     </div>
                     <div class="mb-2">
-                        <label for="description" class="form-label fw-semibold">Description</label>
+                        <label for="description" class="form-label fw-semibold">Описание</label>
                         <textarea class="form-control" id="description" name="description" rows="3"
                                   placeholder="What is this level for?"><?= e(old('description', $editing['description'] ?? '')) ?></textarea>
                     </div>
@@ -60,7 +60,7 @@ $granted = array_flip($grantedKeys ?? []);
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save Changes' : 'Create Permission Level' ?>
                 </button>
-                <a href="/admin/roles" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/roles" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </div>
 

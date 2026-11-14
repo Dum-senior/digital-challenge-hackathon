@@ -113,7 +113,7 @@ $regenerateHref = $mode === 'mine'
                     <tr>
                         <th style="width:42px;"></th>
                         <th style="width:25%;">Skill Name</th>
-                        <th>Description</th>
+                        <th>Описание</th>
                         <th style="width:25%;">Scope</th>
                     </tr>
                 </thead>
@@ -158,7 +158,7 @@ $regenerateHref = $mode === 'mine'
         <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
             <i class="bi bi-check-lg me-1"></i>Add Selected Skills
         </button>
-        <a href="/admin/skills" class="btn btn-outline-secondary">Cancel</a>
+        <a href="/admin/skills" class="btn btn-outline-secondary">Отмена</a>
         <a href="<?= e($regenerateHref) ?>" class="btn btn-outline-primary ms-auto" title="Ask the AI again with the same settings — results will vary">
             <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
         </a>

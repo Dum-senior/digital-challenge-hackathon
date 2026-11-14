@@ -12,7 +12,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-4">The portal is where requesters (users with the End User level) submit help requests, follow them, reply, and search the knowledge base.</p>
 
 <div class="alert alert-info small mb-4"><i class="bi bi-translate me-2"></i>
-    <strong>Plain-language wording.</strong> The portal avoids help-desk jargon. Tickets are <strong>Help Requests</strong>. The list is <strong>My Requests</strong>. Built-in statuses read <em>Submitted</em>, <em>We're working on it</em>, <em>We're waiting on someone else</em>, <em>Waiting on you</em>, <em>Done</em> and <em>Closed</em>. The priority question is <em>"How urgent is this?"</em>, and if priority isn't required it defaults to <em>Let our team decide</em>. Staff still see the real names. To change any of this wording, see <a href="/admin/docs/branding#labels">Labels</a>.
+    <strong>Plain-language wording.</strong> The portal avoids help-desk jargon. Tickets are <strong>Обращения</strong>. The list is <strong>Мои обращения</strong>. Built-in statuses read <em>Submitted</em>, <em>We're working on it</em>, <em>We're waiting on someone else</em>, <em>Waiting on you</em>, <em>Done</em> and <em>Закрыта</em>. The priority question is <em>"How urgent is this?"</em>, and if priority isn't required it defaults to <em>Let our team decide</em>. Staff still see the real names. To change any of this wording, see <a href="/admin/docs/branding#labels">Labels</a>.
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -34,7 +34,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li>they email the helpdesk mailbox and <strong>Auto-create user accounts</strong> is on in the Email-to-Ticket settings (see <a href="/admin/docs/email">Email &amp; Notifications</a>);</li>
     <li>staff forward a ticket to an outside address, which creates an <em>external</em> contact.</li>
 </ul>
-<p class="text-muted mb-0">Accounts created from email or a forward have no usable password. The person clicks <strong>Forgot password?</strong> on the sign-in page to set one: the emailed link works once and expires after 60 minutes. Microsoft 365 users just sign in with Microsoft.</p>
+<p class="text-muted mb-0">Accounts created from email or a forward have no usable password. The person clicks <strong>Забыли пароль?</strong> on the sign-in page to set one: the emailed link works once and expires after 60 minutes. Microsoft 365 users just sign in with Microsoft.</p>
 </div>
 </div>
 
@@ -42,10 +42,10 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-house text-primary me-2"></i>What Requesters See</h5>
 <ul class="text-muted mb-0">
-    <li><strong>Dashboard</strong>: a welcome, the <strong>New Help Request</strong> button and <em>Your Active Requests</em>.</li>
+    <li><strong>Главная</strong>: a welcome, the <strong>Новое обращение</strong> button and <em>Your Active Requests</em>.</li>
     <li><strong>Left rail</strong>: Dashboard, My Requests, Knowledge Base and Help. A <strong>Floor mode</strong> entry also appears on touch-screen devices.</li>
     <li><strong>Status banners</strong> you post appear at the top of every page. Portal users see global banners and banners for their own location. See <a href="/admin/docs/system#status-banners">Status Banners</a>.</li>
-    <li><strong>My Requests</strong>: search, filters and sorting. It starts on their own open requests.</li>
+    <li><strong>Мои обращения</strong>: search, filters and sorting. It starts on their own open requests.</li>
     <li>Each requester controls their own emails, light or dark mode, and timeline order on <strong>My Profile</strong>.</li>
 </ul>
 </div>
@@ -54,11 +54,11 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-send text-primary me-2"></i>Submitting a Request</h5>
-<p class="text-muted mb-2"><strong>New Help Request</strong> opens a form built from the chosen ticket type's layout. You design each type's form in <a href="/admin/workflows/ticket-fields">Settings → Organization → Ticket Forms</a>, so the fields depend on your setup. See <a href="/admin/docs/tickets#form-builder">Tickets → Form Builder</a>. Typically:</p>
+<p class="text-muted mb-2"><strong>Новое обращение</strong> opens a form built from the chosen ticket type's layout. You design each type's form in <a href="/admin/workflows/ticket-fields">Settings → Organization → Ticket Forms</a>, so the fields depend on your setup. See <a href="/admin/docs/tickets#form-builder">Tickets → Form Builder</a>. Typically:</p>
 <ul class="text-muted mb-3">
     <li><strong>Ticket type</strong>: which form to fill in. Fields that only explain things stay hidden until a type is picked.</li>
-    <li><strong>Subject</strong>: matching knowledge-base articles are suggested while they type.</li>
-    <li><strong>Description</strong>, <strong>How urgent is this?</strong>, <strong>Location</strong> (pre-filled with theirs), <strong>Tags</strong> (if tags are on), <strong>Attachments</strong>, <strong>CC</strong> colleagues, and any custom fields you added.</li>
+    <li><strong>Тема</strong>: matching knowledge-base articles are suggested while they type.</li>
+    <li><strong>Описание</strong>, <strong>How urgent is this?</strong>, <strong>Площадка</strong> (pre-filled with theirs), <strong>Tags</strong> (if tags are on), <strong>Attachments</strong>, <strong>CC</strong> colleagues, and any custom fields you added.</li>
     <li>An optional <strong>SLA notice</strong> showing the response and resolution targets for the chosen type and priority.</li>
     <li><strong>Start from a template</strong> appears when you have shared ticket templates.</li>
 </ul>
@@ -116,9 +116,9 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-life-preserver text-primary me-2"></i>Help Pages and the Guided Tour</h5>
 <ul class="text-muted mb-0">
-    <li>Requesters have their own help section at <a href="/portal/help">/portal/help</a>, linked from <strong>Help</strong> on the rail. Its articles are Getting Started, Submitting a Request, Tracking Your Requests, Replying, Editing &amp; Closing, Finding Answers Yourself, Your Profile &amp; Emails, and Floor Mode.</li>
+    <li>Requesters have their own help section at <a href="/portal/help">/portal/help</a>, linked from <strong>Помощь</strong> on the rail. Its articles are Getting Started, Submitting a Request, Tracking Your Requests, Replying, Editing &amp; Closing, Finding Answers Yourself, Your Profile &amp; Emails, and Floor Mode.</li>
     <li>On their first visit, each requester is offered a guided tour of the portal, including a practice request. It skips anything their account doesn't have. They can replay it from their name menu → <strong>Restart Tour</strong>.</li>
-    <li>Published <a href="/admin/docs/kb">knowledge base</a> articles appear under <strong>Knowledge Base</strong> on the rail, and public articles can be read without signing in.</li>
+    <li>Published <a href="/admin/docs/kb">knowledge base</a> articles appear under <strong>База знаний</strong> on the rail, and public articles can be read without signing in.</li>
 </ul>
 </div>
 </div>
@@ -200,7 +200,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-0">
     <li><strong>Look</strong>: logo, app name and colours at <a href="/admin/docs/branding">Branding</a>.</li>
     <li><strong>Wording</strong>: status names, buttons, headings and panels at <a href="/admin/docs/branding#labels">Labels</a>.</li>
-    <li><strong>Forms</strong>: which types requesters can pick and which fields each form shows, at <a href="/admin/docs/tickets#form-builder">Ticket Forms</a>.</li>
+    <li><strong>Forms</strong>: which types requesters can pick and which fields each form shows, at <a href="/admin/docs/tickets#form-builder">Формы заявок</a>.</li>
     <li><strong>Announcements</strong>: <a href="/admin/docs/system#status-banners">status banners</a>.</li>
 </ul>
 </div>

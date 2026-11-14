@@ -5,7 +5,7 @@ $sidebarItems = portalSidebar('help');
 $breadcrumbs  = [['label' => 'Help']];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-1">Help</h2>
+    <h2 class="fw-bold mb-1">Помощь</h2>
     <p class="text-muted mb-0">Quick guides for using the help portal.</p>
 </div>
 

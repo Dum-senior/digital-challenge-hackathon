@@ -26,7 +26,7 @@ class PublicRoutesTest extends TestCase
     {
         $r = $this->get($this->guestClient(), '/login');
         $this->assertOk($r);
-        $this->assertSee('Sign in', $r);
+        $this->assertSee('Войдите в свою учётную запись', $r);
     }
 
     public function test_login_page_has_email_field(): void

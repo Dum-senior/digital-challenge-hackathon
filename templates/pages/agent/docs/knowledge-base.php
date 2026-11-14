@@ -8,15 +8,15 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Knowl
 <div class="col-lg-3"><?php require ROOT_DIR . '/templates/partials/agent-help-nav.php'; ?></div>
 <div class="col-lg-9">
 
-<h2 class="fw-bold mb-1">Knowledge Base</h2>
+<h2 class="fw-bold mb-1">База знаний</h2>
 <p class="text-muted mb-4">Find answers to send to requesters, and turn solved tickets into articles.</p>
 
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-book text-primary me-2"></i>Browsing &amp; Searching</h5>
-<p class="text-muted mb-2">Click <strong><i class="bi bi-book"></i> Knowledge Base</strong> in the left sidebar. Articles are organised into <strong>categories</strong>, then <strong>folders</strong>. Click your way down to an article, and use <strong>Back</strong> to go up a level.</p>
+<p class="text-muted mb-2">Click <strong><i class="bi bi-book"></i> Knowledge Base</strong> in the left sidebar. Articles are organised into <strong>categories</strong>, then <strong>folders</strong>. Click your way down to an article, and use <strong>Назад</strong> to go up a level.</p>
 <ul class="text-muted mb-0">
-    <li><strong>Search articles&hellip;</strong> at the top of the <a href="/agent/kb">Knowledge Base</a> page searches the titles and text of published articles as you type.</li>
+    <li><strong>Search articles&hellip;</strong> at the top of the <a href="/agent/kb">База знаний</a> page searches the titles and text of published articles as you type.</li>
     <li>The search box in the top bar also finds articles &mdash; switch to its <em>Knowledge Base Articles</em> tab to see only those.</li>
     <li>Only published articles are shown here; drafts are only visible to the people who manage articles.</li>
 </ul>

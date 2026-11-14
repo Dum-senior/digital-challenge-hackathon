@@ -8,7 +8,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="col-lg-3"><?php require ROOT_DIR . '/templates/partials/docs-nav.php'; ?></div>
 <div class="col-lg-9">
 
-<h2 class="fw-bold mb-1">Tickets</h2>
+<h2 class="fw-bold mb-1">Заявки</h2>
 <p class="text-muted mb-4">Everything you need to know about creating, managing and resolving tickets.</p>
 
 <div class="card border-0 shadow-sm mb-4" id="creating-tickets">
@@ -18,14 +18,14 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-3">
     <li><strong>Portal:</strong> requesters submit a request at <code>/portal</code> using the form for the ticket type they pick (see <a href="#form-builder">The Ticket Form Builder</a>).</li>
     <li><strong>Email:</strong> messages sent to the monitored mailbox become tickets (see <a href="/admin/docs/email">Email &amp; Notifications</a>).</li>
-    <li><strong>Staff:</strong> click <strong>New Ticket</strong> on the ticket list (<a href="/admin/tickets/create"><code>/admin/tickets/create</code></a>; agents use <code>/agent/tickets/create</code>).</li>
+    <li><strong>Staff:</strong> click <strong>Новая заявка</strong> on the ticket list (<a href="/admin/tickets/create"><code>/admin/tickets/create</code></a>; agents use <code>/agent/tickets/create</code>).</li>
     <li><strong>Recurring schedules and the REST API</strong> also create tickets (see <a href="/admin/docs/automations">Automations</a>).</li>
 </ul>
-<p class="text-muted mb-2">The staff <strong>New Ticket</strong> form has a <strong>Template&hellip;</strong> picker at the top, then <em>Subject</em> and <em>Description</em>, <em>Type</em>, <em>Status</em> and <em>Due Date</em> (only for levels holding <strong>Set due dates</strong>), followed by the chosen type's own fields (Location, Priority, SLA notice, Tags, Attachments and custom fields, in the order set in the Form Builder). The <strong>Assignment</strong> card holds <em>Assign To</em>, <em>Group</em> and <em>On Behalf Of</em>, and the <strong>CC</strong> card adds people who should get email updates.</p>
+<p class="text-muted mb-2">The staff <strong>Новая заявка</strong> form has a <strong>Template&hellip;</strong> picker at the top, then <em>Тема</em> and <em>Описание</em>, <em>Type</em>, <em>Статус</em> and <em>Due Date</em> (only for levels holding <strong>Set due dates</strong>), followed by the chosen type's own fields (Location, Priority, SLA notice, Tags, Attachments and custom fields, in the order set in the Form Builder). The <strong>Assignment</strong> card holds <em>Assign To</em>, <em>Group</em> and <em>On Behalf Of</em>, and the <strong>CC</strong> card adds people who should get email updates.</p>
 <ul class="text-muted mb-3">
     <li>Picking a <strong>Type</strong> switches the form to that type's layout. Text blocks and images appear only once a type is chosen.</li>
     <li><strong>Assign To</strong> narrows to members of the type's default group. Choosing a <strong>Group</strong> narrows it to that group instead.</li>
-    <li><strong>Priority</strong> lists only the priorities the type offers (see <a href="#ticket-types">Ticket Types</a>).</li>
+    <li><strong>Приоритет</strong> lists only the priorities the type offers (see <a href="#ticket-types">Ticket Types</a>).</li>
     <li>If you leave Group blank, the ticket goes to the type's default group, then the system Default Group (see <a href="/admin/docs/flows">Assignment Flows</a>).</li>
     <li>Types with <em>Check for duplicates on submit</em> turned on may warn you before the ticket is created (see <a href="/admin/docs/ai#duplicate-detection">AI duplicate detection</a>).</li>
     <li>The form saves itself as a draft while you type (see <a href="#drafts">Drafts &amp; Undo Send</a>).</li>
@@ -39,15 +39,15 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4" id="on-behalf-of">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-telephone-forward text-primary me-2"></i>Filing a Ticket On Behalf Of Someone Else</h5>
-<p class="text-muted mb-2">When someone phones the helpdesk or stops you in the hall, you can file the ticket <em>for them</em> from the staff <strong>New Ticket</strong> form so the right person owns it from the start. Any staff member can use it, on both <a href="/admin/tickets/create"><code>/admin/tickets/create</code></a> and <code>/agent/tickets/create</code>.</p>
+<p class="text-muted mb-2">When someone phones the helpdesk or stops you in the hall, you can file the ticket <em>for them</em> from the staff <strong>Новая заявка</strong> form so the right person owns it from the start. Any staff member can use it, on both <a href="/admin/tickets/create"><code>/admin/tickets/create</code></a> and <code>/agent/tickets/create</code>.</p>
 
 <p class="text-muted mb-2"><strong>How to use it</strong></p>
 <ol class="text-muted mb-3">
-    <li>Open the <strong>New Ticket</strong> form.</li>
+    <li>Open the <strong>Новая заявка</strong> form.</li>
     <li>In the <strong>Assignment</strong> card, find the <strong>On Behalf Of</strong> field.</li>
     <li>Type at least two characters of the person's name or email and pick them from the dropdown. External contacts and shared accounts are not listed.</li>
     <li>The search box is replaced by a badge showing the chosen requester. Use <strong>Clear</strong> to undo.</li>
-    <li>Fill the rest of the form as normal and click <strong>Create Ticket</strong>.</li>
+    <li>Fill the rest of the form as normal and click <strong>Создать заявку</strong>.</li>
 </ol>
 
 <p class="text-muted mb-2"><strong>What happens behind the scenes</strong></p>
@@ -76,7 +76,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><strong>Escalate</strong> &mdash; on the agent ticket view only (see <a href="#escalating">Escalating a Ticket</a>).</li>
     <li><strong>Split</strong> and <strong>Merge</strong> &mdash; see <a href="#splitting">Splitting</a> and <a href="#merging">Merging</a>.</li>
     <li><strong>Close</strong> &mdash; a split button with ten ways to close (see <a href="#closing">Closing a Ticket</a>).</li>
-    <li><strong>Back</strong> &mdash; returns to the page you came from (a notification, the dashboard, a filtered list). The <em>Tickets</em> breadcrumb always returns to the list with your filters intact.</li>
+    <li><strong>Назад</strong> &mdash; returns to the page you came from (a notification, the dashboard, a filtered list). The <em>Заявки</em> breadcrumb always returns to the list with your filters intact.</li>
 </ul>
 <p class="text-muted mb-2">Below the header the page has three columns:</p>
 <ul class="text-muted mb-3">
@@ -131,7 +131,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><strong>Forward</strong> &mdash; sends the ticket details, the full public conversation and all attachments to one or more email addresses, with an optional note. Recipients are added as contacts and CC'd on the ticket, and their email replies thread back into it with an <em>External</em> badge. Forwarding needs the <em>Forward tickets to internal contacts</em> or <em>external contacts</em> permission, and is disabled on confidential tickets.</li>
 </ul>
 <p class="text-muted mb-2">The <strong>Canned</strong> button in the reply box inserts a saved response. The arrow beside <strong>Send Reply</strong> offers <strong>Send &amp; change status to</strong> Resolved (while that status is active), Closed, Pending, Waiting on Customer or Waiting on Third Party in one step.</p>
-<p class="text-muted mb-2">Replying publicly to an unassigned ticket assigns it to you. If another staff member posts a public reply while you're writing yours, <strong>Send Reply</strong> stops and shows their reply, with <strong>Review their reply</strong>, <strong>Cancel</strong> and <strong>Post anyway</strong>.</p>
+<p class="text-muted mb-2">Replying publicly to an unassigned ticket assigns it to you. If another staff member posts a public reply while you're writing yours, <strong>Send Reply</strong> stops and shows their reply, with <strong>Review their reply</strong>, <strong>Отмена</strong> and <strong>Post anyway</strong>.</p>
 <p class="text-muted mb-0">Replies and notes can carry attachments, and images pasted into the editor are saved as attachments too (see <a href="#attachments">Attachments</a>).</p>
 </div>
 </div>
@@ -150,13 +150,13 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2">Tickets can be assigned to any staff member. Assignment can happen:</p>
 <ul class="text-muted mb-3">
     <li>At creation time, with <strong>Assign To</strong> on the New Ticket form.</li>
-    <li>From the ticket page, with <strong>Assigned To</strong> in the <strong>Update Ticket</strong> panel.</li>
+    <li>From the ticket page, with <strong>Исполнитель</strong> in the <strong>Update Ticket</strong> panel.</li>
     <li>From the ticket list, with the <strong>chevron <i class="bi bi-chevron-down"></i></strong> in the Assigned To column, or the bulk <strong>Assign</strong> action.</li>
     <li>By replying publicly to an unassigned ticket, which assigns it to you.</li>
     <li>Automatically, through the group's auto-assignment strategy or an automation (see <a href="/admin/docs/flows">Assignment Flows</a> and <a href="/admin/docs/automations">Automations</a>).</li>
 </ul>
 <div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-2"></i>
-    When a ticket has a <strong>Group</strong>, the agent picker on the ticket page and in the list is filtered to that group's members. In <strong>Update Ticket</strong>, changing the <strong>Group</strong> re-filters <strong>Assigned To</strong> straight away; pick <em>None</em> to choose from all staff. The current assignee stays selected if they belong to the new group, otherwise the field resets to Unassigned.
+    When a ticket has a <strong>Group</strong>, the agent picker on the ticket page and in the list is filtered to that group's members. In <strong>Update Ticket</strong>, changing the <strong>Group</strong> re-filters <strong>Исполнитель</strong> straight away; pick <em>None</em> to choose from all staff. The current assignee stays selected if they belong to the new group, otherwise the field resets to Unassigned.
 </div>
 </div>
 </div>
@@ -177,14 +177,14 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-3">
     <li><strong>Only agents.</strong> It changes the group list non-admin agents see in the inline <strong>Group</strong> dropdown on the ticket list and on the agent dashboard's <strong>Recent Tickets</strong> widget.</li>
     <li><strong>Only the picker.</strong> It grants no new permission; an agent still needs access to the ticket itself.</li>
-    <li><strong>It is audit-logged</strong> as <code>settings.agents_assign_any_group_changed</code> in the <a href="/admin/audit-log">Audit Log</a>.</li>
+    <li><strong>It is audit-logged</strong> as <code>settings.agents_assign_any_group_changed</code> in the <a href="/admin/audit-log">Журнал действий</a>.</li>
 </ul>
 
 <h6 class="fw-semibold mt-4 mb-2">How to use it</h6>
 <ol class="text-muted mb-3">
     <li>Go to <a href="/admin/settings/ticket-routing"><strong>Settings → Organization → Ticket Routing</strong></a>.</li>
     <li>Flip the <strong>Allow agents to assign tickets to groups they're not part of</strong> switch.</li>
-    <li>Click <strong>Save</strong>. The change takes effect immediately.</li>
+    <li>Click <strong>Сохранить</strong>. The change takes effect immediately.</li>
 </ol>
 
 <div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-2"></i>
@@ -245,23 +245,23 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2">Each ticket moves through a lifecycle managed by statuses. Statuses are <strong>fully configurable</strong> &mdash; add, remove, rename, recolour, and reorder them from <a href="/admin/settings/ticket-statuses"><strong>Settings &rarr; Organization &rarr; Ticket Statuses</strong></a>. The seven statuses installed by default are:</p>
 <div class="table-responsive">
 <table class="table table-sm mb-0">
-    <thead class="table-light"><tr><th>Status</th><th>Meaning</th></tr></thead>
+    <thead class="table-light"><tr><th>Статус</th><th>Meaning</th></tr></thead>
     <tbody>
-        <tr><td><span class="badge bg-warning text-dark">Open</span></td><td class="text-muted">Newly submitted; awaiting agent action. The default status for new tickets.</td></tr>
-        <tr><td><span class="badge bg-primary">In Progress</span></td><td class="text-muted">An agent is actively working on the ticket.</td></tr>
-        <tr><td><span class="badge bg-info text-dark">Pending</span></td><td class="text-muted">Waiting on a response from the requester or a third party.</td></tr>
+        <tr><td><span class="badge bg-warning text-dark">Открыта</span></td><td class="text-muted">Newly submitted; awaiting agent action. The default status for new tickets.</td></tr>
+        <tr><td><span class="badge bg-primary">В работе</span></td><td class="text-muted">An agent is actively working on the ticket.</td></tr>
+        <tr><td><span class="badge bg-info text-dark">Ожидает</span></td><td class="text-muted">Waiting on a response from the requester or a third party.</td></tr>
         <tr><td><span class="badge" style="background:#7c3aed;">Waiting on Customer</span></td><td class="text-muted">A reply has been sent; waiting for the requester to respond. SLA timer pauses. Can trigger automated reminder emails via Escalation Rules.</td></tr>
         <tr><td><span class="badge" style="background:#0369a1;">Waiting on Third Party</span></td><td class="text-muted">Work is blocked pending an external vendor or team. SLA timer pauses while in this state.</td></tr>
-        <tr><td><span class="badge bg-success">Resolved</span></td><td class="text-muted">The issue has been addressed. The requester is notified, and (if CSAT is enabled) a satisfaction survey is sent.</td></tr>
-        <tr><td><span class="badge bg-secondary">Closed</span></td><td class="text-muted">Fully closed. No further action expected.</td></tr>
+        <tr><td><span class="badge bg-success">Решена</span></td><td class="text-muted">The issue has been addressed. The requester is notified, and (if CSAT is enabled) a satisfaction survey is sent.</td></tr>
+        <tr><td><span class="badge bg-secondary">Закрыта</span></td><td class="text-muted">Fully closed. No further action expected.</td></tr>
     </tbody>
 </table>
 </div>
 <h6 class="fw-semibold mt-4 mb-2">Configuring statuses</h6>
 <p class="text-muted mb-2">On the <a href="/admin/settings/ticket-statuses">Ticket Statuses</a> page each status has four levers admins can pull:</p>
 <ul class="text-muted mb-2">
-    <li><strong>Bucket</strong> &mdash; <em>Open</em> or <em>Closed</em>. Drives business logic across the app: <em>open</em>-bucket statuses count toward "open" dashboard tiles and SLA tracking; <em>closed</em>-bucket statuses are treated as done and unlock the resolved/closed email + CSAT flows when used as a default for those kinds.</li>
-    <li><strong>Pauses SLA</strong> &mdash; a per-status toggle. Any status with this on pauses the SLA timer (default policy: <em>Pending</em>, <em>Waiting on Customer</em>, <em>Waiting on Third Party</em>). The timer resumes the moment a ticket moves to a status that does not pause SLA.</li>
+    <li><strong>Bucket</strong> &mdash; <em>Открыта</em> or <em>Закрыта</em>. Drives business logic across the app: <em>open</em>-bucket statuses count toward "open" dashboard tiles and SLA tracking; <em>closed</em>-bucket statuses are treated as done and unlock the resolved/closed email + CSAT flows when used as a default for those kinds.</li>
+    <li><strong>Pauses SLA</strong> &mdash; a per-status toggle. Any status with this on pauses the SLA timer (default policy: <em>Ожидает</em>, <em>Waiting on Customer</em>, <em>Waiting on Third Party</em>). The timer resumes the moment a ticket moves to a status that does not pause SLA.</li>
     <li><strong>Colour</strong> &mdash; the badge colour everywhere the status appears (lists, dashboards, emails). Text contrast picks itself.</li>
     <li><strong>Active</strong> &mdash; click the green checkmark in the Active column to hide a status from every dropdown without losing the historical tickets that still hold it. Existing tickets keep their stored status either way.</li>
 </ul>
@@ -288,7 +288,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 
 <div class="card border-0 shadow-sm mb-4" id="priorities">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-flag text-primary me-2"></i>Priorities</h5>
+<h5 class="fw-semibold mb-3"><i class="bi bi-flag text-primary me-2"></i>Приоритеты</h5>
 <p class="text-muted mb-2">Priorities set urgency and drive SLA timers. Low, Medium, High and Critical are created at installation. Add, rename, recolour and reorder them at <a href="/admin/priorities"><strong>Settings → Organization → Ticket Priorities</strong></a>. The order matters: the first priority is the default used when a type hides the Priority field, and merging tickets raises the primary to whichever of their priorities sits lowest in the list (Critical, by default).</p>
 <p class="text-muted mb-0">Response and resolution targets are set per priority (and optionally per ticket type) at <a href="/admin/settings/sla-policies"><strong>Settings → Scheduling → SLA Policies</strong></a>. Each ticket type can also limit which priorities it offers (see <a href="#ticket-types">Ticket Types</a>).</p>
 </div>
@@ -369,7 +369,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><strong>Edit / Delete</strong> their own entries. Admins can edit or delete anyone's.</li>
 </ul>
 <p class="text-muted mb-2">The card saves in place, so a half-written reply isn't lost. If an agent closes one of these tickets from the ticket page (the Update form, the Close button, or the reply box's <em>Send &amp; change status</em>) with no time logged, a reminder asks them to log time first. Choosing <strong>Log time</strong> turns the card's button into <strong>Save &amp; close ticket</strong>, so saving the entry finishes the close they started. They can still choose <strong>Close without logging</strong>. List quick-edits, bulk changes, and automations close without asking.</p>
-<p class="text-muted mb-0">Logged time feeds two reports under <a href="/admin/reports"><strong>Reports</strong></a>. <strong>Time Spent</strong> shows totals, a daily or monthly trend, time by ticket type and group, and the tickets that took longest. <strong>Agent Time</strong> shows each agent's total, an agent &times; ticket type grid, and a per-agent timesheet. Both export to CSV, count time on the <em>date the work was done</em>, leave out timers that are still running, and hide the subject and note of confidential tickets. Turning tracking off for a type later keeps time already logged visible on its tickets.</p>
+<p class="text-muted mb-0">Logged time feeds two reports under <a href="/admin/reports"><strong>Отчёты</strong></a>. <strong>Time Spent</strong> shows totals, a daily or monthly trend, time by ticket type and group, and the tickets that took longest. <strong>Agent Time</strong> shows each agent's total, an agent &times; ticket type grid, and a per-agent timesheet. Both export to CSV, count time on the <em>date the work was done</em>, leave out timers that are still running, and hide the subject and note of confidential tickets. Turning tracking off for a type later keeps time already logged visible on its tickets.</p>
 </div>
 </div>
 
@@ -397,14 +397,14 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2">When an admin who is <strong>not</strong> a member of the confidential type's group clicks on a confidential ticket, they are presented with a re-authentication screen. Before viewing the ticket they must:</p>
 <ul class="text-muted mb-3">
     <li>Re-enter their password.</li>
-    <li>Acknowledge that the access will be recorded in the <a href="/admin/audit-log"><strong>Audit Log</strong></a>.</li>
+    <li>Acknowledge that the access will be recorded in the <a href="/admin/audit-log"><strong>Журнал действий</strong></a>.</li>
     <li>Acknowledge that all members of the assigned group will be notified via email.</li>
 </ul>
 <p class="text-muted mb-2">After authentication, the admin can view the ticket for 5 minutes before needing to re-authenticate again.</p>
 
 <h6 class="fw-semibold mt-3">Audit &amp; Notification</h6>
 <ul class="text-muted mb-3">
-    <li>Every admin access to a confidential ticket is recorded in the <strong>Audit Log</strong> with action <code>ticket.confidential_viewed</code>.</li>
+    <li>Every admin access to a confidential ticket is recorded in the <strong>Журнал действий</strong> with action <code>ticket.confidential_viewed</code>.</li>
     <li>A timeline entry is added to the ticket itself (internal only).</li>
     <li>All members of the assigned group receive an email notification containing the admin's name, email, IP address, and timestamp.</li>
 </ul>
@@ -433,7 +433,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <thead class="table-light"><tr><th style="width:120px">Layout</th><th>What it looks like</th></tr></thead>
     <tbody class="text-muted">
         <tr><td><strong><i class="bi bi-table me-1"></i>Table</strong></td><td>The classic resizable grid. The default, and the only layout with the <strong>Columns</strong> picker (Status, Priority, Type, Assigned To, Group, Created By, Location, SLA, Opened, Due, Confidential). The <strong>Confidential</strong> column is hidden by default.</td></tr>
-        <tr><td><strong><i class="bi bi-inbox me-1"></i>Compact</strong></td><td>An email-style two-column list showing only <strong>From</strong> and <strong>Subject</strong>. Hovering the <strong>Subject</strong> opens a detail card (requester, submitted time, message snippet, status/priority/type/assignee) with <strong>Reply</strong>, <strong>Forward</strong> and <strong>Add Note</strong> buttons that deep-link into the ticket composer. Hovering the <strong>From</strong> name opens a person card with their email and an <strong>Open tickets &amp; mentions</strong> button.</td></tr>
+        <tr><td><strong><i class="bi bi-inbox me-1"></i>Compact</strong></td><td>An email-style two-column list showing only <strong>From</strong> and <strong>Тема</strong>. Hovering the <strong>Тема</strong> opens a detail card (requester, submitted time, message snippet, status/priority/type/assignee) with <strong>Reply</strong>, <strong>Forward</strong> and <strong>Add Note</strong> buttons that deep-link into the ticket composer. Hovering the <strong>From</strong> name opens a person card with their email and an <strong>Open tickets &amp; mentions</strong> button.</td></tr>
         <tr><td><strong><i class="bi bi-grid-1x2 me-1"></i>Card</strong></td><td>A roomier stacked layout where each ticket is a horizontal card &mdash; colour-keyed requester avatar, a &ldquo;New&rdquo; flag for tickets awaiting a first reply, type badge and subject, the location/group, age and SLA, and priority/assignee/status down the right edge.</td></tr>
     </tbody>
 </table>
@@ -463,14 +463,14 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-funnel text-primary me-2"></i>Filter Panel &amp; Saved Filters</h5>
 <p class="text-muted mb-2">Click <strong>Filters</strong> to slide the filter panel out from the left. Whether it is open is remembered as you move between pages. The admin list filters by Search (subject), Status, Priority, Type, Location, Assigned To (including <em>Unassigned</em>), Group (including <em>No Group</em>), a From/To created-date range, <em>Requested by Me</em> (tickets you opened yourself), <em>My Watched Tickets</em> and <em>Has Attachment</em>. A location named <em>System Wide</em> is labelled <em>(any)</em> and matches every location.</p>
-<p class="text-muted mb-2">Ticking a checkbox or picking a date <strong>applies the filter immediately</strong> &mdash; the list refreshes without reloading the page, and the URL updates so you can bookmark or share it. (The <strong>Search</strong> box is the exception: type your text and press Enter or click Apply.) Every active filter shows as a labelled pill at the top of the panel &mdash; e.g. <span class="badge rounded-pill bg-light text-dark border">Status: Open</span> or <span class="badge rounded-pill bg-light text-dark border">Requester: Jane Doe</span>. Click the <strong>&times;</strong> on a pill to remove just that filter, or <strong>Clear All</strong> to remove them all.</p>
+<p class="text-muted mb-2">Ticking a checkbox or picking a date <strong>applies the filter immediately</strong> &mdash; the list refreshes without reloading the page, and the URL updates so you can bookmark or share it. (The <strong>Поиск</strong> box is the exception: type your text and press Enter or click Apply.) Every active filter shows as a labelled pill at the top of the panel &mdash; e.g. <span class="badge rounded-pill bg-light text-dark border">Status: Open</span> or <span class="badge rounded-pill bg-light text-dark border">Requester: Jane Doe</span>. Click the <strong>&times;</strong> on a pill to remove just that filter, or <strong>Clear All</strong> to remove them all.</p>
 <p class="text-muted mb-2">You can save any combination of active filters as a named preset:</p>
 <ol class="text-muted mb-3">
     <li>Apply the filters you want, then click <strong>Save Current Filter</strong> in the panel and give it a name.</li>
     <li>Saved filters appear under <strong>Saved Filters</strong> and apply with one click.</li>
     <li>The arrow beside a saved filter offers <strong>Set as Default</strong> (applied automatically when you open the list each day), <strong>Share with Team</strong> / <strong>Make Private</strong>, and <strong>Delete</strong>.</li>
 </ol>
-<p class="text-muted mb-0">The list remembers the filters you used today and brings them back when you return; <strong>Clear All</strong> resets that. Coming back from a ticket via the <em>Tickets</em> breadcrumb restores the exact list, including sort order. Both lists have a per-page selector at the bottom (10, 15, 20 or 50; 15 by default). Your choice is remembered, on both lists, until you change it.</p>
+<p class="text-muted mb-0">The list remembers the filters you used today and brings them back when you return; <strong>Clear All</strong> resets that. Coming back from a ticket via the <em>Заявки</em> breadcrumb restores the exact list, including sort order. Both lists have a per-page selector at the bottom (10, 15, 20 or 50; 15 by default). Your choice is remembered, on both lists, until you change it.</p>
 </div>
 </div>
 
@@ -483,8 +483,8 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><strong>Assign</strong> — open an agent picker and assign all selected tickets to one agent.</li>
     <li><strong>Close</strong> — set all selected tickets to Closed status.</li>
     <li><strong>Merge</strong> — choose which selected ticket is the primary; the others are merged into it, moving their conversations as described in <a href="#merging">Merging Tickets</a>. The primary's priority is raised to the highest among them.</li>
-    <li><strong>Status</strong> — set all selected tickets to a chosen status.</li>
-    <li><strong>Priority</strong> — set all selected tickets to a chosen priority (or none). Tickets whose type doesn't offer that priority are skipped and counted.</li>
+    <li><strong>Статус</strong> — set all selected tickets to a chosen status.</li>
+    <li><strong>Приоритет</strong> — set all selected tickets to a chosen priority (or none). Tickets whose type doesn't offer that priority are skipped and counted.</li>
     <li><strong>Group</strong> — assign all selected tickets to a chosen group (or none).</li>
     <li><strong>Delete</strong> — permanently delete selected tickets and their attachments (asks for confirmation first; irreversible).</li>
 </ul>
@@ -503,7 +503,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4" id="reordering-admin-lists">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-grip-vertical text-primary me-2"></i>Reordering &amp; Sorting Admin Lists</h5>
-<p class="text-muted mb-2">The order that <strong>Ticket Types</strong>, <strong>Ticket Statuses</strong>, <strong>Groups</strong>, <strong>Priorities</strong>, <strong>Skills</strong>, <strong>Automations</strong>, <strong>Canned Responses</strong>, <strong>Escalation Rules</strong>, <strong>KB Categories</strong>, and <strong>KB Folders</strong> appear in &mdash; both on their settings tables and in every dropdown where those values surface on the agent and portal sides &mdash; can be set directly from each list.</p>
+<p class="text-muted mb-2">The order that <strong>Ticket Types</strong>, <strong>Ticket Statuses</strong>, <strong>Группы</strong>, <strong>Приоритеты</strong>, <strong>Skills</strong>, <strong>Automations</strong>, <strong>Canned Responses</strong>, <strong>Escalation Rules</strong>, <strong>KB Categories</strong>, and <strong>KB Folders</strong> appear in &mdash; both on their settings tables and in every dropdown where those values surface on the agent and portal sides &mdash; can be set directly from each list.</p>
 <p class="text-muted mb-2"><strong>Drag to reorder.</strong> Every row in those lists has a grip handle <i class="bi bi-grip-vertical"></i> on the left. Drag a row up or down and the new order saves immediately (an <em>Order saved</em> toast confirms it) &mdash; no integer to juggle.</p>
 <p class="text-muted mb-0"><strong>Click a header to sort.</strong> Any sortable column header (Name, Members, Created, etc.) is clickable. Clicking re-sorts the visible rows ascending or descending. Because this overwrites your existing custom order, a yellow toolbar with <strong>Save Order</strong> and <strong>Revert</strong> buttons appears above the table &mdash; the sort is only committed once you click <strong>Save Order</strong>, so a stray click on a header never destroys a curated arrangement.</p>
 </div>
@@ -516,7 +516,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-0">
     <li>Chosen widths are remembered per page in your browser &mdash; lists come back the way each person leaves them.</li>
     <li>A column can't be dragged narrower than its header text.</li>
-    <li>On the ticket lists, <strong>Subject</strong> takes up the spare width and truncates (hover for the full text); widening Subject past the card edge scrolls the table horizontally.</li>
+    <li>On the ticket lists, <strong>Тема</strong> takes up the spare width and truncates (hover for the full text); widening Subject past the card edge scrolls the table horizontally.</li>
     <li>Works on the ticket lists, user list, KB lists, reports, and every settings table. A handful of tables with merged/multi-row headers are skipped (a single column width can't represent a merged header).</li>
     <li>On the ticket lists, a column you have hand-sized is not touched by the auto-fit that runs after an inline quick-change &mdash; only un-resized columns are re-measured.</li>
 </ul>
@@ -625,7 +625,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-ui-checks-grid text-primary me-2"></i>What the Form Builder is for</h5>
-<p class="text-muted mb-2">The <strong>Form Builder</strong> at <a href="/admin/workflows/ticket-fields"><strong>Settings → Organization → Ticket Forms</strong></a> controls everything that appears on the <em>New Ticket</em> form — both on the public portal and on the staff New Ticket form. Anything you change here takes effect immediately for the next person who opens the form. There is no "publish" step.</p>
+<p class="text-muted mb-2">The <strong>Form Builder</strong> at <a href="/admin/workflows/ticket-fields"><strong>Settings → Organization → Ticket Forms</strong></a> controls everything that appears on the <em>Новая заявка</em> form — both on the public portal and on the staff New Ticket form. Anything you change here takes effect immediately for the next person who opens the form. There is no "publish" step.</p>
 <p class="text-muted mb-2"><strong>Every ticket type has its own form.</strong> The page is laid out as a left rail of ticket types and a canvas:</p>
 <ul class="text-muted mb-3">
     <li><strong>Type rail (left)</strong> — pick the ticket type whose form you want to edit. The canvas swaps to that type's layout; <strong>Type settings</strong> jumps to the type's edit form.</li>
@@ -634,8 +634,8 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 </ul>
 <p class="text-muted mb-2">The canvas shows three kinds of rows:</p>
 <ul class="text-muted mb-3">
-    <li><strong>Pinned</strong> — <em>Subject</em> and <em>Description</em>. Always at the very top of every type's form, always Required, and can't be moved or removed. Their labels can be renamed (pencil icon).</li>
-    <li><strong>System fields</strong> — <em>Ticket Type</em> (always Required), <em>Location</em>, <em>Priority</em>, <em>SLA notice</em>, <em>Tags</em>, and <em>Attachments</em>. You can rename them, drag them to reorder, and set them Required / Optional / Hidden per type. They can't be deleted. <em>SLA notice</em> is a read-only line that shows the first-response and resolution targets once a priority is picked (hidden when no policy matches).</li>
+    <li><strong>Pinned</strong> — <em>Тема</em> and <em>Описание</em>. Always at the very top of every type's form, always Required, and can't be moved or removed. Their labels can be renamed (pencil icon).</li>
+    <li><strong>System fields</strong> — <em>Ticket Type</em> (always Required), <em>Площадка</em>, <em>Приоритет</em>, <em>SLA notice</em>, <em>Tags</em>, and <em>Attachments</em>. You can rename them, drag them to reorder, and set them Required / Optional / Hidden per type. They can't be deleted. <em>SLA notice</em> is a read-only line that shows the first-response and resolution targets once a priority is picked (hidden when no policy matches).</li>
     <li><strong>Custom fields</strong> — anything you add via <strong>Add field</strong>. Thirteen field types are supported (see the table below). Custom fields can be edited, reordered, given a visibility and a condition per type, shared onto other types, removed from a type, or deleted entirely.</li>
 </ul>
 <div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-2"></i>
@@ -682,9 +682,9 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><span class="badge badge-vivid" style="background:#f1f5f9;color:#475569;">Hidden</span> &nbsp; The field does not appear on that type's form at all. Hidden rows are drawn with a hatched background in the builder so the state is obvious at a glance.</li>
 </ul>
 <p class="text-muted mb-2">Because visibility is per-type, the same field can be Required on <em>Hardware Issue</em>, Optional on <em>General Enquiry</em>, and Hidden on <em>Lost &amp; Found</em> — no global setting, no juggling separate screens.</p>
-<p class="text-muted mb-2"><strong>Subject</strong>, <strong>Description</strong> and <strong>Ticket Type</strong> are locked to Required. The <strong>Priority</strong> system field is a good Hidden candidate for ticket types where the requester shouldn't be picking severity (e.g. a "Key cut request" type where every ticket lands at the same urgency).</p>
+<p class="text-muted mb-2"><strong>Тема</strong>, <strong>Описание</strong> and <strong>Ticket Type</strong> are locked to Required. The <strong>Приоритет</strong> system field is a good Hidden candidate for ticket types where the requester shouldn't be picking severity (e.g. a "Key cut request" type where every ticket lands at the same urgency).</p>
 <div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-2"></i>
-    Visibility is enforced on the server, not just in the browser. A Required field still fails closed if its input is stripped, and when <strong>Priority</strong> is Hidden the ticket is created with the default (first) priority so SLA timers, escalation, and list views keep working — agents can still change it afterwards.
+    Visibility is enforced on the server, not just in the browser. A Required field still fails closed if its input is stripped, and when <strong>Приоритет</strong> is Hidden the ticket is created with the default (first) priority so SLA timers, escalation, and list views keep working — agents can still change it afterwards.
 </div>
 </div>
 </div>

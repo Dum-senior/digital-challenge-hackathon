@@ -25,7 +25,7 @@ foreach (array_diff(Domains::splitList($domain['ignored_hosts'] ?? null), array_
 $internalFirst = array_flip(Domains::splitList($domain['internal_hosts'] ?? null));
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>

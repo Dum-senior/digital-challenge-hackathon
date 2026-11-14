@@ -17,7 +17,7 @@ $sentimentColors = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -370,7 +370,7 @@ $sentimentColors = [
         <table class="table mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Ticket</th>
+                    <th>Заявка</th>
                     <th>Provider · Model</th>
                     <th>Confidence</th>
                     <th>Sentiment</th>

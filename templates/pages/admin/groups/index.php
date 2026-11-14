@@ -9,13 +9,13 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h5 class="fw-bold mb-0">Groups</h5>
+    <h5 class="fw-bold mb-0">Группы</h5>
     <a href="/admin/groups/create" class="btn text-white" style="background:var(--ld-primary);">
         <i class="bi bi-people-fill me-1"></i>Add Group
     </a>
@@ -28,11 +28,11 @@ $breadcrumbs  = [
             <thead class="table-light">
                 <tr>
                     <th data-sort-col="name">Name</th>
-                    <th>Description</th>
+                    <th>Описание</th>
                     <th data-sort-col="members">Members</th>
                     <th data-sort-col="strategy">Auto-Assign</th>
                     <th data-sort-col="created">Created</th>
-                    <th style="width:110px">Actions</th>
+                    <th style="width:110px">Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -102,7 +102,7 @@ $breadcrumbs  = [
             <div class="modal-footer">
                 <form method="POST" id="deleteGroupForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

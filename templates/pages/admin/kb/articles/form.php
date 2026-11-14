@@ -76,7 +76,7 @@ if ($rawBody !== '' && ltrim($rawBody)[0] !== '<') {
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label for="status" class="form-label fw-semibold">Status</label>
+                    <label for="status" class="form-label fw-semibold">Статус</label>
                     <select class="form-select" id="status" name="status">
                         <option value="draft" <?= old('status', $editing['status'] ?? 'draft') === 'draft' ? 'selected' : '' ?>>Draft</option>
                         <option value="published" <?= old('status', $editing['status'] ?? '') === 'published' ? 'selected' : '' ?>>Published</option>
@@ -108,7 +108,7 @@ if ($rawBody !== '' && ltrim($rawBody)[0] !== '<') {
                     <i class="bi bi-eye me-1"></i>Preview
                 </a>
                 <?php endif; ?>
-                <a href="/admin/kb/articles" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/kb/articles" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

@@ -9512,7 +9512,7 @@ $router->post('/admin/settings/import-kb/confirm', function () {
 $router->get('/admin/settings/branding', function () {
     Auth::requirePermission('settings.manage');
     render('admin/settings/branding', [
-        'appName'             => getSetting('branding_app_name', 'OpenHelpDesk'),
+        'appName'             => getSetting('branding_app_name', 'Диспетчер ИИ'),
         'primaryColor'        => getSetting('branding_primary_color', '#4f46e5'),
         'primaryHover'        => getSetting('branding_primary_hover', '#4338ca'),
         'navbarStart'         => getSetting('branding_navbar_start', '#1e1b4b'),

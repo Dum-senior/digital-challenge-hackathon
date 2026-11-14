@@ -40,8 +40,8 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Manag
 
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-bar-chart text-primary me-2"></i>Reports</h5>
-<p class="text-muted mb-0">If your permission level includes reports, open <strong><i class="bi bi-sliders"></i> Settings</strong> and look under <strong>Reports</strong> &mdash; including <em>Time Spent</em> and <em>Agent Time</em> for tickets that track time. From any report you can also set up a <strong>Scheduled Report</strong> to have it emailed to you regularly. The <a href="/agent/help/wallboard">Live Wallboard</a> (account menu &rarr; Wallboard) gives a real-time view of your team's queue.</p>
+<h5 class="fw-semibold mb-3"><i class="bi bi-bar-chart text-primary me-2"></i>Отчёты</h5>
+<p class="text-muted mb-0">If your permission level includes reports, open <strong><i class="bi bi-sliders"></i> Settings</strong> and look under <strong>Отчёты</strong> &mdash; including <em>Time Spent</em> and <em>Agent Time</em> for tickets that track time. From any report you can also set up a <strong>Scheduled Report</strong> to have it emailed to you regularly. The <a href="/agent/help/wallboard">Live Wallboard</a> (account menu &rarr; Wallboard) gives a real-time view of your team's queue.</p>
 </div>
 </div>
 

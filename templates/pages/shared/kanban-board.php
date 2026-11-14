@@ -297,7 +297,7 @@ foreach ($tickets as $t) {
                 <div class="d-flex align-items-center gap-2">
                     <input type="color" class="form-control form-control-color form-control-sm" id="kanbanBucketColor" value="#6c757d" title="Color">
                     <button class="btn btn-sm btn-primary ms-auto" type="button" id="kanbanBucketSave">Add</button>
-                    <button class="btn btn-sm btn-link" type="button" id="kanbanBucketCancel">Cancel</button>
+                    <button class="btn btn-sm btn-link" type="button" id="kanbanBucketCancel">Отмена</button>
                 </div>
             </div>
         </div>

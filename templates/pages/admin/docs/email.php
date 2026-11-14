@@ -17,7 +17,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2">Go to <a href="/admin/settings"><strong>Settings &rarr; Email &rarr; Email / SMTP</strong></a> and fill in <strong>Email / SMTP Configuration</strong>:</p>
 <div class="table-responsive mb-3">
 <table class="table table-sm mb-0">
-    <thead class="table-light"><tr><th>Field</th><th>Description</th></tr></thead>
+    <thead class="table-light"><tr><th>Field</th><th>Описание</th></tr></thead>
     <tbody>
         <tr><td class="fw-semibold">SMTP Host</td><td class="text-muted">Your mail server hostname (e.g. <code>smtp.office365.com</code>).</td></tr>
         <tr><td class="fw-semibold">Port</td><td class="text-muted">Usually <code>587</code> for TLS or <code>465</code> for SSL.</td></tr>
@@ -117,7 +117,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-envelope-arrow-down text-primary me-2"></i>Inbound Email (Reply by Email)</h5>
 <p class="text-muted mb-2">Requesters and staff can reply to a ticket notification from their inbox, and the reply is added to the ticket. Inbound mail is read from a Microsoft 365 mailbox through the <strong>Microsoft Graph API</strong> (no IMAP or app passwords).</p>
-<p class="text-muted mb-2"><strong>Nothing a person writes is dropped.</strong> A reply that can't go on its ticket opens a <strong>new ticket</strong> with their message instead: a requester replying to a <strong>Closed</strong> ticket (unless it was closed with <em>reopen on reply</em> and the window is still open), a reply from an address with no account, or a reply to a ticket that no longer exists. The new ticket keeps the original's type and group, and both tickets get an internal note linking them. Staff replies always go on the ticket, even a closed one. A reply to a merged ticket goes on the ticket it was merged into. When the requester replies, the assigned agent gets the same alert as for a portal comment.</p>
+<p class="text-muted mb-2"><strong>Nothing a person writes is dropped.</strong> A reply that can't go on its ticket opens a <strong>new ticket</strong> with their message instead: a requester replying to a <strong>Закрыта</strong> ticket (unless it was closed with <em>reopen on reply</em> and the window is still open), a reply from an address with no account, or a reply to a ticket that no longer exists. The new ticket keeps the original's type and group, and both tickets get an internal note linking them. Staff replies always go on the ticket, even a closed one. A reply to a merged ticket goes on the ticket it was merged into. When the requester replies, the assigned agent gets the same alert as for a portal comment.</p>
 <ol class="text-muted mb-3">
     <li>Register an app in Microsoft Entra ID with the <code>Mail.Read</code> and <code>Mail.ReadWrite</code> <strong>application</strong> permissions and admin consent. The <a href="/admin/settings/email-reply-help">Email Reply Setup Guide</a> walks through it.</li>
     <li>On <a href="/admin/settings"><strong>Email / SMTP</strong></a>, in <strong>Inbound Mail &mdash; Reply Processing</strong>, tick <strong>Enable reply-by-email</strong> and fill in <strong>Reply-To Address</strong>, <strong>Mailbox Address</strong>, <strong>Tenant ID</strong>, <strong>Client ID (Application ID)</strong>, <strong>Client Secret</strong> and <strong>App Secret Expiry Date</strong>. Then click <strong>Save Inbound Settings</strong>.</li>
@@ -147,7 +147,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li>The ticket is found from <code>[#123]</code> or <code>[Ticket #123]</code> in the subject. If that has been stripped, the <code>In-Reply-To</code> / <code>References</code> headers of the original notification are used instead.</li>
     <li>The sender's address must match a user account; replies from unknown addresses are skipped. Replies from forwarded third parties work because forwarding creates an <a href="/admin/docs/users">external contact</a> for them.</li>
     <li>Quoted text and signatures are stripped, and the new text is added to the ticket as a <strong>public</strong> comment.</li>
-    <li>Replies to a <strong>Closed</strong> ticket are skipped, unless an agent sends <code>#open</code>, or the ticket was closed with <em>Close and reopen on reply</em> and the requester replies within that window (the ticket reopens).</li>
+    <li>Replies to a <strong>Закрыта</strong> ticket are skipped, unless an agent sends <code>#open</code>, or the ticket was closed with <em>Close and reopen on reply</em> and the requester replies within that window (the ticket reopens).</li>
     <li>Processed messages are marked read in the mailbox.</li>
 </ul>
 </div>
@@ -156,7 +156,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4" id="reply-commands">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-hash text-primary me-2"></i>Email Reply Commands</h5>
-<p class="text-muted mb-3">Users at the <strong>Admin</strong> or <strong>Agent</strong> level can change a ticket from their mail client by putting <strong>hashtag commands</strong> on their own line at the end of the reply. For anyone else, the hashtags are treated as plain text.</p>
+<p class="text-muted mb-3">Users at the <strong>Администратор</strong> or <strong>Инженер</strong> level can change a ticket from their mail client by putting <strong>hashtag commands</strong> on their own line at the end of the reply. For anyone else, the hashtags are treated as plain text.</p>
 
 <h6 class="fw-semibold mb-2">Status Commands</h6>
 <div class="table-responsive mb-4">
@@ -164,10 +164,10 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <thead class="table-light"><tr><th>Hashtag</th><th>Sets ticket status to</th></tr></thead>
     <tbody class="text-muted">
         <tr><td><code>#open</code></td><td>Open (also reopens a closed ticket)</td></tr>
-        <tr><td><code>#close</code> or <code>#closed</code></td><td>Closed</td></tr>
+        <tr><td><code>#close</code> or <code>#closed</code></td><td>Закрыта</td></tr>
         <tr><td><code>#resolve</code> or <code>#resolved</code></td><td>Resolved (ignored while the Resolved status is inactive)</td></tr>
-        <tr><td><code>#pending</code></td><td>Pending</td></tr>
-        <tr><td><code>#in_progress</code> or <code>#inprogress</code></td><td>In Progress</td></tr>
+        <tr><td><code>#pending</code></td><td>Ожидает</td></tr>
+        <tr><td><code>#in_progress</code> or <code>#inprogress</code></td><td>В работе</td></tr>
         <tr><td><code>#waiting_on_customer</code> or <code>#waitingoncustomer</code></td><td>Waiting on Customer</td></tr>
         <tr><td><code>#waiting_on_third_party</code> or <code>#waitingonthirdparty</code></td><td>Waiting on Third Party</td></tr>
     </tbody>
@@ -191,7 +191,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 I've confirmed the fix is deployed and the user has verified it works.
 
 #close #high</pre>
-<p class="text-muted mt-2 mb-0">This posts the comment, sets the status to <strong>Closed</strong> and the priority to <strong>High</strong>. The command line doesn't appear in the comment.</p>
+<p class="text-muted mt-2 mb-0">This posts the comment, sets the status to <strong>Закрыта</strong> and the priority to <strong>Высокий</strong>. The command line doesn't appear in the comment.</p>
 </div>
 </div>
 
@@ -232,7 +232,7 @@ I've confirmed the fix is deployed and the user has verified it works.
 <div class="card border-0 shadow-sm mb-4" id="templates">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-envelope-paper text-primary me-2"></i>Email Templates</h5>
-<p class="text-muted mb-2">Change the wording of the main emails, with no code, at <a href="/admin/settings/email-templates"><strong>Settings &rarr; Email &rarr; Email Templates</strong></a>. Each tab has a <strong>Subject</strong>, an <strong>Intro Message</strong> (rich text: bold, italic, lists, links) and usually a <strong>Button Label</strong>, with a live subject preview and a <strong>Reset to Defaults</strong> button. Leave a field blank to use the built-in wording.</p>
+<p class="text-muted mb-2">Change the wording of the main emails, with no code, at <a href="/admin/settings/email-templates"><strong>Settings &rarr; Email &rarr; Email Templates</strong></a>. Each tab has a <strong>Тема</strong>, an <strong>Intro Message</strong> (rich text: bold, italic, lists, links) and usually a <strong>Button Label</strong>, with a live subject preview and a <strong>Reset to Defaults</strong> button. Leave a field blank to use the built-in wording.</p>
 <div class="table-responsive mb-3">
 <table class="table table-sm mb-0">
     <thead class="table-light"><tr><th style="width:30%;">Tab</th><th>Sent when&hellip;</th></tr></thead>

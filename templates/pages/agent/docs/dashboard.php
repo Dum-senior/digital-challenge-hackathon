@@ -20,9 +20,9 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Dashb
     <thead class="table-light"><tr><th>Card</th><th>What it counts</th></tr></thead>
     <tbody class="text-muted">
         <tr><td><strong>Unassigned</strong></td><td>Open tickets with nobody assigned.</td></tr>
-        <tr><td><strong>My Tickets</strong></td><td>Open tickets assigned to you.</td></tr>
-        <tr><td><strong>Pending</strong></td><td>Tickets in the <em>Pending</em> status.</td></tr>
-        <tr><td><strong>Resolved Today</strong></td><td>Tickets moved to <em>Resolved</em> or <em>Closed</em> today &mdash; by anyone, not just you. Tickets closed as duplicate, won't fix or no response aren't counted.</td></tr>
+        <tr><td><strong>Мои заявки</strong></td><td>Open tickets assigned to you.</td></tr>
+        <tr><td><strong>Ожидает</strong></td><td>Tickets in the <em>Ожидает</em> status.</td></tr>
+        <tr><td><strong>Resolved Today</strong></td><td>Tickets moved to <em>Решена</em> or <em>Закрыта</em> today &mdash; by anyone, not just you. Tickets closed as duplicate, won't fix or no response aren't counted.</td></tr>
         <tr><td><strong>Escalated to Me</strong></td><td>Open tickets that were escalated to you. This red card only appears when you have at least one.</td></tr>
     </tbody>
 </table>
@@ -37,7 +37,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Dashb
 <ul class="text-muted mb-3">
     <li>Click a ticket number or subject to open the ticket.</li>
     <li>Click a column heading to sort by it; click again to reverse.</li>
-    <li>Click a <strong>Status</strong>, <strong>Priority</strong>, <strong>Type</strong>, <strong>Assigned To</strong> or <strong>Group</strong> value (or the small <i class="bi bi-chevron-down"></i> beside it) to change it on the spot. The assignee list shows the members of the ticket's group.</li>
+    <li>Click a <strong>Статус</strong>, <strong>Приоритет</strong>, <strong>Type</strong>, <strong>Исполнитель</strong> or <strong>Group</strong> value (or the small <i class="bi bi-chevron-down"></i> beside it) to change it on the spot. The assignee list shows the members of the ticket's group.</li>
 </ul>
 <p class="text-muted mb-0">Click <strong><i class="bi bi-layout-three-columns"></i> Columns</strong> at the top-right of the table, tick the columns you want, then click <strong>Apply</strong>. The same column choice is used on your ticket list.</p>
 </div>
@@ -50,15 +50,15 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Dashb
 <ul class="text-muted mb-3">
     <li><strong><i class="bi bi-speedometer2"></i> Dashboard</strong> and <strong><i class="bi bi-ticket-detailed"></i> Tickets</strong>.</li>
     <li><strong><i class="bi bi-grid-1x2"></i> Floor mode</strong> &mdash; only shown on touch screens such as tablets and phones. See <a href="/agent/help/floor">Floor Mode</a>.</li>
-    <li><strong><i class="bi bi-book"></i> Knowledge Base</strong> &mdash; see <a href="/agent/help/knowledge-base">Knowledge Base</a>.</li>
+    <li><strong><i class="bi bi-book"></i> Knowledge Base</strong> &mdash; see <a href="/agent/help/knowledge-base">База знаний</a>.</li>
     <li><strong><i class="bi bi-sliders"></i> Settings</strong> &mdash; Status Banners, plus any management areas your permission level allows.</li>
     <li><strong><i class="bi bi-question-circle"></i> Help</strong> &mdash; these pages.</li>
 </ul>
 <p class="text-muted mb-2"><strong>The top bar</strong> has:</p>
 <ul class="text-muted mb-3">
-    <li><strong>Search</strong> &mdash; press <kbd>/</kbd> anywhere (when you're not typing in a box) to jump into it. Results are grouped into <em>Everything</em>, <em>Tickets</em>, <em>Contacts</em> and <em>Knowledge Base Articles</em>. Press <kbd>Esc</kbd> to close it.</li>
+    <li><strong>Поиск</strong> &mdash; press <kbd>/</kbd> anywhere (when you're not typing in a box) to jump into it. Results are grouped into <em>Everything</em>, <em>Заявки</em>, <em>Contacts</em> and <em>Knowledge Base Articles</em>. Press <kbd>Esc</kbd> to close it.</li>
     <li><strong><i class="bi bi-bell"></i> Notifications</strong> &mdash; the bell shows how many unread alerts you have. See <a href="/agent/help/profile">Profile &amp; Notifications</a>.</li>
-    <li><strong>Your name</strong> &mdash; opens your account menu: <strong>Restart Tour</strong>, <strong>Manage My Team</strong> (group managers only), <strong>Wallboard</strong>, <strong>My Profile</strong> and <strong>Sign Out</strong>.</li>
+    <li><strong>Your name</strong> &mdash; opens your account menu: <strong>Restart Tour</strong>, <strong>Manage My Team</strong> (group managers only), <strong>Wallboard</strong>, <strong>My Profile</strong> and <strong>Выйти</strong>.</li>
 </ul>
 <p class="text-muted mb-0">On a phone the sidebar is hidden; tap the <i class="bi bi-list"></i> menu button in the top bar to reach the same links.</p>
 </div>

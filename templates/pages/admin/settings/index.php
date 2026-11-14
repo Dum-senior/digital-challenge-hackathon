@@ -7,7 +7,7 @@ $breadcrumbs  = Auth::isAdmin()
     : [['label' => 'Settings']];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -69,7 +69,7 @@ $breadcrumbs  = Auth::isAdmin()
                            placeholder="e.g. user@example.com" autocomplete="off">
                 </div>
                 <div class="col-md-6">
-                    <label for="smtp_password" class="form-label fw-semibold">Password</label>
+                    <label for="smtp_password" class="form-label fw-semibold">Пароль</label>
                     <input type="password" class="form-control" id="smtp_password" name="smtp_password"
                            value="" placeholder="<?= $settings['smtp_password'] !== '' ? '••••••••' : '' ?>"
                            autocomplete="new-password">

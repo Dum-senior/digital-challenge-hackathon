@@ -341,7 +341,7 @@
                 </select>
             </div>
             <div class="col-5">
-                <label for="fq-location">Location</label>
+                <label for="fq-location">Площадка</label>
                 <select id="fq-location" name="location_id" class="form-select">
                     <option value="">My branch</option>
                     <?php foreach ($locations as $l): ?>
@@ -369,7 +369,7 @@
         <div id="fq-dup-warning" style="display:none;margin-top:1rem;"></div>
 
         <div class="submit-row">
-            <button type="button" class="cancel" id="fq-cancel">Cancel</button>
+            <button type="button" class="cancel" id="fq-cancel">Отмена</button>
             <button type="submit" class="submit" id="fq-submit">Create ticket</button>
         </div>
     </form>

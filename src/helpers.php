@@ -7509,7 +7509,7 @@ function totpVerifyOnce(PDO $db, int $userId, string $secret, string $code, int 
  */
 function totpGetUri(string $secret, string $email): string
 {
-    $appName = rawurlencode(getSetting('branding_app_name', 'OpenHelpDesk'));
+    $appName = rawurlencode(getSetting('branding_app_name', 'Диспетчер ИИ'));
     $email   = rawurlencode($email);
     return "otpauth://totp/{$appName}:{$email}?secret={$secret}&issuer={$appName}&algorithm=SHA1&digits=6&period=30";
 }

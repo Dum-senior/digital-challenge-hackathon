@@ -205,8 +205,8 @@ $csatExtDash   = trim(getSetting('csat_external_dashboard_url', ''));
         <table class="table table-hover mb-0 align-middle">
             <thead class="table-light">
                 <tr>
-                    <th style="width:80px;">Ticket</th>
-                    <th>Subject</th>
+                    <th style="width:80px;">Заявка</th>
+                    <th>Тема</th>
                     <th>User</th>
                     <th style="width:100px;">Rating</th>
                     <th>Comment</th>

@@ -14,13 +14,13 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-compass text-primary me-2"></i>Finding Your Way Around</h5>
-<p class="text-muted mb-2">The left rail holds only <strong>Dashboard</strong>, <strong>Tickets</strong>, <strong>Settings</strong> and <strong>Docs</strong>. Everything you configure is on the <strong>Settings</strong> page, whose left menu is grouped as follows: <em>Operations</em> (status banners), <em>Email</em>, <em>Scheduling</em>, <em>Users &amp; Access</em>, <em>Organization</em>, <em>Knowledge Base</em>, <em>Security</em>, <em>Integrations</em>, <em>Customization</em>, <em>Automation</em>, <em>Reports</em>, <em>Data</em> and <em>System</em>. These docs write menu paths as <em>Settings → group → page</em>.</p>
+<p class="text-muted mb-2">The left rail holds only <strong>Главная</strong>, <strong>Заявки</strong>, <strong>Настройки</strong> and <strong>Документация</strong>. Everything you configure is on the <strong>Настройки</strong> page, whose left menu is grouped as follows: <em>Operations</em> (status banners), <em>Email</em>, <em>Scheduling</em>, <em>Users &amp; Access</em>, <em>Organization</em>, <em>База знаний</em>, <em>Security</em>, <em>Integrations</em>, <em>Customization</em>, <em>Automation</em>, <em>Отчёты</em>, <em>Data</em> and <em>System</em>. These docs write menu paths as <em>Settings → group → page</em>.</p>
 <ul class="text-muted mb-2">
     <li>The search box at the top of the Settings menu finds pages and individual settings, such as "smtp host" or "primary color". Press <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd> to jump to it.</li>
     <li>On a phone, the Settings menu folds behind an <strong>All settings</strong> button.</li>
     <li>Your name menu (top right) has <strong>Restart Tour</strong>, <strong>Wallboard</strong>, <strong>My Profile</strong> and Sign Out. The guided tour starts automatically the first time an admin signs in after installation.</li>
 </ul>
-<p class="text-muted mb-0">Staff who aren't admins also get a <strong>Settings</strong> link, but their menu lists only the pages their <a href="/admin/docs/users#permission-levels">permission level</a> can open.</p>
+<p class="text-muted mb-0">Staff who aren't admins also get a <strong>Настройки</strong> link, but their menu lists only the pages their <a href="/admin/docs/users#permission-levels">permission level</a> can open.</p>
 </div>
 </div>
 
@@ -54,7 +54,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-0">
     <li><a href="/admin/settings/organization"><strong>Settings → Organization → Organization Type</strong></a>: pick your sector (public library, school, municipality and so on). <em>Suggest with AI</em> on Agent Skills uses it as context.</li>
     <li><a href="/admin/settings/branding"><strong>Settings → Customization → Branding</strong></a>: application name, logo and colours.</li>
-    <li><a href="/admin/settings/labels"><strong>Settings → Customization → Labels</strong></a>: rename terms such as <em>Location</em> to <em>Branch</em>, and reword what the portal shows requesters.</li>
+    <li><a href="/admin/settings/labels"><strong>Settings → Customization → Labels</strong></a>: rename terms such as <em>Площадка</em> to <em>Branch</em>, and reword what the portal shows requesters.</li>
 </ul>
 <p class="text-muted small mt-2 mb-0">See <a href="/admin/docs/branding">Branding &amp; Labels</a>.</p>
 </div>
@@ -77,7 +77,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-5-circle-fill text-primary me-2"></i>Shape Your Tickets</h5>
-<p class="text-muted mb-0">Under <strong>Settings → Organization</strong>, review <a href="/admin/settings/ticket-statuses">Ticket Statuses</a> and <a href="/admin/priorities">Ticket Priorities</a>. Then create your <a href="/admin/types">Ticket Types</a> (each with a default group) and lay out each type's form in <a href="/admin/workflows/ticket-fields">Ticket Forms</a>. <a href="/admin/types/matrix">Type Settings Matrix</a> shows every type's options side by side. See <a href="/admin/docs/tickets">Tickets</a>.</p>
+<p class="text-muted mb-0">Under <strong>Settings → Organization</strong>, review <a href="/admin/settings/ticket-statuses">Ticket Statuses</a> and <a href="/admin/priorities">Ticket Priorities</a>. Then create your <a href="/admin/types">Ticket Types</a> (each with a default group) and lay out each type's form in <a href="/admin/workflows/ticket-fields">Формы заявок</a>. <a href="/admin/types/matrix">Type Settings Matrix</a> shows every type's options side by side. See <a href="/admin/docs/tickets">Заявки</a>.</p>
 </div>
 </div>
 
@@ -97,7 +97,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li>Optionally set their location, work phone and avatar.</li>
 </ol>
 <div class="alert alert-warning small mb-0"><i class="bi bi-exclamation-triangle me-2"></i>
-    A staff member who isn't in any group sees no tickets, unless their permission level can view all tickets. No welcome email is sent. Give new staff their password yourself, have them use <strong>Forgot password?</strong> on the sign-in page, or let them sign in with <a href="/admin/docs/sso">Microsoft 365</a>. To add many people at once, use <a href="/admin/settings/import-users">Settings → Data → Import Users</a>.
+    A staff member who isn't in any group sees no tickets, unless their permission level can view all tickets. No welcome email is sent. Give new staff their password yourself, have them use <strong>Забыли пароль?</strong> on the sign-in page, or let them sign in with <a href="/admin/docs/sso">Microsoft 365</a>. To add many people at once, use <a href="/admin/settings/import-users">Settings → Data → Import Users</a>.
 </div>
 </div>
 </div>
@@ -112,7 +112,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><strong>Automation rules, escalations and ticket reminders</strong>: <a href="/admin/docs/automations">Automations</a></li>
     <li><strong>AI routing, duplicate detection and similar past tickets</strong>: <a href="/admin/docs/ai">AI Classification</a></li>
     <li><strong>Satisfaction surveys</strong>: <a href="/admin/docs/csat">Satisfaction Surveys</a></li>
-    <li><strong>Knowledge base articles</strong>: <a href="/admin/docs/kb">Knowledge Base</a></li>
+    <li><strong>Knowledge base articles</strong>: <a href="/admin/docs/kb">База знаний</a></li>
     <li><strong>Existing tickets from another system</strong>: <a href="/admin/docs/import">Importing Tickets</a></li>
 </ul>
 </div>

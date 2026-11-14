@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pageTitle) ?> &ndash; <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> Help Center</title>
+    <title><?= e($pageTitle) ?> &ndash; <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> — Центр помощи</title>
     <?php require ROOT_DIR . '/templates/partials/pwa-head.php'; ?>
     <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link href="/assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
@@ -52,7 +52,7 @@
     <nav class="pub-navbar" aria-label="Primary">
         <div class="container d-flex align-items-center gap-3">
             <a class="navbar-brand me-3" href="/kb">
-                <i class="bi bi-book me-1" aria-hidden="true"></i><?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> Help Center
+                <i class="bi bi-book me-1" aria-hidden="true"></i><?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> — Центр помощи
             </a>
 
             <div class="pub-search-wrap flex-grow-1 position-relative" role="search">
@@ -97,7 +97,7 @@
 
     <footer class="pub-footer">
         <div class="container d-flex justify-content-between align-items-center">
-            <span><?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> Help Center</span>
+            <span><?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?> — Центр помощи</span>
             <span>Powered by OpenHelpDesk</span>
         </div>
     </footer>

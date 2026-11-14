@@ -27,7 +27,7 @@ $breadcrumbs  = [
 <p class="text-muted mb-2"><strong>Group:</strong> IT — last round-robin pick was Bob.</p>
 <div class="table-responsive mb-3">
 <table class="table table-sm mb-0">
-<thead class="table-light"><tr><th>Agent</th><th>Skills</th><th>Open tickets</th><th>Online?</th></tr></thead>
+<thead class="table-light"><tr><th>Инженер</th><th>Skills</th><th>Open tickets</th><th>Online?</th></tr></thead>
 <tbody class="text-muted">
 <tr><td>Alice</td><td>Printers, Networking</td><td>3</td><td>yes — 30s ago</td></tr>
 <tr><td>Bob</td><td>Printers, Servers</td><td>1</td><td>no — 10 min ago</td></tr>

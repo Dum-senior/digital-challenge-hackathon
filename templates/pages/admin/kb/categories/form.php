@@ -29,7 +29,7 @@ $action = $isEdit ? "/admin/kb/categories/{$editing['id']}/edit" : '/admin/kb/ca
             </div>
 
             <div class="mb-3">
-                <label for="description" class="form-label fw-semibold">Description</label>
+                <label for="description" class="form-label fw-semibold">Описание</label>
                 <textarea class="form-control" id="description" name="description" rows="3"><?= e(old('description', $editing['description'] ?? '')) ?></textarea>
             </div>
 
@@ -56,7 +56,7 @@ $action = $isEdit ? "/admin/kb/categories/{$editing['id']}/edit" : '/admin/kb/ca
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update Category' : 'Create Category' ?>
                 </button>
-                <a href="/admin/kb/categories" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/kb/categories" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

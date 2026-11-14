@@ -10,7 +10,7 @@ $breadcrumbs  = [
 $isShared = ($tzMode ?? 'shared') === 'shared';
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -77,12 +77,12 @@ $isShared = ($tzMode ?? 'shared') === 'shared';
                 <tr>
                     <th>Name</th>
                     <th>Address</th>
-                    <th>Description</th>
+                    <th>Описание</th>
                     <?php if (!$isShared): ?>
                     <th>Timezone</th>
                     <?php endif; ?>
                     <th>Created</th>
-                    <th style="width:110px">Actions</th>
+                    <th style="width:110px">Действия</th>
                 </tr>
             </thead>
             <tbody>

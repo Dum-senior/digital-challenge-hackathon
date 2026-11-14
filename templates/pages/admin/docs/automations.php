@@ -51,7 +51,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-play-circle text-primary me-2"></i>Actions</h5>
+<h5 class="fw-semibold mb-3"><i class="bi bi-play-circle text-primary me-2"></i>Действия</h5>
 <ul class="text-muted mb-2">
     <li><strong>Assign to group</strong> and <strong>Assign to agent</strong>.</li>
     <li><strong>Set ticket type</strong>: e.g. match on Group to stamp a type on tickets that AI routed from a "No Wrong Door" type, so type-based rules, reports and SLA apply. SLA deadlines are recalculated.</li>
@@ -174,7 +174,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li><strong>Hours since last update</strong>: greater than N</li>
     <li><strong>Hours in current status</strong>: greater than N</li>
     <li><strong>Is assigned</strong>: Yes / No</li>
-    <li><strong>Priority</strong>, <strong>Status</strong>: equals / not equals</li>
+    <li><strong>Приоритет</strong>, <strong>Статус</strong>: equals / not equals</li>
     <li><strong>Group</strong>: equals / not equals / is empty / is not empty</li>
 </ul>
 </div>
@@ -192,7 +192,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <h6 class="fw-semibold mt-3 mb-2">Example: 3-day customer follow-up</h6>
 <ol class="text-muted mb-3">
     <li>Add a rule named "3-Day Customer Follow-Up".</li>
-    <li>Conditions: <strong>Status</strong> equals <em>Waiting on Customer</em>, and <strong>Hours in current status</strong> greater than <em>72</em>.</li>
+    <li>Conditions: <strong>Статус</strong> equals <em>Waiting on Customer</em>, and <strong>Hours in current status</strong> greater than <em>72</em>.</li>
     <li>Action: <strong>Send reminder email to customer</strong>. Set the cooldown to <code>3d</code> to repeat every three days, or <code>0</code> for a single reminder.</li>
 </ol>
 <p class="text-muted mb-2">Reword the emails on the <strong>Escalation Alert</strong> and <strong>Customer Reminder</strong> tabs of <a href="/admin/settings/email-templates">Email Templates</a>.</p>
@@ -260,7 +260,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <h5 class="fw-semibold mb-3"><i class="bi bi-calendar-event text-primary me-2"></i>Due Dates</h5>
 <ul class="text-muted mb-0">
     <li><strong>Due date follows the SLA</strong> (on by default): a ticket's due date is set to its <a href="/admin/docs/sla">SLA</a> resolution date, and moves with it when the SLA moves (a pause ends, the ticket is reopened, or its priority or type changes). A due date someone set by hand is never overwritten.</li>
-    <li><strong>Ask for a customer reply when a due date moves past the SLA date</strong> (on by default): the <strong>Update Ticket</strong> panel on the ticket page has a <strong>Due Date</strong> field with the <em>SLA target</em> shown under it. Saving a later date opens <em>New due date is past the SLA target</em>, with a reply to the customer already drafted. <strong>Send reply &amp; save</strong> posts it as a normal public reply (to the requester, CCs and watchers) and saves the date; <strong>Save without replying</strong> just saves the date; <strong>Cancel</strong> changes nothing.</li>
+    <li><strong>Ask for a customer reply when a due date moves past the SLA date</strong> (on by default): the <strong>Update Ticket</strong> panel on the ticket page has a <strong>Due Date</strong> field with the <em>SLA target</em> shown under it. Saving a later date opens <em>New due date is past the SLA target</em>, with a reply to the customer already drafted. <strong>Send reply &amp; save</strong> posts it as a normal public reply (to the requester, CCs and watchers) and saves the date; <strong>Save without replying</strong> just saves the date; <strong>Отмена</strong> changes nothing.</li>
     <li>A due date changed on the ticket page is logged as an internal <strong>Due Date Changed</strong> timeline entry. Moving the due date never changes the SLA itself, so SLA reports stay accurate.</li>
 </ul>
 </div>
@@ -272,7 +272,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-3">
     <li><strong>Email the owner when a ticket passes its due date</strong> (off by default): sent once, the day after the due date, if the ticket is still open. Moving the due date later sets up a new reminder for the new date.</li>
     <li><strong>Email the owner when the customer hasn't heard from us in N days</strong> (off by default; N is 1&ndash;365, default 15): counted from the last public reply by staff, or from when the ticket was opened if nobody has replied. Any public reply resets it. It repeats every N days while the silence continues.</li>
-    <li><strong>If a ticket has no owner, email its group's manager(s) instead</strong> (off by default): managers are the group members ticked <strong>Manager</strong> under <a href="/admin/groups">Groups</a>. With this off, unassigned tickets get no reminder.</li>
+    <li><strong>If a ticket has no owner, email its group's manager(s) instead</strong> (off by default): managers are the group members ticked <strong>Manager</strong> under <a href="/admin/groups">Группы</a>. With this off, unassigned tickets get no reminder.</li>
 </ul>
 <p class="text-muted mb-0">Reword the emails on the <strong>Overdue Reminder</strong> and <strong>Update Due Reminder</strong> tabs of <a href="/admin/settings/email-templates">Email Templates</a>. Both offer <code>{{first_name}}</code>, <code>{{last_name}}</code>, <code>{{user_name}}</code> (the recipient), <code>{{ticket_id}}</code>, <code>{{subject}}</code>, <code>{{requester}}</code>, <code>{{due_date}}</code>, <code>{{days_since_contact}}</code> and <code>{{group}}</code>.</p>
 </div>
@@ -323,7 +323,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-sliders text-primary me-2"></i>Settings</h5>
+<h5 class="fw-semibold mb-3"><i class="bi bi-sliders text-primary me-2"></i>Настройки</h5>
 <ul class="text-muted mb-2">
     <li><strong>Enable out-of-office coverage</strong>: the master switch.</li>
     <li><strong>When an agent is out of office</strong>: <em>Reassign if possible, otherwise auto-reply</em> (recommended), <em>Reassign only</em> (one-person groups are left alone), or <em>Auto-reply only</em> (never moves tickets).</li>
@@ -343,7 +343,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2">Create tickets on a schedule for preventive maintenance and routine checks (monthly toner audit, quarterly HVAC service, annual fire inspection). Manage schedules at <a href="/admin/recurring-tickets"><strong>Settings &rarr; Automation &rarr; Recurring Tickets</strong></a> (needs <strong>Manage recurring tickets</strong>) with <strong>New Recurring Ticket</strong>:</p>
 <ul class="text-muted mb-2">
     <li><strong>Schedule</strong>: an internal name and notes, a <strong>Frequency</strong> (Daily, Weekly, Monthly, Yearly or Custom every N days), an interval (e.g. 3 &times; Monthly = quarterly), a <strong>Start Date</strong>, and optional day-of-week, day-of-month and month anchors. A plain-language summary updates as you type.</li>
-    <li><strong>Ticket</strong>: subject, description, type, priority, <?= e(strtolower(label('location.singular', 'location'))) ?>, group (or auto-route), assignee (or auto-assign), a due date set N days after creation, and <strong>Filed As (Requester)</strong>.</li>
+    <li><strong>Заявка</strong>: subject, description, type, priority, <?= e(strtolower(label('location.singular', 'location'))) ?>, group (or auto-route), assignee (or auto-assign), a due date set N days after creation, and <strong>Filed As (Requester)</strong>.</li>
 </ul>
 <ul class="text-muted mb-0">
     <li>Tickets are created at 06:00 on the scheduled day. Days past the end of a month use the last day.</li>

@@ -17,7 +17,7 @@ $hasFilters = !empty($filterParams);
 $panelFilterCount = count(array_diff_key($filterParams, ['q' => null]));
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h2 class="fw-bold mb-0">Users</h2>
+    <h2 class="fw-bold mb-0">Пользователи</h2>
     <div class="d-flex gap-2 align-items-center flex-wrap">
         <span class="badge bg-secondary fs-6" id="userCountBadge"><?= count($users) ?><?= $hasFilters ? ' filtered' : ' total' ?></span>
         <div class="position-relative">

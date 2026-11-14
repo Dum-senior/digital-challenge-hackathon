@@ -16,14 +16,14 @@ $submitLabel  = label('portal.action.submit', 'Submit Request');
 <div class="alert alert-light border d-flex gap-3 mb-4">
     <i class="bi bi-lightbulb fs-4 text-warning flex-shrink-0"></i>
     <div class="small mb-0">
-        <strong>Before you submit:</strong> check the coloured banner at the top of the page and try a quick <a href="/portal/help/knowledge-base">Knowledge Base</a> search. Your answer may already be waiting &mdash; and if a banner describes your problem, we already know.
+        <strong>Before you submit:</strong> check the coloured banner at the top of the page and try a quick <a href="/portal/help/knowledge-base">База знаний</a> search. Your answer may already be waiting &mdash; and if a banner describes your problem, we already know.
     </div>
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-file-earmark-text text-primary me-2"></i>Start From a Template (if offered)</h5>
-<p class="text-muted mb-0">For common requests there may be a <strong>Template&hellip;</strong> menu at the top-right of the form, next to <strong>Back</strong>. Choosing one fills in the subject, description, request type, and urgency for you &mdash; you just adjust the details and submit. If you don't see the menu, no templates have been set up, and that's fine.</p>
+<p class="text-muted mb-0">For common requests there may be a <strong>Template&hellip;</strong> menu at the top-right of the form, next to <strong>Назад</strong>. Choosing one fills in the subject, description, request type, and urgency for you &mdash; you just adjust the details and submit. If you don't see the menu, no templates have been set up, and that's fine.</p>
 </div>
 </div>
 

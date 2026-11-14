@@ -54,9 +54,9 @@ foreach ($tickets as $t) {
             <thead class="table-light">
                 <tr>
                     <th style="width:72px;">#</th>
-                    <th>Subject</th>
-                    <th style="white-space:nowrap;">Status</th>
-                    <th style="white-space:nowrap;">Assigned To</th>
+                    <th>Тема</th>
+                    <th style="white-space:nowrap;">Статус</th>
+                    <th style="white-space:nowrap;">Исполнитель</th>
                     <th style="white-space:nowrap;">Created</th>
                 </tr>
             </thead>

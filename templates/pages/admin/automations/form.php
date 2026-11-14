@@ -52,7 +52,7 @@ if (!empty($existingConditions) && isset($existingConditions[0]['field'])) {
 }
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -137,7 +137,7 @@ if (!empty($existingConditions) && isset($existingConditions[0]['field'])) {
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update' : 'Create' ?> Automation
                 </button>
-                <a href="/admin/settings/automations" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/settings/automations" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>
@@ -247,9 +247,9 @@ if (!empty($existingConditions) && isset($existingConditions[0]['field'])) {
                             item.href = '#';
                             item.className = 'list-group-item list-group-item-action py-1 px-2 small';
                             var badge = u.role === 'admin'
-                                ? ' <span class="badge bg-danger" style="font-size:.6rem;">Admin</span>'
+                                ? ' <span class="badge bg-danger" style="font-size:.6rem;">Администратор</span>'
                                 : u.role === 'agent'
-                                ? ' <span class="badge bg-primary" style="font-size:.6rem;">Agent</span>'
+                                ? ' <span class="badge bg-primary" style="font-size:.6rem;">Инженер</span>'
                                 : ' <span class="badge bg-secondary" style="font-size:.6rem;">User</span>';
                             item.innerHTML = '<strong>' + escHtml(u.first_name + ' ' + u.last_name) + '</strong> '
                                            + '<span class="text-muted">' + escHtml(u.email) + '</span>' + badge;

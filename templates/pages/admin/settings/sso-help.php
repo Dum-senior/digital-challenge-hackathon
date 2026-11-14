@@ -178,7 +178,7 @@ $redirectUri = rtrim(env('APP_URL', ''), '/') . '/auth/microsoft/callback';
             <li>Paste the <strong>Directory (Tenant) ID</strong>, <strong>Application (Client) ID</strong>, and <strong>Client Secret</strong> into the corresponding fields.</li>
             <li>Tick <strong>Enable Microsoft 365 SSO</strong>.</li>
             <li>Click <strong>Save SSO Settings</strong>.</li>
-            <li>Open a private/incognito browser window and visit your login page. You should see a <em>Sign in with Microsoft 365</em> button.</li>
+            <li>Open a private/incognito browser window and visit your login page. You should see a <em>Войти через Microsoft 365</em> button.</li>
         </ol>
     </div>
 </div>

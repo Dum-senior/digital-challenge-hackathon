@@ -34,7 +34,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4" id="sending">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-send text-primary me-2"></i>How and when a survey is sent</h5>
-<p class="text-muted mb-2">With surveys enabled, a survey is emailed when a ticket reaches the <strong>trigger status</strong>: <em>Resolved</em> by default, or <em>Closed</em>. These are your default resolved and default closed statuses from Ticket Statuses, so renaming them doesn't break the trigger. It fires when the status is changed from the agent ticket page's Update Ticket panel, <em>Send &amp; set status</em> on a reply, the inline status menu on a ticket list, floor mode, or the API. The survey goes to the ticket's <strong>requester</strong>, not to a staff member who filed it on their behalf.</p>
+<p class="text-muted mb-2">With surveys enabled, a survey is emailed when a ticket reaches the <strong>trigger status</strong>: <em>Решена</em> by default, or <em>Закрыта</em>. These are your default resolved and default closed statuses from Ticket Statuses, so renaming them doesn't break the trigger. It fires when the status is changed from the agent ticket page's Update Ticket panel, <em>Send &amp; set status</em> on a reply, the inline status menu on a ticket list, floor mode, or the API. The survey goes to the ticket's <strong>requester</strong>, not to a staff member who filed it on their behalf.</p>
 <p class="text-muted mb-2"><strong>One email, not two.</strong> When the trigger status also sends the requester a resolved or closed notice, the survey buttons are placed inside that notice rather than sent as a second email. That combined email uses the wording of the <em>Ticket Resolved</em> / <em>Ticket Closed</em> template; the separate survey email (and its template) is used when no notice goes out — for example <em>Send &amp; set status</em> from the agent ticket page, <em>Close and request feedback</em>, or a requester who has switched off closed notices.</p>
 <p class="text-muted mb-2"><strong>The ticket page's Close menu:</strong></p>
 <ul class="text-muted mb-3">
@@ -133,7 +133,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-3">It's optional. Skip it and External mode works fine &mdash; you just read ratings in your survey tool's own dashboard (see the <a href="#reports">External dashboard URL</a> setting). Wire it up when you want ticket-level CSAT reporting inside this app.</p>
 
 <h6 class="fw-semibold mb-2">1. Get your endpoint and secret</h6>
-<p class="text-muted mb-2">Set <strong>Survey type = External</strong>, fill in the survey URL, and <strong>Save</strong>. A signing secret is generated automatically the first time you save in External mode. The settings page then shows two values:</p>
+<p class="text-muted mb-2">Set <strong>Survey type = External</strong>, fill in the survey URL, and <strong>Сохранить</strong>. A signing secret is generated automatically the first time you save in External mode. The settings page then shows two values:</p>
 <div class="table-responsive mb-3">
     <table class="table table-sm mb-0">
         <thead class="table-light"><tr><th style="width:160px;">Value</th><th>Use</th></tr></thead>
@@ -224,7 +224,7 @@ await fetch('https://help.example.com/api/csat/webhook', {
 <h6 class="fw-semibold mb-2">4. Responses you'll get back</h6>
 <div class="table-responsive mb-3">
     <table class="table table-sm mb-0">
-        <thead class="table-light"><tr><th style="width:90px;">Status</th><th>Body</th><th>Meaning</th></tr></thead>
+        <thead class="table-light"><tr><th style="width:90px;">Статус</th><th>Body</th><th>Meaning</th></tr></thead>
         <tbody>
             <tr><td><code>200</code></td><td><code>{"ok":true,"status":"recorded"}</code></td><td>Saved. Rating + comment are now on the ticket and in reports.</td></tr>
             <tr><td><code>200</code></td><td><code>{"ok":true,"status":"already_recorded"}</code></td><td>A response was already stored for this ticket. Ignored &mdash; <strong>first response wins</strong>. Safe to retry.</td></tr>
@@ -359,7 +359,7 @@ await fetch('https://help.example.com/api/csat/webhook', {
         </thead>
         <tbody>
             <tr><td><strong>Enable CSAT surveys</strong></td><td>Master switch. Off = no survey emails ever go out, regardless of the other settings below.</td></tr>
-            <tr><td><strong>Send survey when ticket is</strong></td><td><em>Resolved</em> (default, recommended) or <em>Closed</em>: your default resolved or default closed status. <em>Close and request feedback</em> sends a survey regardless.</td></tr>
+            <tr><td><strong>Send survey when ticket is</strong></td><td><em>Решена</em> (default, recommended) or <em>Закрыта</em>: your default resolved or default closed status. <em>Close and request feedback</em> sends a survey regardless.</td></tr>
             <tr><td><strong>Survey type</strong></td><td><em>Built-in</em> (default) hosts the rating page in this app. <em>External</em> links to a URL you provide.</td></tr>
             <tr><td><strong>External survey URL</strong></td><td>Required when type is External. Supports <code>{ticket_id}</code>, <code>{token}</code>, <code>{user_email}</code>, <code>{first_name}</code>, <code>{last_name}</code>, <code>{user_name}</code>, <code>{subject}</code>.</td></tr>
             <tr><td><strong>External dashboard URL</strong></td><td>Optional. Surfaces as an <em>Open external dashboard</em> button on the Satisfaction report.</td></tr>

@@ -70,7 +70,7 @@ final class PWA
     /** First grapheme of the app name, uppercased. */
     public static function appInitial(): string
     {
-        $name = trim(getSetting('branding_app_name', 'OpenHelpDesk'));
+        $name = trim(getSetting('branding_app_name', 'Диспетчер ИИ'));
         if ($name === '') {
             return 'L';
         }
@@ -261,7 +261,7 @@ final class PWA
      */
     public static function manifestData(): array
     {
-        $appName     = getSetting('branding_app_name', 'OpenHelpDesk');
+        $appName     = getSetting('branding_app_name', 'Диспетчер ИИ');
         $shortName   = mb_substr($appName, 0, 12, 'UTF-8') ?: 'OpenHelpDesk';
         $themeColor  = getSetting('branding_navbar_start', '#1e1b4b');
         $brandColor  = getSetting('branding_primary_color', '#4f46e5');

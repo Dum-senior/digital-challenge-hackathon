@@ -125,7 +125,7 @@ $_agentTourCanTemplates = Auth::can('ticket_templates.manage') ? 'true' : 'false
             popover: {
                 title:       'Your Dashboard',
                 description: 'At a glance: <strong>Unassigned</strong> shows tickets waiting to be picked up, ' +
-                             '<strong>My Tickets</strong> are assigned to you, <strong>Pending</strong> are awaiting a response, ' +
+                             '<strong>Мои заявки</strong> are assigned to you, <strong>Ожидает</strong> are awaiting a response, ' +
                              'and <strong>Resolved Today</strong> tracks your progress.',
                 side:  'bottom',
                 align: 'start'
@@ -145,8 +145,8 @@ $_agentTourCanTemplates = Auth::can('ticket_templates.manage') ? 'true' : 'false
             element: '.sidebar',
             popover: {
                 title:       'Navigation',
-                description: 'Use the left sidebar to move between <strong>Dashboard</strong>, <strong>Tickets</strong>, ' +
-                             'the <strong>Knowledge Base</strong>, and more. Hover over an icon to see its label.<br><br>' +
+                description: 'Use the left sidebar to move between <strong>Главная</strong>, <strong>Заявки</strong>, ' +
+                             'the <strong>База знаний</strong>, and more. Hover over an icon to see its label.<br><br>' +
                              'Your <strong>Canned Responses</strong> (pre-written reply snippets) now live on your ' +
                              '<strong>profile page</strong> — open it from your name in the top-right corner.',
                 side:  'right',
@@ -203,7 +203,7 @@ $_agentTourCanTemplates = Auth::can('ticket_templates.manage') ? 'true' : 'false
             element: '.sidebar a[href="/portal/kb"]',
             popover: {
                 title:       'Knowledge Base',
-                description: 'The <strong>Knowledge Base</strong> contains articles written by your team. ' +
+                description: 'The <strong>База знаний</strong> contains articles written by your team. ' +
                              'Before creating a ticket, check if there is already a documented solution. ' +
                              'You can also search and reference articles while helping customers.',
                 side:  'right',
@@ -214,7 +214,7 @@ $_agentTourCanTemplates = Auth::can('ticket_templates.manage') ? 'true' : 'false
             element: '#tour-new-ticket-btn',
             popover: {
                 title:       'Creating a New Ticket',
-                description: 'Click <strong>New Ticket</strong> to manually create a ticket on behalf of a customer. ' +
+                description: 'Click <strong>Новая заявка</strong> to manually create a ticket on behalf of a customer. ' +
                              'Fill in the subject, description, type, priority, and location.<br><br>' +
                              'At the top of the New Ticket form there is a <strong>Template…</strong> dropdown — ' +
                              'select a template to pre-fill common fields automatically.',
@@ -260,7 +260,7 @@ $_agentTourCanTemplates = Auth::can('ticket_templates.manage') ? 'true' : 'false
             popover: {
                 title:       'Ticket Header',
                 description: 'The subject line sits at the top, with colour-coded badges showing the current ' +
-                             '<strong>Status</strong>, <strong>Priority</strong>, and <strong>SLA state</strong> (On Track / Warning / Breached). ' +
+                             '<strong>Статус</strong>, <strong>Приоритет</strong>, and <strong>SLA state</strong> (On Track / Warning / Breached). ' +
                              'The ticket number is also shown here for reference.',
                 side:  'bottom',
                 align: 'start'
@@ -313,7 +313,7 @@ $_agentTourCanTemplates = Auth::can('ticket_templates.manage') ? 'true' : 'false
             element: '#tour-update-ticket',
             popover: {
                 title:       'Update Ticket',
-                description: 'Use this panel to change the <strong>Status</strong>, <strong>Priority</strong>, ' +
+                description: 'Use this panel to change the <strong>Статус</strong>, <strong>Приоритет</strong>, ' +
                              '<strong>Assigned Agent</strong>, or <strong>Group</strong>, then click <strong>Update</strong> to save.<br><br>' +
                              'When sending a reply you can also change the status in one step using the dropdown ' +
                              'next to the Send button — for example, reply and mark as Resolved at the same time.',

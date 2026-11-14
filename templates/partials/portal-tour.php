@@ -280,9 +280,9 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
             element: '.sidebar',
             popover: {
                 title:       'Navigation',
-                description: 'The sidebar gets you everywhere: <strong>Dashboard</strong> (this page), <strong>My Requests</strong>, ' +
-                             'the <strong>Knowledge Base</strong> — a library of help articles that may already answer your question — ' +
-                             'and <strong>Help</strong> guides for this portal.',
+                description: 'The sidebar gets you everywhere: <strong>Главная</strong> (this page), <strong>Мои обращения</strong>, ' +
+                             'the <strong>База знаний</strong> — a library of help articles that may already answer your question — ' +
+                             'and <strong>Помощь</strong> guides for this portal.',
                 side:  'right',
                 align: 'center'
             }
@@ -308,7 +308,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                 element: '#tour-nav-help',
                 popover: {
                     title:       'The Help Menu',
-                    description: 'Stuck on how the portal itself works? The <strong>Help</strong> menu up here has short guides — ' +
+                    description: 'Stuck on how the portal itself works? The <strong>Помощь</strong> menu up here has short guides — ' +
                                  'it\'s always one click away, on every page.',
                     side:  'bottom',
                     align: 'start'
@@ -322,7 +322,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                 popover: {
                     title:       'Your Account Menu',
                     description: 'Click your name for <strong>My Profile</strong> (name, password, dark mode, and email preferences), ' +
-                                 '<strong>Restart Tour</strong> to see this walkthrough again, and <strong>Sign Out</strong>.',
+                                 '<strong>Restart Tour</strong> to see this walkthrough again, and <strong>Выйти</strong>.',
                     side:  'bottom',
                     align: 'end'
                 }
@@ -353,7 +353,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                 title:       'Start a New Request',
                 description: 'This button is how you reach the team.<br><br>' +
                              '➡️ <strong>Click Next</strong> and we\'ll leave the Dashboard and take you to your ' +
-                             '<strong>My Requests</strong> page (you\'ll find it in the sidebar), which lists ' +
+                             '<strong>Мои обращения</strong> page (you\'ll find it in the sidebar), which lists ' +
                              '<em>all</em> of your requests.',
                 side:  'bottom',
                 align: 'end',
@@ -367,7 +367,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
             popover: {
                 title:       '📍 New page: My Requests',
                 description: '<strong>Notice the page changed</strong> — we\'ve moved you from the Dashboard to your ' +
-                             '<strong>My Requests</strong> page (the one in the sidebar). Every help request you\'ve ' +
+                             '<strong>Мои обращения</strong> page (the one in the sidebar). Every help request you\'ve ' +
                              'ever submitted lives here — open ones and finished ones.'
             }
         });
@@ -376,10 +376,10 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
             element: '#tour-portal-filter-bar',
             popover: {
                 title:       'Search & Filter',
-                description: 'Type a keyword in <strong>Search</strong> to find a request by its subject. ' +
-                             'Narrow the list with the <strong>Status</strong> dropdown (statuses are in plain words — ' +
+                description: 'Type a keyword in <strong>Поиск</strong> to find a request by its subject. ' +
+                             'Narrow the list with the <strong>Статус</strong> dropdown (statuses are in plain words — ' +
                              '<em>Submitted</em>, <em>We\'re working on it</em>, <em>Waiting on you</em>, <em>Done</em>) ' +
-                             'or by <strong>Priority</strong>, then click <strong>Filter</strong>.',
+                             'or by <strong>Приоритет</strong>, then click <strong>Filter</strong>.',
                 side:  'bottom',
                 align: 'start'
             }
@@ -750,7 +750,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
             element: '#tour-ticket-details',
             popover: {
                 title:       'The Details Panel',
-                description: 'A quick summary: status, priority, type, branch, and — importantly — <strong>Assigned To</strong>: ' +
+                description: 'A quick summary: status, priority, type, branch, and — importantly — <strong>Исполнитель</strong>: ' +
                              'the person handling your request. "Unassigned" just means it\'s still in the queue.',
                 side:  'left',
                 align: 'start'
@@ -791,7 +791,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                 description: 'Problem sorted itself out, or the answer worked? You can close any of your own requests with this button — ' +
                              'it tells the team it\'s taken care of. Afterwards you may get a short <strong>satisfaction survey</strong> by ' +
                              'email; if the issue ever comes back, just reply or submit a new request.<br><br>' +
-                             '➡️ One last stop — <strong>click Next</strong> and we\'ll take you to your <strong>Profile</strong> page ' +
+                             '➡️ One last stop — <strong>click Next</strong> and we\'ll take you to your <strong>Профиль</strong> page ' +
                              'and email preferences (normally reached from your name menu in the top-right corner).',
                 side:  'bottom',
                 align: 'end',
@@ -812,7 +812,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                     title:       '📍 New page: Your Profile',
                     description: 'We brought you straight here, but on your own you\'d get to this page by clicking ' +
                                  '<strong>your name in the top-right corner</strong> and choosing <strong>My Profile</strong>. ' +
-                                 'That same menu is also where <strong>Restart Tour</strong> and <strong>Sign Out</strong> live.',
+                                 'That same menu is also where <strong>Restart Tour</strong> and <strong>Выйти</strong> live.',
                     side:  'bottom',
                     align: 'end'
                 }
@@ -823,7 +823,7 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                     title:       '📍 New page: Your Profile',
                     description: 'We brought you straight here, but on your own you\'d get to this page by opening the menu under ' +
                                  '<strong>your name in the top-right corner</strong> and choosing <strong>My Profile</strong>. ' +
-                                 'That same menu is also where <strong>Restart Tour</strong> and <strong>Sign Out</strong> live.'
+                                 'That same menu is also where <strong>Restart Tour</strong> and <strong>Выйти</strong> live.'
                 }
             });
         }
@@ -854,8 +854,8 @@ $_portalTourLocLabel = e(label('location.singular', 'Location'));
                 title:       '🎉 You\'re All Set!',
                 description: 'That\'s the full tour! You now know how to submit a request (and dodge duplicates), read a ticket, ' +
                              'comment here or by email, escalate when needed, close things yourself, and tune your notifications.<br><br>' +
-                             'Quick reminders: the <strong>Knowledge Base</strong> in the sidebar may already have your answer, ' +
-                             '<kbd>/</kbd> opens search anywhere, <strong>Help</strong> lives in the top menu, and you can replay this tour ' +
+                             'Quick reminders: the <strong>База знаний</strong> in the sidebar may already have your answer, ' +
+                             '<kbd>/</kbd> opens search anywhere, <strong>Помощь</strong> lives in the top menu, and you can replay this tour ' +
                              'from your name menu → <strong>Restart Tour</strong>.'
             }
         });

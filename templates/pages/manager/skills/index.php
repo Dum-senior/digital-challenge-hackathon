@@ -32,10 +32,10 @@ $sidebarItems = Auth::isAdmin()
                 <tr>
                     <th>Name</th>
                     <th>Scope</th>
-                    <th>Description</th>
-                    <th>Agents</th>
+                    <th>Описание</th>
+                    <th>Инженеры</th>
                     <th>Required by Types</th>
-                    <th style="width:120px;">Actions</th>
+                    <th style="width:120px;">Действия</th>
                 </tr>
             </thead>
             <tbody>

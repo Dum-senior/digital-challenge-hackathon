@@ -11,7 +11,7 @@ $breadcrumbs  = [
 <?php // Always loaded here so the live preview can show a Font Awesome icon before it's saved. ?>
 <link href="/assets/vendor/fontawesome/css/all.min.css" rel="stylesheet">
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -301,8 +301,8 @@ $breadcrumbs  = [
                             <span class="fw-bold" id="previewAppName"><?= e($appName) ?></span>
                         </div>
                         <div class="ms-auto d-flex gap-2 small opacity-75">
-                            <span>Admin</span>
-                            <span>Agent</span>
+                            <span>Администратор</span>
+                            <span>Инженер</span>
                             <span>Portal</span>
                         </div>
                     </div>

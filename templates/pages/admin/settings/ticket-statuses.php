@@ -13,7 +13,7 @@ $old = $_SESSION['_old_input'] ?? [];
 unset($_SESSION['_old_input']);
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -45,12 +45,12 @@ unset($_SESSION['_old_input']);
             <thead class="table-light">
                 <tr>
                     <th style="width:90px">Color</th>
-                    <th>Status</th>
+                    <th>Статус</th>
                     <th style="width:90px">Bucket</th>
                     <th style="width:90px;text-align:center">Pauses SLA</th>
                     <th style="width:220px">Defaults</th>
                     <th style="width:90px;text-align:center">Active</th>
-                    <th style="width:130px">Actions</th>
+                    <th style="width:130px">Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -65,9 +65,9 @@ unset($_SESSION['_old_input']);
                     </td>
                     <td>
                         <?php if ($s['bucket'] === 'open'): ?>
-                            <span class="badge bg-primary-subtle text-primary">Open</span>
+                            <span class="badge bg-primary-subtle text-primary">Открыта</span>
                         <?php else: ?>
-                            <span class="badge bg-secondary-subtle text-secondary">Closed</span>
+                            <span class="badge bg-secondary-subtle text-secondary">Закрыта</span>
                         <?php endif; ?>
                     </td>
                     <td class="text-center">
@@ -83,10 +83,10 @@ unset($_SESSION['_old_input']);
                                 <span class="badge bg-info-subtle text-info" title="New tickets land in this status">New</span>
                             <?php endif; ?>
                             <?php if ($s['is_default_resolved']): ?>
-                                <span class="badge bg-success-subtle text-success" title="Fires the 'resolved' email + CSAT trigger">Resolved</span>
+                                <span class="badge bg-success-subtle text-success" title="Fires the 'resolved' email + CSAT trigger">Решена</span>
                             <?php endif; ?>
                             <?php if ($s['is_default_closed']): ?>
-                                <span class="badge bg-secondary-subtle text-secondary" title="Fires the 'closed' email">Closed</span>
+                                <span class="badge bg-secondary-subtle text-secondary" title="Fires the 'closed' email">Закрыта</span>
                             <?php endif; ?>
                             <?php
                             $eligibleNew      = $s['bucket'] === 'open';
@@ -236,7 +236,7 @@ unset($_SESSION['_old_input']);
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                         <i class="bi bi-check-lg me-1"></i>Create
                     </button>
@@ -299,7 +299,7 @@ unset($_SESSION['_old_input']);
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                         <i class="bi bi-check-lg me-1"></i>Save Changes
                     </button>
@@ -335,7 +335,7 @@ unset($_SESSION['_old_input']);
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

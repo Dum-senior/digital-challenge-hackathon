@@ -9,12 +9,12 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/portal/help'], ['label' => 'Find
 <div class="col-lg-9">
 
 <h2 class="fw-bold mb-1">Finding Answers Yourself</h2>
-<p class="text-muted mb-4">The <strong>Knowledge Base</strong> is a library of how-to articles and answers to common questions. It's the fastest way to fix something &mdash; often quicker than submitting a request and waiting for a reply.</p>
+<p class="text-muted mb-4">The <strong>База знаний</strong> is a library of how-to articles and answers to common questions. It's the fastest way to fix something &mdash; often quicker than submitting a request and waiting for a reply.</p>
 
 <div class="alert alert-light border d-flex gap-3 mb-4">
     <i class="bi bi-book fs-4 text-primary flex-shrink-0"></i>
     <div class="small mb-0">
-        Open it from the <i class="bi bi-book"></i> <strong>Knowledge Base</strong> link in the left sidebar.
+        Open it from the <i class="bi bi-book"></i> <strong>База знаний</strong> link in the left sidebar.
     </div>
 </div>
 

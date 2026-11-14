@@ -66,7 +66,7 @@ $inboxBase = $inboxBase ?? '/agent/tickets';
         </thead>
         <tbody>
             <?php if (empty($tickets)): ?>
-            <tr><td colspan="3" class="text-center py-4 text-muted">No tickets found.</td></tr>
+            <tr><td colspan="3" class="text-center py-4 text-muted">Заявки не найдены.</td></tr>
             <?php else: ?>
                 <?php foreach ($tickets as $t): ?>
                 <?php

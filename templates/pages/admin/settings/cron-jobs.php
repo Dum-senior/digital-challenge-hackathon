@@ -34,7 +34,7 @@ $fmtAgo = static function (int $seconds): string {
 };
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -383,7 +383,7 @@ foreach ($cronJobs as $j) {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-danger" id="cronConfirmGo">
                     <i class="bi bi-play-fill me-1"></i>Run it for real
                 </button>

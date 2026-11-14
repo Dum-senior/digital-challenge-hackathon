@@ -47,10 +47,10 @@ $breadcrumbs  = [
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Agent</th>
+                    <th>Инженер</th>
                     <th class="text-center">Total Open</th>
-                    <th class="text-center">In Progress</th>
-                    <th class="text-center">Pending</th>
+                    <th class="text-center">В работе</th>
+                    <th class="text-center">Ожидает</th>
                     <th class="text-center">Waiting</th>
                     <th class="text-center">SLA Breached</th>
                 </tr>

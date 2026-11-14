@@ -167,7 +167,7 @@ class Teams
     /** A minimal card for the admin test button. */
     public static function testCard(): array
     {
-        $app = getSetting('branding_app_name', 'OpenHelpDesk');
+        $app = getSetting('branding_app_name', 'Диспетчер ИИ');
         return self::wrap('✅ Test message', [
             ['type' => 'TextBlock', 'wrap' => true,
              'text' => "Teams notifications from **{$app}** are working. You'll receive ticket updates in this channel."],

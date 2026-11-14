@@ -38,7 +38,7 @@ $breadcrumbs  = [
                     <th>Title</th>
                     <th>Preview</th>
                     <th style="width:90px;">Sort</th>
-                    <th style="width:110px;">Actions</th>
+                    <th style="width:110px;">Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -120,7 +120,7 @@ $breadcrumbs  = [
             <div class="modal-footer">
                 <form method="POST" id="deleteCannedResponseForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

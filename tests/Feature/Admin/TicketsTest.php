@@ -18,7 +18,7 @@ class TicketsTest extends TestCase
     {
         $r = $this->get($this->adminClient(), '/admin/tickets');
         $this->assertOk($r);
-        $this->assertSee('All Tickets', $r);
+        $this->assertSee('Все заявки', $r);
     }
 
     public function test_ticket_list_shows_filter_button(): void

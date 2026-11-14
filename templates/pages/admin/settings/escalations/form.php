@@ -29,7 +29,7 @@ $existingConditions = $isEdit ? ($editing['conditions_decoded'] ?? []) : [];
 $existingActions    = $isEdit ? ($editing['actions_decoded']    ?? []) : [];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -100,7 +100,7 @@ $existingActions    = $isEdit ? ($editing['actions_decoded']    ?? []) : [];
             <div class="mb-4">
                 <div class="d-flex align-items-center justify-content-between mb-2">
                     <div>
-                        <h6 class="fw-semibold mb-0">Actions</h6>
+                        <h6 class="fw-semibold mb-0">Действия</h6>
                         <div class="form-text mt-0">Actions are executed in order when conditions match.</div>
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-primary" id="addActBtn">
@@ -117,7 +117,7 @@ $existingActions    = $isEdit ? ($editing['actions_decoded']    ?? []) : [];
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save Changes' : 'Create Rule' ?>
                 </button>
-                <a href="/admin/settings/escalations" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/settings/escalations" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

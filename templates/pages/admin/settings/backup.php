@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -79,7 +79,7 @@ $breadcrumbs  = [
                             <th>Filename</th>
                             <th>Created</th>
                             <th>Size</th>
-                            <th class="text-end">Actions</th>
+                            <th class="text-end">Действия</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -175,7 +175,7 @@ $breadcrumbs  = [
                 <form method="POST" action="/admin/settings/backup/delete" id="deleteBackupForm">
                     <?= csrfField() ?>
                     <input type="hidden" name="filename" id="deleteBackupFilenameInput">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

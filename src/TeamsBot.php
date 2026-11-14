@@ -466,7 +466,7 @@ class TeamsBot
 
     private static function helpCard(bool $unknown = false): array
     {
-        $app   = getSetting('branding_app_name', 'OpenHelpDesk');
+        $app   = getSetting('branding_app_name', 'Диспетчер ИИ');
         $intro = $unknown
             ? "I didn't catch that. Here's what I understand:"
             : "Hi! I'm the **{$app}** bot. In a channel, @mention me first. Here's what I can do:";
@@ -797,7 +797,7 @@ class TeamsBot
      */
     public static function manifest(): array
     {
-        $app  = getSetting('branding_app_name', 'OpenHelpDesk');
+        $app  = getSetting('branding_app_name', 'Диспетчер ИИ');
         $base = rtrim((string) env('APP_URL', ''), '/');
         $host = (string) parse_url($base, PHP_URL_HOST);
         $cmds = [

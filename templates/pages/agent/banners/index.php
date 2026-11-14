@@ -42,13 +42,13 @@ $severityBadge = [
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th style="width:90px">Status</th>
+                    <th style="width:90px">Статус</th>
                     <th style="width:110px">Severity</th>
                     <th>Title / Body</th>
                     <th style="width:160px">Branches</th>
                     <th style="width:160px">Window</th>
                     <th style="width:160px">Posted</th>
-                    <th style="width:200px" class="text-end">Actions</th>
+                    <th style="width:200px" class="text-end">Действия</th>
                 </tr>
             </thead>
             <tbody>

@@ -21,7 +21,7 @@ $locLabel     = label('location.singular', 'Location');
     <thead class="table-light"><tr><th>Level</th><th>Access</th></tr></thead>
     <tbody>
         <tr>
-            <td><span class="badge bg-danger">Admin</span></td>
+            <td><span class="badge bg-danger">Администратор</span></td>
             <td class="text-muted">Everything: all tickets, all settings, users and permission levels. Bypasses every permission check. Confidential tickets still need a password re-check (see <a href="#confidential-groups">Confidential Groups</a>).</td>
         </tr>
         <tr>
@@ -29,7 +29,7 @@ $locLabel     = label('location.singular', 'Location');
             <td class="text-muted">Everything an Agent has, plus <strong>View reports</strong> and <strong>View all tickets</strong> (every non-confidential ticket, whatever its group).</td>
         </tr>
         <tr>
-            <td><span class="badge bg-primary">Agent</span></td>
+            <td><span class="badge bg-primary">Инженер</span></td>
             <td class="text-muted">Works tickets in their groups: replies, internal notes, status, priority and assignment. Also granted by default: ticket templates, recurring tickets, forwarding (internal and external), and the six non-destructive bulk actions.</td>
         </tr>
         <tr>
@@ -39,7 +39,7 @@ $locLabel     = label('location.singular', 'Location');
     </tbody>
 </table>
 </div>
-<p class="text-muted small mt-3 mb-0">Admin, Power User, Agent and every custom level are <strong>staff</strong> levels (they sign in to the agent interface). A non-admin staff member sees a single <strong>Settings</strong> link, and the Settings menu lists only the areas their level can open. Opening a page you aren't allowed to see returns you to your dashboard with a "You do not have permission to access that page" banner.</p>
+<p class="text-muted small mt-3 mb-0">Admin, Power User, Agent and every custom level are <strong>staff</strong> levels (they sign in to the agent interface). A non-admin staff member sees a single <strong>Настройки</strong> link, and the Settings menu lists only the areas their level can open. Opening a page you aren't allowed to see returns you to your dashboard with a "You do not have permission to access that page" banner.</p>
 </div>
 </div>
 
@@ -55,17 +55,17 @@ $locLabel     = label('location.singular', 'Location');
 <h6 class="fw-semibold mt-3 mb-2">Grantable permissions</h6>
 <div class="table-responsive mb-3">
 <table class="table table-sm mb-0">
-    <thead class="table-light"><tr><th style="width:22%;">Category</th><th>Permissions</th></tr></thead>
+    <thead class="table-light"><tr><th style="width:22%;">Категория</th><th>Permissions</th></tr></thead>
     <tbody class="text-muted">
-        <tr><td>Reports</td><td>View reports</td></tr>
-        <tr><td>Knowledge Base</td><td>Create &amp; delete KB articles (also needed to edit them); Manage KB categories &amp; folders</td></tr>
-        <tr><td>Tickets</td><td>Forward tickets to internal contacts; Forward tickets to external contacts; Manage ticket templates; View all tickets; Set due dates; Manage recurring tickets; Manage ticket types &amp; forms; Manage priorities; Manage SLA policies</td></tr>
+        <tr><td>Отчёты</td><td>View reports</td></tr>
+        <tr><td>База знаний</td><td>Create &amp; delete KB articles (also needed to edit them); Manage KB categories &amp; folders</td></tr>
+        <tr><td>Заявки</td><td>Forward tickets to internal contacts; Forward tickets to external contacts; Manage ticket templates; View all tickets; Set due dates; Manage recurring tickets; Manage ticket types &amp; forms; Manage priorities; Manage SLA policies</td></tr>
         <tr><td>People</td><td>Manage users; Manage groups; Manage agent skills</td></tr>
         <tr><td>Organization</td><td>Manage locations</td></tr>
         <tr><td>Automation</td><td>Manage automations &amp; escalations; View out-of-office status; Manage CSAT surveys; Manage AI classification</td></tr>
         <tr><td>Data</td><td>Import data &amp; manage backups</td></tr>
         <tr><td>System</td><td>View the audit log</td></tr>
-        <tr><td>Settings</td><td>Manage general settings (email, templates, branding, labels and the other general pages)</td></tr>
+        <tr><td>Настройки</td><td>Manage general settings (email, templates, branding, labels and the other general pages)</td></tr>
         <tr><td>Bulk Actions</td><td>Bulk assign; Bulk close; Bulk merge; Bulk change status; Bulk change priority; Bulk change group; Bulk delete (off for every level by default)</td></tr>
     </tbody>
 </table>
@@ -108,7 +108,7 @@ $locLabel     = label('location.singular', 'Location');
         <tr><td>Anyone (on top of the above)</td><td>Tickets assigned to them, created by them, watched by them, or that they are CC'd on.</td></tr>
         <tr><td>@Mentioned on a ticket</td><td>Can open it, and it shows on their agent Tickets list with an <em>@Mentioned</em> badge (not on dashboards, Kanban or the wallboard). Never applies to confidential tickets.</td></tr>
         <tr><td>Level with <strong>View all tickets</strong></td><td>Every non-confidential ticket.</td></tr>
-        <tr><td>Admin</td><td>Every ticket (confidential ones redacted until a password re-check).</td></tr>
+        <tr><td>Администратор</td><td>Every ticket (confidential ones redacted until a password re-check).</td></tr>
     </tbody>
 </table>
 </div>
@@ -128,7 +128,7 @@ $locLabel     = label('location.singular', 'Location');
     <li><strong><?= e($locLabel) ?> Ticket Visibility</strong> and <strong>Shared account</strong> switches (both described below).</li>
     <li><strong>Group Membership</strong>, which appears as soon as you pick a staff level (see <a href="#group-membership">Group Membership</a>).</li>
 </ul>
-<p class="text-muted mb-0">No welcome email is sent. Give the user their password yourself, or let them set one with <em>Forgot password?</em> on the login page. To add many people at once, use <a href="/admin/settings/import-users">Settings &rarr; Data &rarr; Import Users</a>. People who sign in with <a href="/admin/docs/sso">Microsoft 365 SSO</a> get an End User account automatically on first sign-in.</p>
+<p class="text-muted mb-0">No welcome email is sent. Give the user their password yourself, or let them set one with <em>Забыли пароль?</em> on the login page. To add many people at once, use <a href="/admin/settings/import-users">Settings &rarr; Data &rarr; Import Users</a>. People who sign in with <a href="/admin/docs/sso">Microsoft 365 SSO</a> get an End User account automatically on first sign-in.</p>
 </div>
 </div>
 
@@ -151,7 +151,7 @@ $locLabel     = label('location.singular', 'Location');
 <p class="text-muted mb-2">Click a user to open their profile page, then <strong>Edit User</strong>:</p>
 <ul class="text-muted mb-2">
     <li>Change name, email, permission level, <?= e(strtolower($locLabel)) ?>, phone, avatar, flags and group membership.</li>
-    <li>Type a new <strong>Password</strong> to reset it (leave blank to keep the current one).</li>
+    <li>Type a new <strong>Пароль</strong> to reset it (leave blank to keep the current one).</li>
     <li>Use <strong>Reset 2FA</strong> on the profile page if the user has lost their authenticator.</li>
 </ul>
 <p class="text-muted mb-0">There is no "deactivate" switch. To stop someone signing in, change their password or <a href="#deleting-users">delete</a> the account. Level changes and deletions apply on the user's next page load, without waiting for them to sign out.</p>
@@ -215,10 +215,10 @@ $locLabel     = label('location.singular', 'Location');
 
 <div class="card border-0 shadow-sm mb-4" id="groups">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-people-fill text-primary me-2"></i>Groups</h5>
+<h5 class="fw-semibold mb-3"><i class="bi bi-people-fill text-primary me-2"></i>Группы</h5>
 <p class="text-muted mb-2">Groups are teams (IT, Facilities, Circulation&hellip;). They decide which tickets staff can see, where new tickets are routed, and who is auto-assigned. Manage them at <a href="/admin/groups"><strong>Settings &rarr; Organization &rarr; Groups</strong></a>. Each group has:</p>
 <ul class="text-muted mb-0">
-    <li><strong>Group Name</strong> and <strong>Description</strong>. AI group routing reads the description, so describe what the team handles.</li>
+    <li><strong>Group Name</strong> and <strong>Описание</strong>. AI group routing reads the description, so describe what the team handles.</li>
     <li><strong>Members</strong>, each with a <strong>Manager</strong> sub-checkbox (see <a href="#group-managers">Group Managers</a>).</li>
     <li><strong>Notify members when a new ticket is created</strong>. Members can still opt out on their own profile.</li>
     <li><strong>Confidential</strong> (see <a href="#confidential-groups">Confidential Groups</a>).</li>
@@ -232,8 +232,8 @@ $locLabel     = label('location.singular', 'Location');
 <h5 class="fw-semibold mb-3"><i class="bi bi-people text-primary me-2"></i>Group Membership</h5>
 <p class="text-muted mb-2">Membership can be edited from either side, and both write the same records:</p>
 <ul class="text-muted mb-2">
-    <li><strong>One group, many people:</strong> <a href="/admin/groups">Groups</a> &rarr; edit the group &rarr; Members.</li>
-    <li><strong>One person, many groups:</strong> <a href="/admin/users">Users</a> &rarr; edit the user (or <strong>Add User</strong>) &rarr; <strong>Group Membership</strong>.</li>
+    <li><strong>One group, many people:</strong> <a href="/admin/groups">Группы</a> &rarr; edit the group &rarr; Members.</li>
+    <li><strong>One person, many groups:</strong> <a href="/admin/users">Пользователи</a> &rarr; edit the user (or <strong>Add User</strong>) &rarr; <strong>Group Membership</strong>.</li>
 </ul>
 <p class="text-muted mb-2">On the user form the picker appears only for staff levels. It shows each group's member count, flags <i class="bi bi-shield-lock-fill text-warning"></i> confidential groups, has a filter box when there are more than six groups, and warns live if a staff user would end up in no group.</p>
 <p class="text-muted mb-0">Editing membership from the user form needs <strong>Manage groups</strong> on top of <strong>Manage users</strong>; without it the list is read-only. Changes are logged as <code>group.members_changed</code> / <code>group.managers_changed</code>, and adding someone to a confidential group asks for confirmation and emails the existing members.</p>
@@ -329,7 +329,7 @@ $locLabel     = label('location.singular', 'Location');
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-key text-primary me-2"></i>Passwords &amp; Sign-In Protection</h5>
-<p class="text-muted mb-2">Users can reset a forgotten password themselves with <strong>Forgot password?</strong> on the login page:</p>
+<p class="text-muted mb-2">Users can reset a forgotten password themselves with <strong>Забыли пароль?</strong> on the login page:</p>
 <ol class="text-muted mb-2">
     <li>They enter their email address.</li>
     <li>If an account with a password exists, a one-time link is emailed. It works once and expires after 60 minutes.</li>
@@ -399,7 +399,7 @@ $locLabel     = label('location.singular', 'Location');
 
 <div class="card border-0 shadow-sm mb-4" id="audit-log">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-journal-text text-primary me-2"></i>Audit Log</h5>
+<h5 class="fw-semibold mb-3"><i class="bi bi-journal-text text-primary me-2"></i>Журнал действий</h5>
 <p class="text-muted mb-2">Significant actions are recorded at <a href="/admin/audit-log"><strong>Settings &rarr; System &rarr; Audit Log</strong></a> (needs the <strong>View the audit log</strong> permission). Each entry shows when, who, the action, its target, details and, where captured, the IP address.</p>
 <h6 class="fw-semibold mt-3 mb-2">What gets logged</h6>
 <ul class="text-muted mb-3">

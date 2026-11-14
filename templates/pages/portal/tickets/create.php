@@ -311,7 +311,7 @@ endif; ?>
                     <i class="bi bi-send me-1"></i><?= e(label('portal.action.submit', 'Submit Request')) ?>
                 </button>
                 <?php if (empty($embedMode)): ?>
-                <a href="/portal/tickets" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/portal/tickets" class="btn btn-outline-secondary">Отмена</a>
                 <?php endif; ?>
             </div>
         </form>

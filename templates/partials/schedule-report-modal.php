@@ -99,7 +99,7 @@
 
                 </div>
                 <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                         <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>Create Schedule
                     </button>

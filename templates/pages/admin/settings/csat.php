@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -43,12 +43,12 @@ $breadcrumbs  = [
             <div class="mb-4">
                 <label for="csat_trigger_status" class="form-label fw-semibold">Send survey when ticket is</label>
                 <select class="form-select" id="csat_trigger_status" name="csat_trigger_status" style="max-width:220px;">
-                    <option value="resolved" <?= $settings['csat_trigger_status'] === 'resolved' ? 'selected' : '' ?>>Resolved</option>
-                    <option value="closed"   <?= $settings['csat_trigger_status'] === 'closed'   ? 'selected' : '' ?>>Closed</option>
+                    <option value="resolved" <?= $settings['csat_trigger_status'] === 'resolved' ? 'selected' : '' ?>>Решена</option>
+                    <option value="closed"   <?= $settings['csat_trigger_status'] === 'closed'   ? 'selected' : '' ?>>Закрыта</option>
                 </select>
                 <div class="form-text">
-                    <strong>Resolved</strong> — survey sent as soon as the agent marks the ticket resolved (recommended).<br>
-                    <strong>Closed</strong> — survey sent only when the ticket is fully closed.
+                    <strong>Решена</strong> — survey sent as soon as the agent marks the ticket resolved (recommended).<br>
+                    <strong>Закрыта</strong> — survey sent only when the ticket is fully closed.
                 </div>
             </div>
 

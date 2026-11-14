@@ -13,7 +13,7 @@ $scope       = ($settings['ticket_reminders_scope'] ?? 'new') === 'all' ? 'all' 
 $scopeCutoff = (string) ($settings['ticket_reminders_scope_cutoff'] ?? '');
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -91,7 +91,7 @@ $scopeCutoff = (string) ($settings['ticket_reminders_scope_cutoff'] ?? '');
                 <label class="form-check-label" for="notify_managers">
                     <span class="fw-semibold">If a ticket has no owner, email its group's manager(s) instead</span>
                     <span class="d-block text-muted small mt-1">
-                        Managers are the group members ticked <strong>Manager</strong> under <a href="/admin/groups">Groups</a>.
+                        Managers are the group members ticked <strong>Manager</strong> under <a href="/admin/groups">Группы</a>.
                         With this off, unassigned tickets get no reminder.
                         <?php if (($openUnassigned ?? 0) > 0): ?>
                             <span class="d-block mt-1">There are <strong><?= number_format((int) $openUnassigned) ?></strong> open unassigned tickets right now.</span>

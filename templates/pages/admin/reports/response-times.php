@@ -86,8 +86,8 @@ $breadcrumbs  = [
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Priority</th>
-                    <th class="text-center">Tickets</th>
+                    <th>Приоритет</th>
+                    <th class="text-center">Заявки</th>
                     <th class="text-center">Avg First Response</th>
                     <th class="text-center">Avg Resolution Time</th>
                     <th class="text-center">Fastest Resolution</th>

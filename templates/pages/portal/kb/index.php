@@ -11,7 +11,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0">Knowledge Base</h2>
+    <h2 class="fw-bold mb-0">База знаний</h2>
     <div style="max-width:320px; width:100%;">
         <div class="input-group">
             <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>

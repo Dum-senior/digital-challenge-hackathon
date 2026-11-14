@@ -64,7 +64,7 @@ function auditBadge(string $action, array $colors): string {
 }
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0">Audit Log</h2>
+    <h2 class="fw-bold mb-0">Журнал действий</h2>
     <div class="d-flex align-items-center gap-3">
         <span class="text-muted small"><?= number_format($total) ?> record<?= $total === 1 ? '' : 's' ?></span>
         <?php

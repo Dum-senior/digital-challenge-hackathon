@@ -74,7 +74,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 <div id="bulkMergeList"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm btn-danger" onclick="submitBulkMerge()">
                     <i class="bi bi-diagram-2 me-1"></i>Merge Tickets
                 </button>
@@ -121,7 +121,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
 })();
 </script>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0">All Tickets</h2>
+    <h2 class="fw-bold mb-0">Все заявки</h2>
     <div class="d-flex align-items-center gap-2">
         <span class="badge bg-secondary fs-6" id="ticketCount"><?php if ($hasFilters): ?><?= $totalTickets ?> filtered of <?= $allTickets ?> total<?php else: ?><?= $totalTickets ?> total<?php endif; ?></span>
         <button type="button" class="btn btn-sm btn-outline-secondary" id="filterPanelBtn" onclick="filterPanelToggle()">
@@ -284,12 +284,12 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
         <hr class="my-3">
         <form method="GET" action="/admin/tickets" id="filterForm">
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Search</label>
+                <label class="form-label small fw-semibold mb-1">Поиск</label>
                 <input type="text" class="form-control form-control-sm" name="q"
                        value="<?= e($filters['q']) ?>" placeholder="Search subject...">
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Status</label>
+                <label class="form-label small fw-semibold mb-1">Статус</label>
                 <div class="filter-checklist">
                     <?php foreach ($statusLabels as $val => $lbl): ?>
                     <label class="filter-check-item">
@@ -300,7 +300,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Priority</label>
+                <label class="form-label small fw-semibold mb-1">Приоритет</label>
                 <div class="filter-checklist">
                     <?php foreach ($priorities as $p): ?>
                     <label class="filter-check-item">
@@ -333,7 +333,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Assigned To</label>
+                <label class="form-label small fw-semibold mb-1">Исполнитель</label>
                 <div class="filter-checklist">
                     <label class="filter-check-item">
                         <input type="checkbox" name="agent[]" value="unassigned" <?= in_array('unassigned', $filters['agent'], true) ? 'checked' : '' ?>>
@@ -441,8 +441,8 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                     <input type="text" name="name" class="form-control form-control-sm" placeholder="e.g. My Open Tickets" required autofocus>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);">Save</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-sm text-white" style="background:var(--ld-primary);">Сохранить</button>
                 </div>
             </form>
         </div>
@@ -566,7 +566,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
             </thead>
             <tbody>
                 <?php if (empty($tickets)): ?>
-                <tr><td colspan="<?= $colCount ?>" class="text-center py-4 text-muted">No tickets found.</td></tr>
+                <tr><td colspan="<?= $colCount ?>" class="text-center py-4 text-muted">Заявки не найдены.</td></tr>
                 <?php else: ?>
                     <?php foreach ($tickets as $t): ?>
                     <?php $isRedacted = isTicketRedactedForUser($t, $confidentialTypeIds ?? [], $adminGroupIds ?? []); ?>
@@ -734,7 +734,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 </select>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm text-white" style="background:var(--ld-primary);" onclick="submitBulkAssign()">Assign</button>
             </div>
         </div>
@@ -755,7 +755,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 <p class="mb-0">Delete <strong id="bulkDeleteCount"></strong> ticket(s)? <span class="text-danger fw-semibold">This cannot be undone.</span></p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-danger px-4" id="bulkDeleteConfirmBtn">
                     <i class="bi bi-trash me-1"></i>Delete
                 </button>
@@ -781,7 +781,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 </select>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm text-white" style="background:var(--ld-primary);" onclick="submitBulkStatus()">Apply</button>
             </div>
         </div>
@@ -806,7 +806,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 </select>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm text-white" style="background:var(--ld-primary);" onclick="submitBulkPriority()">Apply</button>
             </div>
         </div>
@@ -831,7 +831,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
                 </select>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm text-white" style="background:var(--ld-primary);" onclick="submitBulkGroup()">Apply</button>
             </div>
         </div>
@@ -854,7 +854,7 @@ $currentUrl = '/admin/tickets' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SER
             <div class="modal-footer">
                 <form method="POST" id="deleteFilterForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

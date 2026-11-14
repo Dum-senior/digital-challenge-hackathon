@@ -22,9 +22,9 @@ $locLabel     = label('location.singular', 'Location');
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-box-arrow-in-right text-primary me-2"></i>Signing In</h5>
-<p class="text-muted mb-2">Enter your <strong>Email Address</strong> and <strong>Password</strong>, then click <strong>Sign In</strong>. If you see a <strong>Sign in with Microsoft 365</strong> button, you can use your work account instead.</p>
+<p class="text-muted mb-2">Enter your <strong>Электронная почта</strong> and <strong>Пароль</strong>, then click <strong>Войти</strong>. If you see a <strong>Войти через Microsoft 365</strong> button, you can use your work account instead.</p>
 <ul class="text-muted mb-2">
-    <li><strong>Forgot your password?</strong> Click <strong>Forgot password?</strong> under the password box and enter your email address. We'll email you a link to choose a new password (at least 8 characters). The link works once and expires after 60 minutes.</li>
+    <li><strong>Forgot your password?</strong> Click <strong>Забыли пароль?</strong> under the password box and enter your email address. We'll email you a link to choose a new password (at least 8 characters). The link works once and expires after 60 minutes.</li>
     <li><strong>"Too many failed login attempts"?</strong> Wait a few minutes, then try again.</li>
     <li><strong>Asked to choose your <?= e(strtolower($locLabel)) ?>?</strong> If your account doesn't have one yet, you may be asked which <?= e(strtolower($locLabel)) ?> you work from. Pick it and click <strong>Continue</strong>, or choose <strong>Skip for now</strong>.</li>
 </ul>
@@ -35,7 +35,7 @@ $locLabel     = label('location.singular', 'Location');
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-speedometer2 text-primary me-2"></i>The Dashboard</h5>
-<p class="text-muted mb-0">When you sign in you land on your <strong>Dashboard</strong>. The <strong><?= e(label('portal.action.new', 'New Help Request')) ?></strong> button in the top-right starts a new request. Below it, <strong><?= e(label('portal.dashboard.recent_tickets', 'Your Active Requests')) ?></strong> lists your five newest requests that aren't finished yet &mdash; click one to open it, or click <strong>View All</strong> to see the rest. The <strong><?= e(label('portal.nav.dashboard', 'Dashboard')) ?></strong> link in the sidebar always brings you back here.</p>
+<p class="text-muted mb-0">When you sign in you land on your <strong>Главная</strong>. The <strong><?= e(label('portal.action.new', 'New Help Request')) ?></strong> button in the top-right starts a new request. Below it, <strong><?= e(label('portal.dashboard.recent_tickets', 'Your Active Requests')) ?></strong> lists your five newest requests that aren't finished yet &mdash; click one to open it, or click <strong>View All</strong> to see the rest. The <strong><?= e(label('portal.nav.dashboard', 'Dashboard')) ?></strong> link in the sidebar always brings you back here.</p>
 </div>
 </div>
 
@@ -51,7 +51,7 @@ $locLabel     = label('location.singular', 'Location');
         <tr><td><i class="bi bi-ticket-detailed me-1"></i><strong><?= e(label('portal.nav.my_tickets', 'My Requests')) ?></strong></td><td>Every help request you've submitted, open and finished.</td></tr>
         <tr><td><i class="bi bi-grid-1x2 me-1"></i><strong>Floor mode</strong></td><td>A simple, phone-friendly view (shows on touch-screen devices).</td></tr>
         <tr><td><i class="bi bi-book me-1"></i><strong><?= e(label('portal.nav.knowledge_base', 'Knowledge Base')) ?></strong></td><td>A library of help articles that may already answer your question.</td></tr>
-        <tr><td><i class="bi bi-question-circle me-1"></i><strong>Help</strong></td><td>These guides &mdash; how the portal itself works.</td></tr>
+        <tr><td><i class="bi bi-question-circle me-1"></i><strong>Помощь</strong></td><td>These guides &mdash; how the portal itself works.</td></tr>
     </tbody>
 </table>
 </div>
@@ -69,8 +69,8 @@ $locLabel     = label('location.singular', 'Location');
 
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
-<h5 class="fw-semibold mb-3"><i class="bi bi-search text-primary me-2"></i>Search</h5>
-<p class="text-muted mb-2">The search box in the top bar searches <strong>both</strong> your requests <em>and</em> Knowledge Base articles at once. Use the tabs in the results (<strong>Everything</strong>, <strong>Tickets</strong>, <strong>Knowledge Base Articles</strong>) to narrow it down. Know the request number? Type it, like <code>#123</code>, to jump straight to it.</p>
+<h5 class="fw-semibold mb-3"><i class="bi bi-search text-primary me-2"></i>Поиск</h5>
+<p class="text-muted mb-2">The search box in the top bar searches <strong>both</strong> your requests <em>and</em> Knowledge Base articles at once. Use the tabs in the results (<strong>Everything</strong>, <strong>Заявки</strong>, <strong>Knowledge Base Articles</strong>) to narrow it down. Know the request number? Type it, like <code>#123</code>, to jump straight to it.</p>
 <p class="text-muted small mb-0"><strong>Shortcut:</strong> press the <code>/</code> key on any page to jump straight into the search box.</p>
 </div>
 </div>
@@ -78,7 +78,7 @@ $locLabel     = label('location.singular', 'Location');
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-person-circle text-primary me-2"></i>Your Account Menu</h5>
-<p class="text-muted mb-0">Click <strong>your name in the top-right corner</strong> to reach <strong>My Profile</strong> (your name, password, dark mode, and which emails you receive), <strong>Restart Tour</strong>, and <strong>Sign Out</strong>. The <strong>Help</strong> link in the top bar is on every page if you get stuck.</p>
+<p class="text-muted mb-0">Click <strong>your name in the top-right corner</strong> to reach <strong>My Profile</strong> (your name, password, dark mode, and which emails you receive), <strong>Restart Tour</strong>, and <strong>Выйти</strong>. The <strong>Помощь</strong> link in the top bar is on every page if you get stuck.</p>
 </div>
 </div>
 

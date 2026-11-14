@@ -42,7 +42,7 @@ $ageColors = ['success', 'info', 'warning', 'danger', 'danger'];
 
 <div class="mb-4">
     <h2 class="fw-bold mb-1">Reports &amp; Analytics</h2>
-    <p class="text-muted mb-0">Unresolved Tickets</p>
+    <p class="text-muted mb-0">Нерешённые заявки</p>
 </div>
 
 <!-- Summary cards -->

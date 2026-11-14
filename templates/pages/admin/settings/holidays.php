@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -61,7 +61,7 @@ $breadcrumbs  = [
                     <div class="form-text mb-2">All added holidays will be set to exclude from SLA by default.</div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn text-white px-4" style="background:var(--ld-primary);">
                         <i class="bi bi-calendar-plus me-1"></i>Populate Holidays
                     </button>
@@ -143,7 +143,7 @@ $breadcrumbs  = [
                     <th>Date</th>
                     <th>Name</th>
                     <th class="text-center">Exclude from SLA</th>
-                    <th class="text-end">Actions</th>
+                    <th class="text-end">Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -204,7 +204,7 @@ $breadcrumbs  = [
                 <form method="POST" action="/admin/settings/holidays/delete" id="deleteHolidayForm">
                     <?= csrfField() ?>
                     <input type="hidden" name="id" id="deleteHolidayId">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Remove
                     </button>

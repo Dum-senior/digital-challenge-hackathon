@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <?php $userTheme = Auth::check() ? getSetting('ui_theme:' . Auth::id(), 'light') : 'light'; ?>
-<html lang="en" data-bs-theme="<?= e($userTheme) ?>">
+<html lang="ru" data-bs-theme="<?= e($userTheme) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

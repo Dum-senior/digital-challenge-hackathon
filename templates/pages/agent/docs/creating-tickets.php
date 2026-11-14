@@ -14,7 +14,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Creat
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-plus-square text-primary me-2"></i>Opening the Form</h5>
-<p class="text-muted mb-2">Click <strong><i class="bi bi-plus-lg"></i> New Ticket</strong> on the <a href="/agent/tickets">ticket list</a>, or go straight to the <a href="/agent/tickets/create">New Ticket</a> form. Fill in the cards from top to bottom and click <strong>Create Ticket</strong>.</p>
+<p class="text-muted mb-2">Click <strong><i class="bi bi-plus-lg"></i> New Ticket</strong> on the <a href="/agent/tickets">ticket list</a>, or go straight to the <a href="/agent/tickets/create">Новая заявка</a> form. Fill in the cards from top to bottom and click <strong>Создать заявку</strong>.</p>
 <p class="text-muted mb-0">On a tablet or phone you can also use the quick <i class="bi bi-plus-lg"></i> button in <a href="/agent/help/floor">Floor Mode</a>.</p>
 </div>
 </div>
@@ -27,7 +27,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Creat
     <thead class="table-light"><tr><th style="width:30%;">Section</th><th>What to fill in</th></tr></thead>
     <tbody class="text-muted">
         <tr><td><strong>Template&hellip;</strong> (top-right)</td><td>If any ticket templates exist, pick one to fill in the subject, description, type and priority for you. Edit anything before you submit.</td></tr>
-        <tr><td><strong>Ticket Details</strong></td><td>Subject and description. You can paste or drop images straight into the description.</td></tr>
+        <tr><td><strong>Карточка заявки</strong></td><td>Subject and description. You can paste or drop images straight into the description.</td></tr>
         <tr><td><strong>Classification &amp; Details</strong></td><td>Type, status, due date, location, priority, tags, attachments and any extra fields. <strong>Pick the Type first</strong> &mdash; it decides which fields appear, which are required, and which priorities you can choose.</td></tr>
         <tr><td><strong>Service level targets</strong></td><td>Once a type and priority are chosen, this line shows the response and resolution targets that will apply (if your organisation uses SLAs).</td></tr>
         <tr><td><strong>Assignment</strong></td><td><strong>Assign To</strong> and <strong>Group</strong>. Picking a type narrows <em>Assign To</em> to that type's group; choosing a group yourself takes priority. Leave them blank and the ticket is routed automatically.</td></tr>
@@ -54,7 +54,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Creat
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-files text-primary me-2"></i>Duplicate Warning</h5>
-<p class="text-muted mb-2">For some ticket types, the helpdesk checks for similar open tickets when you click <strong>Create Ticket</strong>. If it finds any, it shows them with a <strong>Click here to see this ticket</strong> button so you can check without leaving the form. Then choose:</p>
+<p class="text-muted mb-2">For some ticket types, the helpdesk checks for similar open tickets when you click <strong>Создать заявку</strong>. If it finds any, it shows them with a <strong>Click here to see this ticket</strong> button so you can check without leaving the form. Then choose:</p>
 <ul class="text-muted mb-0">
     <li><strong>Create anyway &mdash; This is a Different Issue</strong> &mdash; submit your ticket as normal.</li>
     <li><strong>Let me edit this ticket first.</strong> &mdash; go back to the form.</li>

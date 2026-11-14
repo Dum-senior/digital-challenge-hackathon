@@ -324,7 +324,7 @@ $aiWarning = $aiWarning ?? null;
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update Type' : 'Create Type' ?>
                 </button>
-                <a href="/admin/types" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/types" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

@@ -10,7 +10,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -22,7 +22,7 @@ $breadcrumbs  = [
     <div class="col-md-3">
         <div class="card border-0 shadow-sm text-center p-3">
             <div class="fs-3 fw-bold" style="color:var(--ld-primary);"><?= $summary['total_articles'] ?></div>
-            <div class="text-muted small">Articles</div>
+            <div class="text-muted small">Статьи</div>
         </div>
     </div>
     <div class="col-md-3">
@@ -64,8 +64,8 @@ $breadcrumbs  = [
                 <tr>
                     <th>#</th>
                     <th>Title</th>
-                    <th>Category</th>
-                    <th>Status</th>
+                    <th>Категория</th>
+                    <th>Статус</th>
                     <th>Body Preview</th>
                 </tr>
             </thead>

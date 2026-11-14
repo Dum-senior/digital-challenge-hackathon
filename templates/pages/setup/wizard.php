@@ -61,7 +61,7 @@ $pageTitle = 'Setup — Create Admin Account';
 
                 <!-- Email -->
                 <div class="mb-3">
-                    <label for="email" class="form-label fw-semibold">Email Address</label>
+                    <label for="email" class="form-label fw-semibold">Электронная почта</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-envelope"></i></span>
                         <input type="email" class="form-control" id="email" name="email"
@@ -72,7 +72,7 @@ $pageTitle = 'Setup — Create Admin Account';
 
                 <!-- Password -->
                 <div class="mb-3">
-                    <label for="password" class="form-label fw-semibold">Password</label>
+                    <label for="password" class="form-label fw-semibold">Пароль</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-lock"></i></span>
                         <input type="password" class="form-control" id="password" name="password"

@@ -258,7 +258,7 @@ $suggestLabel = $suggestUser
                     <input type="hidden" name="action"    value="execute">
                     <input type="hidden" name="keep_id"   value="<?= (int) $keepUser['id'] ?>">
                     <input type="hidden" name="delete_id" value="<?= (int) $deleteUser['id'] ?>">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-arrow-left-right me-1"></i>Merge Accounts
                     </button>

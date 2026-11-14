@@ -75,7 +75,7 @@
                             <?php endif; ?>
                             <?php if (!empty($priorityName)): ?>
                             <tr>
-                                <td style="padding:4px 0; color:#64748b; vertical-align:top;">Priority</td>
+                                <td style="padding:4px 0; color:#64748b; vertical-align:top;">Приоритет</td>
                                 <td style="padding:4px 0;"><?= htmlspecialchars($priorityName, ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                             <?php endif; ?>

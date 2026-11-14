@@ -29,7 +29,7 @@ $breadcrumbs  = [
                     <th>Title at snapshot</th>
                     <th>Saved by</th>
                     <th>Snapshot time</th>
-                    <th style="width:120px;">Actions</th>
+                    <th style="width:120px;">Действия</th>
                 </tr>
             </thead>
             <tbody>

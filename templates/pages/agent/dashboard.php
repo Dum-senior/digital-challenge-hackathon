@@ -44,7 +44,7 @@ $dir  = $dir ?? 'desc';
                     <i class="bi bi-person-check"></i>
                 </div>
                 <div>
-                    <div class="text-muted small">My Tickets</div>
+                    <div class="text-muted small">Мои заявки</div>
                     <div class="fs-4 fw-bold"><?= $myTickets ?></div>
                 </div>
             </div>
@@ -59,7 +59,7 @@ $dir  = $dir ?? 'desc';
                     <i class="bi bi-hourglass-split"></i>
                 </div>
                 <div>
-                    <div class="text-muted small">Pending</div>
+                    <div class="text-muted small">Ожидает</div>
                     <div class="fs-4 fw-bold"><?= $pending ?></div>
                 </div>
             </div>

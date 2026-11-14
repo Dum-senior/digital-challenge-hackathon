@@ -181,7 +181,7 @@ if ($solutionTimelineId > 0) {
                     <div id="escalateError" class="alert alert-danger mt-3 d-none" role="alert"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="button" id="escalateConfirmBtn" class="btn btn-danger"
                             <?= $demoMode ? 'disabled title="Disabled in this practice view"' : '' ?>>
                         <i class="bi bi-arrow-up-circle me-1"></i>Escalate
@@ -270,7 +270,7 @@ if ($solutionTimelineId > 0) {
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm mb-4" id="tour-ticket-description">
             <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-text-paragraph me-2"></i>Description</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-text-paragraph me-2"></i>Описание</h5>
             </div>
             <div class="card-body">
                 <?php $desc = $ticket['description'] ?? ''; ?>
@@ -603,14 +603,14 @@ if ($solutionTimelineId > 0) {
             </div>
             <div class="card-body">
                 <dl class="mb-0">
-                    <dt class="text-muted small">Status</dt>
+                    <dt class="text-muted small">Статус</dt>
                     <dd>
                         <span class="badge" style="<?= ticketStatusBadgeStyle($ticket['status']) ?>">
                             <?= e($statusLabels[$ticket['status']] ?? $ticket['status']) ?>
                         </span>
                     </dd>
 
-                    <dt class="text-muted small">Priority</dt>
+                    <dt class="text-muted small">Приоритет</dt>
                     <dd>
                         <?php if ($ticket['priority_name']): ?>
                         <span class="badge" style="background:<?= e($ticket['priority_color']) ?>;"><?= e($ticket['priority_name']) ?></span>
@@ -625,7 +625,7 @@ if ($solutionTimelineId > 0) {
                     <dt class="text-muted small"><?= label('location.singular') ?></dt>
                     <dd><?= e($ticket['location_name'] ?? 'Not set') ?></dd>
 
-                    <dt class="text-muted small">Assigned To</dt>
+                    <dt class="text-muted small">Исполнитель</dt>
                     <dd><?= e($ticket['agent_name'] ?: 'Unassigned') ?></dd>
 
                     <?php if ((int) ($ticket['escalation_level'] ?? 0) > 0): ?>
@@ -677,7 +677,7 @@ if ($solutionTimelineId > 0) {
                 <p class="mb-0">Comments from many different people on one ticket get confusing for the person who opened it and for the staff working on it. If you have your own issue, please open a new ticket instead.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn text-white px-4" style="background:var(--ld-primary);" id="notRequesterProceed">
                     I want to add a comment anyway
                 </button>
@@ -703,7 +703,7 @@ if ($solutionTimelineId > 0) {
             <div class="modal-footer">
                 <form method="POST" action="/portal/tickets/<?= $ticket['id'] ?>/close">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-secondary px-4"
                             <?= $demoMode ? 'disabled title="Disabled in this practice view"' : '' ?>>
                         <i class="bi bi-x-circle me-1"></i><?= e(label('portal.action.close', 'Close this request')) ?>

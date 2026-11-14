@@ -121,7 +121,7 @@ $intervalOptions = [10 => '10s', 15 => '15s', 30 => '30s', 60 => '1m', 120 => '2
         <ul id="wbWidgetList" class="list-group"></ul>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
         <button type="button" id="wbSaveConfig" class="btn btn-primary" data-bs-dismiss="modal">Apply</button>
       </div>
     </div>

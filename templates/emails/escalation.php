@@ -42,7 +42,7 @@
                     <td style="padding:16px;">
                         <table width="100%" cellpadding="0" cellspacing="4">
                             <tr>
-                                <td style="font-size:13px; color:#64748b; width:140px; padding:2px 0;">Ticket</td>
+                                <td style="font-size:13px; color:#64748b; width:140px; padding:2px 0;">Заявка</td>
                                 <td style="font-size:13px; color:#1e293b; font-weight:600;">[#<?= (int) $ticketId ?>] <?= htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                             <tr>

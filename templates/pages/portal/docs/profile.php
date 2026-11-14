@@ -14,7 +14,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/portal/help'], ['label' => 'Your
 <div class="alert alert-light border d-flex gap-3 mb-4">
     <i class="bi bi-person-circle fs-4 text-primary flex-shrink-0"></i>
     <div class="small mb-0">
-        Get there by clicking <strong>your name in the top-right corner</strong> and choosing <strong>My Profile</strong>. That same menu also has <strong>Restart Tour</strong> and <strong>Sign Out</strong>.
+        Get there by clicking <strong>your name in the top-right corner</strong> and choosing <strong>My Profile</strong>. That same menu also has <strong>Restart Tour</strong> and <strong>Выйти</strong>.
     </div>
 </div>
 

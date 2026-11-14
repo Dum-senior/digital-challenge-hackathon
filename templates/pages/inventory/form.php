@@ -15,7 +15,7 @@ $v = static fn(string $k, $d = '') => old($k, (string) ($editing[$k] ?? $d));
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2 class="fw-bold mb-0"><?= $isEdit ? 'Edit <span class="font-monospace">' . e($editing['asset_tag']) . '</span>' : 'Add asset' ?></h2>
-    <a href="<?= $isEdit ? '/inventory/' . (int) $editing['id'] : '/inventory' ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back</a>
+    <a href="<?= $isEdit ? '/inventory/' . (int) $editing['id'] : '/inventory' ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Назад</a>
 </div>
 
 <form method="POST" action="<?= e($action) ?>" enctype="multipart/form-data">
@@ -163,6 +163,6 @@ $v = static fn(string $k, $d = '') => old($k, (string) ($editing[$k] ?? $d));
     </div>
     <div class="d-flex gap-2 mt-4">
         <button type="submit" class="btn text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save changes' : 'Create asset' ?></button>
-        <a href="<?= $isEdit ? '/inventory/' . (int) $editing['id'] : '/inventory' ?>" class="btn btn-outline-secondary">Cancel</a>
+        <a href="<?= $isEdit ? '/inventory/' . (int) $editing['id'] : '/inventory' ?>" class="btn btn-outline-secondary">Отмена</a>
     </div>
 </form>

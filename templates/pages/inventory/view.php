@@ -144,8 +144,8 @@ $money = static fn($v): string => $v !== null && $v !== '' ? '$' . number_format
             <thead class="table-light">
                 <tr>
                     <th style="width:70px">#</th>
-                    <th>Subject</th>
-                    <th>Status</th>
+                    <th>Тема</th>
+                    <th>Статус</th>
                     <th>Requester</th>
                     <th>Assigned to</th>
                     <th>Created</th>
@@ -188,8 +188,8 @@ $money = static fn($v): string => $v !== null && $v !== '' ? '$' . number_format
                     <dt class="col-5 text-muted fw-normal">Serial</dt><dd class="col-7 font-monospace"><?= e($asset['serial'] ?: '—') ?></dd>
                     <dt class="col-5 text-muted fw-normal">Model</dt><dd class="col-7"><?= e($asset['model_name']) ?><?= $asset['model_number'] ? ' <span class="text-muted">(' . e($asset['model_number']) . ')</span>' : '' ?></dd>
                     <dt class="col-5 text-muted fw-normal">Manufacturer</dt><dd class="col-7"><?= e($asset['manufacturer_name'] ?: '—') ?></dd>
-                    <dt class="col-5 text-muted fw-normal">Category</dt><dd class="col-7"><?= e($asset['category_name']) ?></dd>
-                    <dt class="col-5 text-muted fw-normal">Status</dt><dd class="col-7"><?= e(Assets::statusLabel($asset)) ?></dd>
+                    <dt class="col-5 text-muted fw-normal">Категория</dt><dd class="col-7"><?= e($asset['category_name']) ?></dd>
+                    <dt class="col-5 text-muted fw-normal">Статус</dt><dd class="col-7"><?= e(Assets::statusLabel($asset)) ?></dd>
                     <dt class="col-5 text-muted fw-normal">Assigned to</dt><dd class="col-7"><?= Assets::assigneeHtml($asset) ?></dd>
                     <dt class="col-5 text-muted fw-normal"><?= label('location.singular') ?></dt><dd class="col-7"><?= e($asset['location_name'] ?: '—') ?></dd>
                     <dt class="col-5 text-muted fw-normal">Default <?= label('location.singular') ?></dt><dd class="col-7"><?= e($asset['default_location_name'] ?: '—') ?></dd>

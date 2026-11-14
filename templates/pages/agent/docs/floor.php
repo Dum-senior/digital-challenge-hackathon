@@ -41,8 +41,8 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Floor
     <thead class="table-light"><tr><th style="width:30%;">Field</th><th>Notes</th></tr></thead>
     <tbody class="text-muted">
         <tr><td><strong>What happened?</strong></td><td>Subject line. Tap the <i class="bi bi-mic-fill text-primary"></i> microphone to dictate (uses the browser's speech recognition &mdash; Chrome on Android works best).</td></tr>
-        <tr><td><strong>Type</strong></td><td>Required. Confidential types aren&rsquo;t offered here; use the regular <a href="/agent/help/creating-tickets">New Ticket</a> form for those.</td></tr>
-        <tr><td><strong>Location</strong></td><td>Leave it on <em>My branch</em> to use your own branch, or pick another.</td></tr>
+        <tr><td><strong>Type</strong></td><td>Required. Confidential types aren&rsquo;t offered here; use the regular <a href="/agent/help/creating-tickets">Новая заявка</a> form for those.</td></tr>
+        <tr><td><strong>Площадка</strong></td><td>Leave it on <em>My branch</em> to use your own branch, or pick another.</td></tr>
         <tr><td><strong>Take photo</strong></td><td>Opens the device camera (rear-facing) and attaches the snap to the new ticket. You can take several.</td></tr>
         <tr><td><strong>Scan barcode</strong></td><td>Uses the device camera + <code>BarcodeDetector</code> (Chrome on Android) to read an asset code; the value is appended to the subject like <code>[Asset 12345]</code>. If the browser doesn't support it you'll see a hint to type the code manually.</td></tr>
     </tbody>
@@ -63,7 +63,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Floor
         <tr><td><strong>Subject card</strong></td><td>Big subject line with status, priority, type, location, and group pills.</td></tr>
         <tr><td><strong>Reported by / Assigned to</strong></td><td>Two cards showing the requester and the current owner. <em>Unassigned</em> tickets show in red.</td></tr>
         <tr><td><strong>Details</strong></td><td>The ticket description. Long text auto-collapses with a <strong>Show all</strong> toggle so the action buttons stay above the fold.</td></tr>
-        <tr><td><strong>Quick actions</strong></td><td>One-tap buttons: <strong>Claim</strong> (or <strong>Release</strong> if it's already yours), <strong>In progress</strong>, <strong>Pending</strong> and <strong>Resolve</strong> (<strong>Close</strong> if your organisation doesn't use the Resolved status). On a resolved or closed ticket, <strong>Reopen</strong> replaces it. The button for the current status is hidden. Each works exactly like changing it on the regular ticket page.</td></tr>
+        <tr><td><strong>Quick actions</strong></td><td>One-tap buttons: <strong>Claim</strong> (or <strong>Release</strong> if it's already yours), <strong>In progress</strong>, <strong>Ожидает</strong> and <strong>Resolve</strong> (<strong>Close</strong> if your organisation doesn't use the Resolved status). On a resolved or closed ticket, <strong>Reopen</strong> replaces it. The button for the current status is hidden. Each works exactly like changing it on the regular ticket page.</td></tr>
         <tr><td><strong>Recent activity</strong></td><td>The last 8 timeline entries, with internal notes marked <em>internal</em>. Useful for catching up on what someone else has already tried.</td></tr>
         <tr><td><strong>Add a note</strong></td><td>A plain-text message with optional <strong>Photo</strong> and an <strong>Internal only</strong> checkbox, then <strong>Send</strong>. Unticked, it's a public reply &mdash; and like on the regular page, a public reply on an unassigned ticket assigns it to you.</td></tr>
     </tbody>

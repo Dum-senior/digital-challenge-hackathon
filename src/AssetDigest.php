@@ -118,7 +118,7 @@ final class AssetDigest
     /** [subject, html, text] for a data() result. */
     public static function message(array $d): array
     {
-        $app  = getSetting('branding_app_name', 'OpenHelpDesk');
+        $app  = getSetting('branding_app_name', 'Диспетчер ИИ');
         $base = rtrim(getSetting('app_url', ''), '/');
         $day  = static fn(?string $x): string => $x ? date('M j, Y', strtotime($x)) : '';
         $h    = static fn(?string $x): string => htmlspecialchars((string) $x, ENT_QUOTES);

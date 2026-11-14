@@ -31,7 +31,7 @@ if (!isset($reopenLabels[$reopenGlobal])) {
 }
 ?>
 <div class="mb-4 d-print-none">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>

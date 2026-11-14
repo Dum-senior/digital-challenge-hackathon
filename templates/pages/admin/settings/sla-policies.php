@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -224,7 +224,7 @@ function renderTypeBusinessHours(int $typeId, ?array $typeSchedule, array $globa
                     <thead class="table-light">
                         <tr>
                             <th style="width:120px">Day</th>
-                            <th style="width:60px">Open</th>
+                            <th style="width:60px">Открыта</th>
                             <th>Start</th>
                             <th>End</th>
                         </tr>
@@ -282,7 +282,7 @@ function renderSlaPriorityTable(array $priorities, array $typePolicies, int $typ
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Priority</th>
+                    <th>Приоритет</th>
                     <th style="width:170px">First Response</th>
                     <th style="width:170px">Resolution</th>
                     <th style="width:160px">Rolled up</th>
@@ -456,7 +456,7 @@ document.querySelectorAll('.sla-input').forEach(function(input) {
             <div class="modal-footer">
                 <form method="POST" action="/admin/settings/sla-recalculate">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-primary px-4">
                         <i class="bi bi-arrow-clockwise me-1"></i>Recalculate All
                     </button>

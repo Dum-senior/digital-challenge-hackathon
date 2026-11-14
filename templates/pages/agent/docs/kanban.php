@@ -27,8 +27,8 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Kanba
 <table class="table table-sm mb-0">
     <thead class="table-light"><tr><th style="width:140px">Board</th><th>Columns &amp; what dragging does</th></tr></thead>
     <tbody class="text-muted">
-        <tr><td><strong>Status</strong></td><td>One column per active status. Drag a card to <strong>change its status</strong>.</td></tr>
-        <tr><td><strong>Priority</strong></td><td>One column per priority, plus <em>No priority</em>. Drag a card to <strong>change its priority</strong>.</td></tr>
+        <tr><td><strong>Статус</strong></td><td>One column per active status. Drag a card to <strong>change its status</strong>.</td></tr>
+        <tr><td><strong>Приоритет</strong></td><td>One column per priority, plus <em>No priority</em>. Drag a card to <strong>change its priority</strong>.</td></tr>
         <tr><td><strong>Assignee</strong></td><td><em>Unassigned</em> plus a column per person. Drag a card to <strong>assign or reassign</strong> it.</td></tr>
     </tbody>
 </table>

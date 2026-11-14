@@ -45,7 +45,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Worki
 <div class="card border-0 shadow-sm mb-4" id="layout">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-layout-three-columns text-primary me-2"></i>Ticket Layout</h5>
-<p class="text-muted mb-2"><strong>The header</strong> shows the subject, status, priority and SLA badges, and the ticket number. When a colleague has the same ticket open, a coloured pill appears under the subject (see <a href="#drafts">Drafts, undo &amp; collisions</a>). The action buttons sit at the top-right: <strong>Watch</strong>, <strong>Escalate</strong>, <strong>Split</strong>, <strong>Merge</strong>, <strong>Close</strong> and <strong>Back</strong>. The header stays pinned below the top bar as you scroll. <strong>Back</strong> returns you to wherever you opened the ticket from &mdash; the list, the dashboard or your notifications.</p>
+<p class="text-muted mb-2"><strong>The header</strong> shows the subject, status, priority and SLA badges, and the ticket number. When a colleague has the same ticket open, a coloured pill appears under the subject (see <a href="#drafts">Drafts, undo &amp; collisions</a>). The action buttons sit at the top-right: <strong>Watch</strong>, <strong>Escalate</strong>, <strong>Split</strong>, <strong>Merge</strong>, <strong>Close</strong> and <strong>Назад</strong>. The header stays pinned below the top bar as you scroll. <strong>Назад</strong> returns you to wherever you opened the ticket from &mdash; the list, the dashboard or your notifications.</p>
 <p class="text-muted mb-2">Below the header are three columns:</p>
 <ul class="text-muted mb-0">
     <li><strong>Left</strong> &mdash; the description, the <strong>Reply</strong> / <strong>Forward</strong> / <strong>Add Note</strong> buttons, any files attached when the ticket was created, and the timeline.</li>
@@ -69,7 +69,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Worki
     <li><strong>Canned responses</strong> &mdash; click <strong>Canned</strong> in the box's header to insert a saved reply. See <a href="/agent/help/canned-responses">Canned Responses</a>.</li>
     <li><strong>@mentions</strong> &mdash; type <code>@</code> and start a colleague's name, then pick them from the list. They get a notification pointing to your message.</li>
     <li><strong>Taking the ticket</strong> &mdash; posting a public reply on an unassigned ticket assigns it to you.</li>
-    <li><strong>Send &amp; change status</strong> &mdash; the arrow beside <strong>Send Reply</strong> lets you send and set the status in one step: <strong>Resolved</strong> (if your organisation uses it), <strong>Closed</strong>, <strong>Pending</strong>, <strong>Waiting on Customer</strong> or <strong>Waiting on Third Party</strong>.</li>
+    <li><strong>Send &amp; change status</strong> &mdash; the arrow beside <strong>Send Reply</strong> lets you send and set the status in one step: <strong>Решена</strong> (if your organisation uses it), <strong>Закрыта</strong>, <strong>Ожидает</strong>, <strong>Waiting on Customer</strong> or <strong>Waiting on Third Party</strong>.</li>
 </ul>
 </div>
 </div>
@@ -102,7 +102,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Worki
 <p class="text-muted mb-2">If a colleague posts a public reply while you're writing yours, clicking <strong>Send Reply</strong> pauses and shows who replied, when, and part of what they said. Choose:</p>
 <ul class="text-muted mb-0">
     <li><strong>Review their reply</strong> &mdash; opens the latest version of the ticket in a new tab. Your draft is kept.</li>
-    <li><strong>Cancel</strong> &mdash; go back and adjust your reply.</li>
+    <li><strong>Отмена</strong> &mdash; go back and adjust your reply.</li>
     <li><strong>Post anyway</strong> &mdash; send your reply as written.</li>
 </ul>
 </div>
@@ -111,9 +111,9 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Worki
 <div class="card border-0 shadow-sm mb-4" id="updating">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-sliders text-primary me-2"></i>Updating Ticket Fields</h5>
-<p class="text-muted mb-2">Use the <strong>Update Ticket</strong> card on the right to change <strong>Status</strong>, <strong>Priority</strong>, <strong>Assigned To</strong>, <strong>Group</strong>, <strong>Type</strong> and <strong>Due Date</strong>. The <strong>Update</strong> button becomes clickable once you change something. Each change is recorded on the timeline. You can also reassign straight from the <strong>Assigned To</strong> line in the Details card.</p>
+<p class="text-muted mb-2">Use the <strong>Update Ticket</strong> card on the right to change <strong>Статус</strong>, <strong>Приоритет</strong>, <strong>Исполнитель</strong>, <strong>Group</strong>, <strong>Type</strong> and <strong>Due Date</strong>. The <strong>Update</strong> button becomes clickable once you change something. Each change is recorded on the timeline. You can also reassign straight from the <strong>Исполнитель</strong> line in the Details card.</p>
 <ul class="text-muted mb-0">
-    <li>Changing the <strong>Group</strong> immediately narrows <em>Assigned To</em> to that group's members.</li>
+    <li>Changing the <strong>Group</strong> immediately narrows <em>Исполнитель</em> to that group's members.</li>
     <li>Changing the <strong>Type</strong> moves the ticket into that type's default group (if it has one). Moving it to a group that doesn't match its type clears the type to &ldquo;Not Set&rdquo;.</li>
     <li>Only the priorities allowed for the ticket's type are offered.</li>
     <li>The <strong>Due Date</strong> usually follows the SLA resolution date, shown as <em>SLA target</em> under the field. If you move it past the SLA target, a box asks you to tell the customer why and when to expect it, with a reply already drafted: <strong>Send reply &amp; save</strong> sends it as a normal public reply and saves the date, or choose <strong>Save without replying</strong>. Moving the due date doesn't change the SLA.</li>
@@ -163,7 +163,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Worki
 <p class="text-muted mb-2">For ticket types that track time, a <strong>Time Tracking</strong> card appears under Update Ticket, showing the total and every entry with who logged it.</p>
 <ul class="text-muted mb-0">
     <li><strong>Start timer</strong> / <strong>Stop timer</strong> &mdash; a live timer that keeps running if you reload or leave the page. You can only run one timer at a time: starting one on another ticket stops this one. Add an optional note before stopping.</li>
-    <li><strong>Log time</strong> &mdash; enter hours, minutes, the date you did the work and an optional note, then <strong>Save</strong>.</li>
+    <li><strong>Log time</strong> &mdash; enter hours, minutes, the date you did the work and an optional note, then <strong>Сохранить</strong>.</li>
     <li><strong>Edit</strong> / <strong>Delete</strong> &mdash; available on your own entries.</li>
     <li>The card saves without reloading the page, so a half-written reply is safe.</li>
     <li>Closing a time-tracked ticket with no time logged asks whether to <strong>Log time</strong> first or <strong>Close without logging</strong>. If you choose <strong>Log time</strong>, the button reads <strong>Save &amp; close ticket</strong>, and saving your time finishes the close (and sends your reply, if you were replying). Fold the form away to cancel the close.</li>

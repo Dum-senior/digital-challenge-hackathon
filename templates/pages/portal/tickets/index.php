@@ -43,12 +43,12 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
             <input type="hidden" name="scope" value="<?= e($filters['scope']) ?>">
             <?php endif; ?>
             <div class="col-md">
-                <label class="form-label small text-muted mb-1">Search</label>
+                <label class="form-label small text-muted mb-1">Поиск</label>
                 <input type="text" class="form-control form-control-sm" name="q"
                        value="<?= e($filters['q']) ?>" placeholder="Search subject...">
             </div>
             <div class="col-md-auto" style="min-width:140px;">
-                <label class="form-label small text-muted mb-1">Status</label>
+                <label class="form-label small text-muted mb-1">Статус</label>
                 <select class="form-select form-select-sm" name="status">
                     <option value="">All Statuses</option>
                     <?php foreach ($statusLabels as $val => $label): ?>
@@ -57,7 +57,7 @@ $sortParams = array_filter($filters, fn($v) => $v !== '' && $v !== 'mine');
                 </select>
             </div>
             <div class="col-md-auto" style="min-width:130px;">
-                <label class="form-label small text-muted mb-1">Priority</label>
+                <label class="form-label small text-muted mb-1">Приоритет</label>
                 <select class="form-select form-select-sm" name="priority">
                     <option value="">All Priorities</option>
                     <?php foreach ($priorities as $p): ?>

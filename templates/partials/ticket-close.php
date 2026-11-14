@@ -125,7 +125,7 @@ endif;
                 <div class="form-text" id="closeMessageHelp"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-success" id="closeConfirmBtn">
                     <i class="bi bi-check2-circle me-1"></i>Close ticket
                 </button>
@@ -257,7 +257,7 @@ endif;
             fetch(searchUrl + '?q=' + encodeURIComponent(q) + '&exclude=' + ticketId)
                 .then(function (r) { return r.json(); })
                 .then(function (rows) {
-                    dupResults.innerHTML = rows.length ? '' : '<div class="px-3 py-2 text-muted small">No tickets found.</div>';
+                    dupResults.innerHTML = rows.length ? '' : '<div class="px-3 py-2 text-muted small">Заявки не найдены.</div>';
                     rows.forEach(function (t) {
                         var b = document.createElement('button');
                         b.type = 'button';

@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -48,7 +48,7 @@ $breadcrumbs  = [
                 <ul class="mb-0 mt-1">
                     <li>Tickets are created with their original timestamps and metadata</li>
                     <li>Unknown submitters are created as <strong>User</strong> accounts</li>
-                    <li>Unknown agents are created as <strong>Agent</strong> accounts</li>
+                    <li>Unknown agents are created as <strong>Инженер</strong> accounts</li>
                     <li>Missing locations and ticket types are created automatically</li>
                     <li>Original ticket IDs are preserved as legacy references</li>
                 </ul>

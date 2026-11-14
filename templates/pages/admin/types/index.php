@@ -9,7 +9,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -31,7 +31,7 @@ $breadcrumbs  = [
                     <th data-sort-col="name">Name</th>
                     <th>Created</th>
                     <th style="min-width:280px">Direct Link</th>
-                    <th style="width:110px">Actions</th>
+                    <th style="width:110px">Действия</th>
                 </tr>
             </thead>
             <tbody>

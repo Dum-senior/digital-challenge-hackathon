@@ -70,7 +70,7 @@ $badge = ['create' => ['success', 'New'], 'update' => ['primary', 'Update'], 'sk
     <div class="card-header bg-white fw-semibold">First <?= min(25, count($plan['rows'])) ?> rows as they will be imported</div>
     <div class="table-responsive">
         <table class="table table-sm align-middle mb-0" data-no-resize>
-            <thead class="table-light"><tr><th>Line</th><th>Tag</th><th>Name</th><th>Serial</th><th>Model</th><th>Status</th><th><?= e(label('location.singular')) ?></th><th>Purchased</th><th>Result</th></tr></thead>
+            <thead class="table-light"><tr><th>Line</th><th>Tag</th><th>Name</th><th>Serial</th><th>Model</th><th>Статус</th><th><?= e(label('location.singular')) ?></th><th>Purchased</th><th>Result</th></tr></thead>
             <tbody>
                 <?php foreach (array_slice($plan['rows'], 0, 25) as $r): [$tone, $text] = $badge[$r['action']]; ?>
                 <tr>
@@ -102,5 +102,5 @@ $badge = ['create' => ['success', 'New'], 'update' => ['primary', 'Update'], 'sk
     <div class="alert alert-warning mb-0 py-2">Nothing in this file would be imported.</div>
     <?php endif; ?>
     <a href="/inventory/import/map" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to matching</a>
-    <a href="/inventory/import" class="btn btn-outline-secondary"><i class="bi bi-x-lg me-1"></i>Cancel</a>
+    <a href="/inventory/import" class="btn btn-outline-secondary"><i class="bi bi-x-lg me-1"></i>Отмена</a>
 </div>

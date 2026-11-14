@@ -263,7 +263,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <h6 class="fw-semibold mt-3 mb-2">Decoding common errors</h6>
 <div class="table-responsive">
 <table class="table table-sm mb-0">
-    <thead class="table-light"><tr><th>Status</th><th>Message</th><th>Root cause</th></tr></thead>
+    <thead class="table-light"><tr><th>Статус</th><th>Message</th><th>Root cause</th></tr></thead>
     <tbody class="text-muted">
         <tr><td>200</td><td>—</td><td>Working. If OpenHelpDesk's classifier still fails, the issue is in the OpenHelpDesk side — check error logs.</td></tr>
         <tr><td>401</td><td>Unauthorized</td><td>Wrong key, revoked key, or whitespace in the pasted value. Generate a new one.</td></tr>
@@ -358,9 +358,9 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-0">
     <li>Every classification persists provider, model, latency, prompt + output token counts, and the raw provider response (for debugging).</li>
     <li>Internal timeline entries: <code>ai_classified</code> on every classification, <code>ai_priority_bumped</code> when sentiment triggers a bump, <code>ai_override</code> when a human edits the suggestion. Portal users never see these, and staff can hide them with the <strong>AI notes</strong> switch on a ticket's timeline.</li>
-    <li>Audit log entries: <code>ai.settings_changed</code>, <code>ai.backfill_run</code>, <code>ai.classification_override</code> (visible in the <a href="/admin/audit-log">Audit Log</a>).</li>
+    <li>Audit log entries: <code>ai.settings_changed</code>, <code>ai.backfill_run</code>, <code>ai.classification_override</code> (visible in the <a href="/admin/audit-log">Журнал действий</a>).</li>
     <li>The Recent Classifications strip on the AI settings page surfaces the last 10 runs at a glance — handy for confirming the integration is healthy after a model swap.</li>
-    <li>The <a href="/admin/reports/ai-usage"><strong>AI Token Usage</strong></a> report totals tokens and estimated cost across all AI features. See <a href="/admin/docs/reports#ai-usage">Reports</a>.</li>
+    <li>The <a href="/admin/reports/ai-usage"><strong>AI Token Usage</strong></a> report totals tokens and estimated cost across all AI features. See <a href="/admin/docs/reports#ai-usage">Отчёты</a>.</li>
 </ul>
 </div>
 </div>

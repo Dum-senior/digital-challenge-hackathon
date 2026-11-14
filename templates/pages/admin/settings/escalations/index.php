@@ -12,7 +12,7 @@ $runOutput = $_SESSION['_escalation_run'] ?? null;
 unset($_SESSION['_escalation_run']);
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -49,7 +49,7 @@ unset($_SESSION['_escalation_run']);
                 <tr>
                     <th data-sort-col="name">Name</th>
                     <th>Conditions</th>
-                    <th>Actions</th>
+                    <th>Действия</th>
                     <th style="width:90px;" data-sort-col="cooldown">Cooldown</th>
                     <th style="width:80px;" data-sort-col="enabled">Enabled</th>
                     <th style="width:120px;"></th>
@@ -213,7 +213,7 @@ unset($_SESSION['_escalation_run']);
             <div class="modal-footer">
                 <form method="POST" id="deleteEscalationForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

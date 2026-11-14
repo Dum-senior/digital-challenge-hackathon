@@ -173,7 +173,7 @@ $pickedActive    = $isEdit
                             </select>
                         </div>
                         <div class="col-md-6 col-lg-4">
-                            <label for="priority_id" class="form-label fw-semibold">Priority</label>
+                            <label for="priority_id" class="form-label fw-semibold">Приоритет</label>
                             <select class="form-select" id="priority_id" name="priority_id">
                                 <option value="">— None —</option>
                                 <?php foreach ($priorities as $pri): ?>
@@ -185,7 +185,7 @@ $pickedActive    = $isEdit
                             </select>
                         </div>
                         <div class="col-md-6 col-lg-4">
-                            <label for="location_id" class="form-label fw-semibold">Location</label>
+                            <label for="location_id" class="form-label fw-semibold">Площадка</label>
                             <select class="form-select" id="location_id" name="location_id">
                                 <option value="">— None —</option>
                                 <?php foreach ($locations as $loc): ?>
@@ -269,7 +269,7 @@ $pickedActive    = $isEdit
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update Schedule' : 'Create Schedule' ?>
                 </button>
-                <a href="/admin/recurring-tickets" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/recurring-tickets" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

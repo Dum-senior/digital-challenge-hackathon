@@ -42,7 +42,7 @@ $slaOn       = slaEnabled();
     </div>
 
     <?php if (empty($tickets)): ?>
-    <div class="text-center py-5 text-muted">No tickets found.</div>
+    <div class="text-center py-5 text-muted">Заявки не найдены.</div>
     <?php else: ?>
         <?php foreach ($tickets as $t): ?>
         <?php

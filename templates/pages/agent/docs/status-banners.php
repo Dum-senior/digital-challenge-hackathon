@@ -20,7 +20,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Statu
     <thead class="table-light"><tr><th style="width:28%;">Field</th><th>What it does</th></tr></thead>
     <tbody class="text-muted">
         <tr><td><strong>Title</strong> (optional)</td><td>Shown in bold above the message.</td></tr>
-        <tr><td><strong>Severity</strong></td><td><em>Info</em> (FYI or planned maintenance), <em>Warning</em> (active issue, workarounds available) or <em>Critical</em> (major outage, no workaround). Sets the colour and icon.</td></tr>
+        <tr><td><strong>Severity</strong></td><td><em>Info</em> (FYI or planned maintenance), <em>Warning</em> (active issue, workarounds available) or <em>Критический</em> (major outage, no workaround). Sets the colour and icon.</td></tr>
         <tr><td><strong>Message</strong></td><td>Required. Formatting and links are allowed.</td></tr>
         <tr><td><strong>Branches</strong></td><td>Tick one or more branches to show the banner only to requesters at those branches, or leave it on <em>All branches</em>.</td></tr>
         <tr><td><strong>Show from</strong> (optional)</td><td>Schedule it for later. Blank shows it straight away.</td></tr>

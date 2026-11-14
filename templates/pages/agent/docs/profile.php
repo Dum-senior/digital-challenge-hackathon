@@ -70,7 +70,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'Profi
 <div class="card border-0 shadow-sm mb-4">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-reply-all text-primary me-2"></i>Working From Your Email</h5>
-<p class="text-muted mb-2"><strong>Reply to any ticket email</strong> and your message is added to the ticket as a public reply &mdash; no need to sign in. Replies to a ticket that's already <em>Closed</em> are ignored unless you include <code>#open</code>.</p>
+<p class="text-muted mb-2"><strong>Reply to any ticket email</strong> and your message is added to the ticket as a public reply &mdash; no need to sign in. Replies to a ticket that's already <em>Закрыта</em> are ignored unless you include <code>#open</code>.</p>
 <p class="text-muted mb-2"><strong>Email commands.</strong> Put one or more of these on their own line at the end of your reply (before your signature is fine) to update the ticket at the same time. They aren't case-sensitive and the command line is removed from the posted reply.</p>
 <div class="table-responsive mb-2">
 <table class="table table-sm mb-0">

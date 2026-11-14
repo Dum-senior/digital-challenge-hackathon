@@ -177,7 +177,7 @@ $activeVal    = $isEdit ? (int) $editing['is_active'] === 1 : true;
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-megaphone me-1"></i><?= $isEdit ? 'Save Changes' : 'Post Banner' ?>
                 </button>
-                <a href="/agent/banners" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/agent/banners" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

@@ -34,10 +34,10 @@ $breadcrumbs  = $isAgentView ? [
                     <th>Name</th>
                     <th>Subject Preview</th>
                     <th>Type</th>
-                    <th>Priority</th>
+                    <th>Приоритет</th>
                     <th>Shared</th>
                     <th>Created By</th>
-                    <th style="width:120px">Actions</th>
+                    <th style="width:120px">Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -117,7 +117,7 @@ $breadcrumbs  = $isAgentView ? [
             <div class="modal-footer">
                 <form method="POST" id="deleteTemplateForm" action="">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete
                     </button>

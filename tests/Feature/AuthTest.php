@@ -18,7 +18,7 @@ class AuthTest extends TestCase
     {
         $r = $this->get($this->guestClient(), '/login');
         $this->assertOk($r);
-        $this->assertSee('Sign in', $r);
+        $this->assertSee('Войдите в свою учётную запись', $r);
     }
 
     public function test_login_page_contains_csrf_field(): void
@@ -68,7 +68,7 @@ class AuthTest extends TestCase
 
         $body = (string) $r->getBody();
         $this->assertTrue(
-            str_contains($body, 'Invalid') || str_contains($body, 'incorrect') || str_contains($body, 'Sign in'),
+            str_contains($body, 'Invalid') || str_contains($body, 'incorrect') || str_contains($body, 'Войдите в свою учётную запись'),
             'Expected an error or re-shown login form'
         );
     }
@@ -88,7 +88,7 @@ class AuthTest extends TestCase
             ],
         ]);
 
-        $this->assertStringContainsString('Sign in', (string) $r->getBody(), 'Should re-show login form');
+        $this->assertStringContainsString('Войдите в свою учётную запись', (string) $r->getBody(), 'Should re-show login form');
     }
 
     // ── POST without CSRF ─────────────────────────────────────────────────────

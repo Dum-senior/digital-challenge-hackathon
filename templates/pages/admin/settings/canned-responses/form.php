@@ -15,7 +15,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -80,7 +80,7 @@ $breadcrumbs  = [
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save Changes' : 'Create Response' ?>
                 </button>
-                <a href="/admin/settings/canned-responses" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/settings/canned-responses" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

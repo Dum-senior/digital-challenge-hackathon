@@ -71,7 +71,7 @@
                 <div id="ld-search-dropdown" class="d-none position-absolute w-100 bg-white rounded-3 shadow-lg mt-1" style="z-index:1055;max-height:420px;overflow-y:auto;">
                     <div class="d-flex border-bottom px-3 pt-2 gap-1" id="ld-search-tabs" role="tablist" aria-label="Search filters">
                         <button type="button" class="btn btn-sm px-2 py-1 ld-search-tab active" data-type="all" role="tab" aria-selected="true">Everything</button>
-                        <button type="button" class="btn btn-sm px-2 py-1 ld-search-tab" data-type="tickets" role="tab" aria-selected="false">Tickets</button>
+                        <button type="button" class="btn btn-sm px-2 py-1 ld-search-tab" data-type="tickets" role="tab" aria-selected="false">Заявки</button>
                         <?php if (Auth::isStaff()): ?>
                         <button type="button" class="btn btn-sm px-2 py-1 ld-search-tab" data-type="contacts" role="tab" aria-selected="false">Contacts</button>
                         <?php endif; ?>
@@ -156,7 +156,7 @@
                         <?php if (is_file(ROOT_DIR . '/src/routes/credits.php')): ?>
                         <li><a class="dropdown-item" href="/credits"><i class="bi bi-film me-2" aria-hidden="true"></i>Credits</a></li>
                         <?php endif; ?>
-                        <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>Sign Out</a></li>
+                        <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>Выйти</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><span class="dropdown-item-text text-muted" style="font-size:.7rem;">v<?= APP_VERSION ?></span></li>
                     </ul>
@@ -165,7 +165,7 @@
             <?php else: ?>
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
-                    <a class="nav-link" href="/login"><i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Sign In</a>
+                    <a class="nav-link" href="/login"><i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Войти</a>
                 </li>
             </ul>
             <?php endif; ?>
@@ -494,7 +494,7 @@
         if (data.tickets && data.tickets.length > 0) {
             hasResults = true;
             html += '<div class="ld-search-group">';
-            html += '<div class="px-2 py-1 text-muted small fw-semibold text-uppercase" style="font-size:.7rem;letter-spacing:.05em;">Tickets</div>';
+            html += '<div class="px-2 py-1 text-muted small fw-semibold text-uppercase" style="font-size:.7rem;letter-spacing:.05em;">Заявки</div>';
             data.tickets.forEach(function (t) {
                 var color = statusColors[t.status] || 'secondary';
                 var label = statusLabels[t.status] || t.status;
@@ -534,7 +534,7 @@
         if (data.kb && data.kb.length > 0) {
             hasResults = true;
             html += '<div class="ld-search-group">';
-            html += '<div class="px-2 py-1 text-muted small fw-semibold text-uppercase" style="font-size:.7rem;letter-spacing:.05em;">Knowledge Base</div>';
+            html += '<div class="px-2 py-1 text-muted small fw-semibold text-uppercase" style="font-size:.7rem;letter-spacing:.05em;">База знаний</div>';
             data.kb.forEach(function (a) {
                 html += '<a href="/portal/kb/articles/' + encodeURIComponent(a.slug) + '" class="ld-search-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none text-dark">';
                 html += '<i class="bi bi-book text-muted"></i>';

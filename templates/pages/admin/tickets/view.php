@@ -159,7 +159,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
         <!-- Description -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-text-paragraph me-2"></i>Description</h5>
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-text-paragraph me-2"></i>Описание</h5>
             </div>
             <div class="card-body">
                 <?php $desc = $ticket['description'] ?? ''; ?>
@@ -243,10 +243,10 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><h6 class="dropdown-header small">Send &amp; change status to</h6></li>
                                     <?php if (in_array('resolved', ticketActiveStatusSlugs(), true)): ?>
-                                    <li><a class="dropdown-item reply-status-opt" href="#" data-status="resolved"><i class="bi bi-check-circle me-2 text-success"></i>Resolved</a></li>
+                                    <li><a class="dropdown-item reply-status-opt" href="#" data-status="resolved"><i class="bi bi-check-circle me-2 text-success"></i>Решена</a></li>
                                     <?php endif; ?>
-                                    <li><a class="dropdown-item reply-status-opt" href="#" data-status="closed"><i class="bi bi-x-circle me-2 text-secondary"></i>Closed</a></li>
-                                    <li><a class="dropdown-item reply-status-opt" href="#" data-status="pending"><i class="bi bi-pause-circle me-2 text-info"></i>Pending</a></li>
+                                    <li><a class="dropdown-item reply-status-opt" href="#" data-status="closed"><i class="bi bi-x-circle me-2 text-secondary"></i>Закрыта</a></li>
+                                    <li><a class="dropdown-item reply-status-opt" href="#" data-status="pending"><i class="bi bi-pause-circle me-2 text-info"></i>Ожидает</a></li>
                                     <li><a class="dropdown-item reply-status-opt" href="#" data-status="waiting_on_customer"><i class="bi bi-person-clock me-2 text-warning"></i>Waiting on Customer</a></li>
                                     <li><a class="dropdown-item reply-status-opt" href="#" data-status="waiting_on_third_party"><i class="bi bi-building-check me-2"></i>Waiting on Third Party</a></li>
                                 </ul>
@@ -672,12 +672,12 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
             </div>
             <div class="card-body" id="ticketDetails">
                 <dl class="mb-0">
-                    <dt class="text-muted small">Status</dt>
+                    <dt class="text-muted small">Статус</dt>
                     <dd>
                         <?= ticketStatusBadgeHtml($ticket['status']) ?>
                     </dd>
 
-                    <dt class="text-muted small">Priority</dt>
+                    <dt class="text-muted small">Приоритет</dt>
                     <dd>
                         <?php if ($ticket['priority_name']): ?>
                         <span class="badge" style="background:<?= e($ticket['priority_color']) ?>;"><?= e($ticket['priority_name']) ?></span>
@@ -689,7 +689,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                     <dt class="text-muted small">Type</dt>
                     <dd><?php if ($ticket['type_name']): ?><span class="badge" style="background:<?= e($ticket['type_color'] ?: '#6c757d') ?>;"><?= e($ticket['type_name']) ?></span><?php else: ?><span class="text-muted">Not Set</span><?php endif; ?></dd>
 
-                    <dt class="text-muted small">Assigned To</dt>
+                    <dt class="text-muted small">Исполнитель</dt>
                     <dd><?= e($ticket['agent_name'] ?: 'Unassigned') ?></dd>
 
                     <dt class="text-muted small">Group</dt>
@@ -918,7 +918,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                             <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                                 <i class="bi bi-check-lg me-1"></i>Save override
                             </button>
@@ -1041,7 +1041,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                     <input type="hidden" name="close_without_note_reason" id="closeWithoutNoteReasonField" value="">
 
                     <div class="mb-3">
-                        <label for="status" class="form-label fw-semibold small">Status</label>
+                        <label for="status" class="form-label fw-semibold small">Статус</label>
                         <select class="form-select form-select-sm" name="status" id="status">
                             <?php foreach ($statusLabels as $val => $label): ?>
                             <option value="<?= e($val) ?>" <?= $ticket['status'] === $val ? 'selected' : '' ?>><?= e($label) ?></option>
@@ -1050,7 +1050,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                     </div>
 
                     <div class="mb-3">
-                        <label for="priority_id" class="form-label fw-semibold small">Priority</label>
+                        <label for="priority_id" class="form-label fw-semibold small">Приоритет</label>
                         <select class="form-select form-select-sm" name="priority_id" id="priority_id">
                             <option value="">None</option>
                             <?php foreach ($priorities as $pri): ?>
@@ -1062,7 +1062,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                     </div>
 
                     <div class="mb-3">
-                        <label for="assigned_to" class="form-label fw-semibold small">Assigned To</label>
+                        <label for="assigned_to" class="form-label fw-semibold small">Исполнитель</label>
                         <select class="form-select form-select-sm" name="assigned_to" id="assigned_to">
                             <option value="">Unassigned</option>
                             <?php foreach ($agents as $a): ?>
@@ -1203,7 +1203,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <form method="POST" action="/admin/tickets/<?= $ticket['id'] ?>/merge" class="d-inline" id="mergeForm">
                     <?= csrfField() ?>
                     <input type="hidden" name="merge_into_id" id="mergeTargetId">
@@ -1234,7 +1234,7 @@ $resolutionClosedSlugs  = ticketClosedBucketSlugs();
             </div>
             <div class="modal-footer">
                 <a href="#" class="btn btn-outline-secondary me-auto" id="collisionReviewBtn"><i class="bi bi-arrow-down-circle me-1"></i>Review their reply</a>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-warning" id="collisionPostAnywayBtn"><i class="bi bi-send me-1"></i>Post anyway</button>
             </div>
         </div>
@@ -1402,8 +1402,8 @@ var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).conten
         if (!data.length) { dropdown.style.display = 'none'; return; }
         var html = '';
         data.forEach(function(u, idx) {
-            var roleBadge = u.role === 'admin' ? '<span class="badge bg-danger" style="font-size:.6rem;">Admin</span>'
-                          : u.role === 'agent' ? '<span class="badge bg-primary" style="font-size:.6rem;">Agent</span>'
+            var roleBadge = u.role === 'admin' ? '<span class="badge bg-danger" style="font-size:.6rem;">Администратор</span>'
+                          : u.role === 'agent' ? '<span class="badge bg-primary" style="font-size:.6rem;">Инженер</span>'
                           : '<span class="badge bg-secondary" style="font-size:.6rem;">User</span>';
             html += '<div class="mention-item" data-index="' + idx + '">'
                   + '<span class="mention-name">' + escHtml(u.first_name + ' ' + u.last_name) + '</span> '
@@ -1537,7 +1537,7 @@ var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).conten
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.length) {
-                        resultsEl.innerHTML = '<div class="px-3 py-2 text-muted small">No tickets found.</div>';
+                        resultsEl.innerHTML = '<div class="px-3 py-2 text-muted small">Заявки не найдены.</div>';
                         resultsEl.style.display = 'block';
                         return;
                     }
@@ -2432,8 +2432,8 @@ ClassicEditor.create(document.querySelector('#replyEditor'), {
         var html = '';
         results.forEach(function(u, idx) {
             var badge = u.role === 'admin'
-                ? '<span class="badge bg-danger" style="font-size:.65rem;">Admin</span>'
-                : '<span class="badge bg-primary" style="font-size:.65rem;">Agent</span>';
+                ? '<span class="badge bg-danger" style="font-size:.65rem;">Администратор</span>'
+                : '<span class="badge bg-primary" style="font-size:.65rem;">Инженер</span>';
             html += '<div class="mention-item" data-index="' + idx + '">'
                   + '<span class="mention-name">' + u.first_name + ' ' + u.last_name + '</span> ' + badge
                   + '</div>';

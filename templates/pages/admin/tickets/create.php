@@ -52,7 +52,7 @@ $statusOptions = ticketStatusLabelMap();
 [data-bs-theme="dark"] .ck.ck-color-grid__tile:hover { border-color: #fff !important; }
 </style>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0">New Ticket</h2>
+    <h2 class="fw-bold mb-0">Новая заявка</h2>
     <div class="d-flex align-items-center gap-2">
         <?php if (!empty($templates)): ?>
         <select id="templateSelect" class="form-select form-select-sm" style="width:auto;max-width:200px;" title="Start from a template">
@@ -136,7 +136,7 @@ $statusOptions = ticketStatusLabelMap();
                         </div>
                         <!-- Status (admin-only, not in layout) -->
                         <div class="col-md-6 col-lg-4">
-                            <label for="status" class="form-label fw-semibold">Status</label>
+                            <label for="status" class="form-label fw-semibold">Статус</label>
                             <select class="form-select" id="status" name="status">
                                 <?php foreach ($statusOptions as $val => $label): ?>
                                     <option value="<?= $val ?>"
@@ -376,7 +376,7 @@ $statusOptions = ticketStatusLabelMap();
                     <i class="bi bi-plus-lg me-1"></i>Create Ticket
                 </button>
                 <a href="<?= $isAgent ? '/agent/tickets' : '/admin/tickets' ?>"
-                   class="btn btn-outline-secondary">Cancel</a>
+                   class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>
@@ -826,8 +826,8 @@ document.addEventListener('click', e => {
         if (!data.length) { ccClose(); return; }
         var html = '';
         data.forEach(function(u, i) {
-            var rb = u.role === 'admin' ? '<span class="badge bg-danger" style="font-size:.6rem;">Admin</span>'
-                   : u.role === 'agent' ? '<span class="badge bg-primary" style="font-size:.6rem;">Agent</span>'
+            var rb = u.role === 'admin' ? '<span class="badge bg-danger" style="font-size:.6rem;">Администратор</span>'
+                   : u.role === 'agent' ? '<span class="badge bg-primary" style="font-size:.6rem;">Инженер</span>'
                    : '<span class="badge bg-secondary" style="font-size:.6rem;">User</span>';
             html += '<div class="mention-item" data-index="' + i + '">'
                   + '<span class="mention-name">' + escH(u.first_name + ' ' + u.last_name) + '</span> '

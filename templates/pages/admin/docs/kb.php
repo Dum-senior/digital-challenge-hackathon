@@ -8,7 +8,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="col-lg-3"><?php require ROOT_DIR . '/templates/partials/docs-nav.php'; ?></div>
 <div class="col-lg-9">
 
-<h2 class="fw-bold mb-1">Knowledge Base</h2>
+<h2 class="fw-bold mb-1">База знаний</h2>
 <p class="text-muted mb-4">Publish self-service articles to help users resolve common issues without submitting a ticket.</p>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -32,7 +32,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li>Go to <a href="/admin/kb/categories"><strong>Settings → Knowledge Base → Categories &amp; Folders</strong></a> and click <strong>Add Category</strong>.</li>
     <li>Enter a <strong>Category Name</strong> and an optional description.</li>
     <li>Optionally turn on <strong>Public</strong> to let anyone browse the category without signing in (see <a href="#public-kb">Public Knowledge Base</a>), then save.</li>
-    <li>Click <strong>Folders</strong>, then <strong>Add Folder</strong>: give it a <strong>Folder Name</strong> and choose its <strong>Category</strong>. A category needs at least one folder before articles can go in it.</li>
+    <li>Click <strong>Folders</strong>, then <strong>Add Folder</strong>: give it a <strong>Folder Name</strong> and choose its <strong>Категория</strong>. A category needs at least one folder before articles can go in it.</li>
 </ol>
 <ul class="text-muted mb-0">
     <li>Drag the grip handle <i class="bi bi-grip-vertical"></i> to set the order categories and folders appear in.</li>
@@ -50,7 +50,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <li>Enter a <strong>Title</strong> &mdash; this becomes the article heading and its web address.</li>
     <li>Pick a <strong>Folder</strong> (listed as <em>Category / Folder</em>).</li>
     <li>Write the <strong>Body</strong> in the rich text editor: headings, lists, bold/italic, font and background colours, tables, images, links and code.</li>
-    <li>Set <strong>Status</strong> to <strong>Published</strong> to make it visible, or leave it as <strong>Draft</strong>.</li>
+    <li>Set <strong>Статус</strong> to <strong>Published</strong> to make it visible, or leave it as <strong>Draft</strong>.</li>
     <li>Click <strong>Create Article</strong>.</li>
 </ol>
 <p class="text-muted mb-0"><strong>From a ticket.</strong> On a ticket, the Close menu's <strong>Close and create KB article</strong> closes the ticket and opens a new draft article prefilled with the ticket's subject, the problem (its description) and the resolution (the marked solution or the latest staff reply). Pick a folder, tidy the text and save. See <a href="/admin/docs/tickets#closing">Closing a Ticket</a>.</p>
@@ -63,7 +63,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <p class="text-muted mb-2"><a href="/admin/kb/articles"><strong>Manage Articles</strong></a> lists every article with its folder, author, status and last update. Each row has <strong>Preview</strong>, <strong>Edit</strong>, <strong>History</strong> and <strong>Delete</strong> buttons. When staff read an article in the portal or on the public knowledge base, an <strong>Edit Article</strong> button opens it in the editor (editing still needs the permission above).</p>
 <ul class="text-muted mb-0">
     <li>Changes take effect immediately for published articles.</li>
-    <li>Publish or unpublish an article by switching its <strong>Status</strong> between <strong>Draft</strong> and <strong>Published</strong>.</li>
+    <li>Publish or unpublish an article by switching its <strong>Статус</strong> between <strong>Draft</strong> and <strong>Published</strong>.</li>
     <li>Deleting an article cannot be undone.</li>
 </ul>
 </div>

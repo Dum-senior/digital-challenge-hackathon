@@ -8,7 +8,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="col-lg-3"><?php require ROOT_DIR . '/templates/partials/docs-nav.php'; ?></div>
 <div class="col-lg-9">
 
-<h2 class="fw-bold mb-1">Reports</h2>
+<h2 class="fw-bold mb-1">Отчёты</h2>
 <p class="text-muted mb-4">Where to see how the helpdesk is doing: the Reports &amp; Analytics area, the admin dashboard, the live wallboard, and report summaries emailed on a schedule.</p>
 
 <div class="card border-0 shadow-sm mb-4" id="overview">
@@ -43,7 +43,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
         <tr><td class="fw-semibold">Response Times</td><td>Average first-response and resolution times by priority.</td><td>&ndash;</td><td>Yes</td></tr>
         <tr><td class="fw-semibold">SLA Compliance</td><td>SLA met vs breached, by priority, with the breached tickets. Shows a notice instead when SLA tracking is switched off.</td><td>&ndash;</td><td>Yes</td></tr>
         <tr><td class="fw-semibold">SLA Violations</td><td>Every ticket that breached its first-response or resolution target in the period: which target, how overdue, assignee, status and priority. Also catches tickets that are overdue but not yet re-checked by the SLA job.</td><td>Yes</td><td>Yes</td></tr>
-        <tr><td class="fw-semibold">Unresolved Tickets</td><td>Every ticket not yet closed. Click the <em>By Status</em> and <em>By Age</em> tiles (under 1 day, 1&ndash;3, 3&ndash;7, 7&ndash;14, over 14 days) to filter. Filters combine, and the table pages without reloading.</td><td>Yes</td><td>Email only</td></tr>
+        <tr><td class="fw-semibold">Нерешённые заявки</td><td>Every ticket not yet closed. Click the <em>By Status</em> and <em>By Age</em> tiles (under 1 day, 1&ndash;3, 3&ndash;7, 7&ndash;14, over 14 days) to filter. Filters combine, and the table pages without reloading.</td><td>Yes</td><td>Email only</td></tr>
         <tr><td class="fw-semibold">Ticket Volume</td><td>Tickets created over time, by priority, type and location.</td><td>&ndash;</td><td>Yes</td></tr>
         <tr><td class="fw-semibold">Ticket Lifecycle</td><td>Average time tickets spend in each status, overall and by priority. Custom statuses appear automatically.</td><td>&ndash;</td><td>Yes</td></tr>
         <tr><td class="fw-semibold">By Location</td><td>Volume and resolution rates compared across locations. The name follows your Location label.</td><td>Yes</td><td>Yes</td></tr>
@@ -112,7 +112,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card border-0 shadow-sm mb-4" id="dashboard">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-speedometer2 text-primary me-2"></i>The Admin Dashboard</h5>
-<p class="text-muted mb-0"><a href="/admin"><strong>Dashboard</strong></a> on the left rail shows <strong>Recent Tickets</strong>, the 10 most recently updated tickets with status, type, priority and when they changed. Confidential tickets are left out unless you belong to that type's group. <strong>Quick Actions</strong> link to the ticket list, Add User, Locations, Priorities and Settings. Staff who aren't admins land on the agent dashboard instead.</p>
+<p class="text-muted mb-0"><a href="/admin"><strong>Главная</strong></a> on the left rail shows <strong>Recent Tickets</strong>, the 10 most recently updated tickets with status, type, priority and when they changed. Confidential tickets are left out unless you belong to that type's group. <strong>Quick Actions</strong> link to the ticket list, Add User, Locations, Priorities and Settings. Staff who aren't admins land on the agent dashboard instead.</p>
 </div>
 </div>
 

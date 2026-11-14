@@ -1,11 +1,11 @@
 <?php
 $layout    = 'auth';
-$pageTitle = 'Sign In';
+$pageTitle = 'Вход';
 ?>
 <div style="max-width:420px;width:100%;">
     <div class="text-center mb-4">
         <h1 class="text-white fw-bold"><?= brandMark('1em') ?> <?= e(getSetting('branding_app_name', 'Диспетчер ИИ')) ?></h1>
-        <p class="text-white-50">Sign in to your account</p>
+        <p class="text-white-50">Войдите в свою учётную запись</p>
     </div>
 
     <div class="card shadow-lg border-0" style="border-radius:1rem;">
@@ -13,7 +13,7 @@ $pageTitle = 'Sign In';
             <?php if (!empty($_GET['setup'])): ?>
             <div class="alert alert-success d-flex align-items-center" role="status" aria-live="polite">
                 <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
-                <span>Setup complete! Sign in with your new admin account.</span>
+                <span>Настройка завершена. Войдите под учётной записью администратора.</span>
             </div>
             <?php endif; ?>
             <?php if ($flashSuccess = getFlash('success')): ?>
@@ -33,7 +33,7 @@ $pageTitle = 'Sign In';
                 <?= csrfField() ?>
 
                 <div class="mb-3">
-                    <label for="email" class="form-label fw-semibold">Email Address</label>
+                    <label for="email" class="form-label fw-semibold">Электронная почта</label>
                     <div class="input-group">
                         <span class="input-group-text" aria-hidden="true"><i class="bi bi-envelope"></i></span>
                         <input type="email" class="form-control" id="email" name="email"
@@ -43,21 +43,21 @@ $pageTitle = 'Sign In';
                 </div>
 
                 <div class="mb-2">
-                    <label for="password" class="form-label fw-semibold">Password</label>
+                    <label for="password" class="form-label fw-semibold">Пароль</label>
                     <div class="input-group">
                         <span class="input-group-text" aria-hidden="true"><i class="bi bi-lock"></i></span>
                         <input type="password" class="form-control" id="password" name="password"
-                               placeholder="Enter your password" required autocomplete="current-password">
+                               placeholder="Введите пароль" required autocomplete="current-password">
                     </div>
                 </div>
 
                 <div class="text-end mb-4">
-                    <a href="/forgot" class="small text-decoration-none">Forgot password?</a>
+                    <a href="/forgot" class="small text-decoration-none">Забыли пароль?</a>
                 </div>
 
                 <button type="submit" class="btn w-100 py-2 fw-semibold text-white"
                         style="background-color:var(--ld-primary);border-color:var(--ld-primary);">
-                    <i class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></i>Sign In
+                    <i class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></i>Войти
                 </button>
             </form>
 
@@ -75,7 +75,7 @@ $pageTitle = 'Sign In';
                     <rect x="1"  y="11" width="9" height="9" fill="#00a4ef"/>
                     <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
                 </svg>
-                Sign in with Microsoft 365
+                Войти через Microsoft 365
             </a>
             <?php endif; ?>
 

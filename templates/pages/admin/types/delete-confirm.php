@@ -10,7 +10,7 @@ $breadcrumbs  = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -35,7 +35,7 @@ $breadcrumbs  = [
             <button type="submit" class="btn btn-danger">
                 <i class="bi bi-trash me-1"></i>Delete "<?= e($type['name']) ?>"
             </button>
-            <a href="/admin/types" class="btn btn-outline-secondary ms-2">Cancel</a>
+            <a href="/admin/types" class="btn btn-outline-secondary ms-2">Отмена</a>
         </form>
     </div>
 </div>
@@ -117,9 +117,9 @@ $breadcrumbs  = [
                 <thead class="table-light">
                     <tr>
                         <th>#</th>
-                        <th>Subject</th>
-                        <th>Status</th>
-                        <th>Assigned To</th>
+                        <th>Тема</th>
+                        <th>Статус</th>
+                        <th>Исполнитель</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -168,7 +168,7 @@ $breadcrumbs  = [
                 <form method="POST" action="/admin/types/<?= (int) $type['id'] ?>/delete">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="delete_tickets">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-danger px-4">
                         <i class="bi bi-trash me-1"></i>Delete Tickets &amp; Type
                     </button>

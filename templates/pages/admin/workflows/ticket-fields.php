@@ -637,8 +637,8 @@ $sysDefaults = systemFieldDefaults();
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="condSaveBtn">Save</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="condSaveBtn">Сохранить</button>
             </div>
         </div>
     </div>
@@ -761,8 +761,8 @@ $sysDefaults = systemFieldDefaults();
                 <button type="button" class="btn btn-outline-danger me-auto" id="deleteFieldFromAllBtn" style="display:none;">
                     <i class="bi bi-trash me-1"></i>Delete field entirely
                 </button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveFieldBtn">Save</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveFieldBtn">Сохранить</button>
             </div>
         </div>
     </div>
@@ -781,7 +781,7 @@ $sysDefaults = systemFieldDefaults();
                 <p class="text-muted small mb-0" id="removeRowNote">The field definition stays available — you can re-add it later from <em>Add existing field</em>. Tickets that already use it keep their saved values.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-danger" id="removeRowConfirmBtn">Remove</button>
             </div>
         </div>

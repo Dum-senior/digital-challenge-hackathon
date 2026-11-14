@@ -175,7 +175,7 @@ $canDeleteProfileUser = roleAssignableBy(Auth::role(), $profileUser['role']);
                         <?php endif; ?>
                     </div>
                     <div class="modal-footer border-0 pt-0">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                         <button type="button" class="btn btn-danger" id="delStep1Btn"
                                 <?= $hasAssociated ? 'disabled' : '' ?>>
                             Continue
@@ -192,7 +192,7 @@ $canDeleteProfileUser = roleAssignableBy(Auth::role(), $profileUser['role']);
                         </div>
                     </div>
                     <div class="modal-footer border-0 pt-0">
-                        <button type="button" class="btn btn-secondary" id="delBackBtn">Back</button>
+                        <button type="button" class="btn btn-secondary" id="delBackBtn">Назад</button>
                         <button type="submit" class="btn btn-danger">
                             <i class="bi bi-trash me-1"></i>Confirm &amp; Delete
                         </button>
@@ -431,12 +431,12 @@ $_baseUrl         = '/admin/users/' . (int)$profileUser['id'];
     <div class="filter-panel-body">
         <form method="GET" action="<?= e($_baseUrl) ?>">
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Search</label>
+                <label class="form-label small fw-semibold mb-1">Поиск</label>
                 <input type="text" class="form-control form-control-sm" name="q"
                        value="<?= e($userTicketFilters['q']) ?>" placeholder="Search subject&hellip;">
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Status</label>
+                <label class="form-label small fw-semibold mb-1">Статус</label>
                 <div class="filter-checklist">
                     <?php foreach ($_allStatusLabels as $val => $lbl): ?>
                     <label class="filter-check-item">
@@ -447,7 +447,7 @@ $_baseUrl         = '/admin/users/' . (int)$profileUser['id'];
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Priority</label>
+                <label class="form-label small fw-semibold mb-1">Приоритет</label>
                 <div class="filter-checklist">
                     <?php foreach ($ticketPriorities as $p): ?>
                     <label class="filter-check-item">
@@ -510,11 +510,11 @@ $_baseUrl         = '/admin/users/' . (int)$profileUser['id'];
             <thead class="table-light">
                 <tr>
                     <th style="width:70px">#</th>
-                    <th>Subject</th>
-                    <th>Status</th>
-                    <th>Priority</th>
+                    <th>Тема</th>
+                    <th>Статус</th>
+                    <th>Приоритет</th>
                     <th>Type</th>
-                    <th>Assigned To</th>
+                    <th>Исполнитель</th>
                     <th>Created</th>
                 </tr>
             </thead>
@@ -590,7 +590,7 @@ $_baseUrl         = '/admin/users/' . (int)$profileUser['id'];
             <div class="modal-footer">
                 <form method="POST" action="/admin/users/<?= (int)$profileUser['id'] ?>/reset-2fa">
                     <?= csrfField() ?>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="submit" class="btn btn-warning px-4">
                         <i class="bi bi-shield-x me-1"></i>Reset 2FA
                     </button>

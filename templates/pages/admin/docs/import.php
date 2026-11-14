@@ -21,7 +21,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <tbody class="text-muted">
         <tr><td><a href="/admin/settings/import"><strong>Import Tickets</strong></a></td><td>Upload, map columns, preview, confirm</td><td><em>Import data &amp; manage backups</em></td></tr>
         <tr><td><a href="/admin/settings/import-users"><strong>Import Users</strong></a></td><td>Upload, map columns, preview, confirm</td><td><em>Manage users</em></td></tr>
-        <tr><td><a href="/admin/settings/import-kb"><strong>Import KB</strong></a></td><td>Upload, preview, confirm (see <a href="/admin/docs/kb#import">Knowledge Base</a>)</td><td><em>Import data &amp; manage backups</em></td></tr>
+        <tr><td><a href="/admin/settings/import-kb"><strong>Import KB</strong></a></td><td>Upload, preview, confirm (see <a href="/admin/docs/kb#import">База знаний</a>)</td><td><em>Import data &amp; manage backups</em></td></tr>
     </tbody>
 </table>
 </div>
@@ -49,17 +49,17 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <table class="table table-sm mb-0">
     <thead class="table-light"><tr><th style="width:170px">Field</th><th>Required</th><th>How it is used</th></tr></thead>
     <tbody class="text-muted">
-        <tr><td class="fw-semibold">Subject</td><td><span class="badge bg-danger">Required</span></td><td>The ticket title.</td></tr>
+        <tr><td class="fw-semibold">Тема</td><td><span class="badge bg-danger">Required</span></td><td>The ticket title.</td></tr>
         <tr><td class="fw-semibold">Submitter Email</td><td><span class="badge bg-danger">Required</span></td><td>Matched to an existing user; otherwise a new <strong>User</strong> account is created (see below).</td></tr>
-        <tr><td class="fw-semibold">Description</td><td><span class="badge bg-secondary">Optional</span></td><td>The ticket body. Blank becomes "(Imported from legacy system)".</td></tr>
+        <tr><td class="fw-semibold">Описание</td><td><span class="badge bg-secondary">Optional</span></td><td>The ticket body. Blank becomes "(Imported from legacy system)".</td></tr>
         <tr><td class="fw-semibold">Ticket ID (Legacy)</td><td><span class="badge bg-secondary">Optional</span></td><td>The ticket's number in the old system, kept as a legacy reference. New tickets still get OpenHelpDesk numbers.</td></tr>
         <tr><td class="fw-semibold">Submitter Name</td><td><span class="badge bg-secondary">Optional</span></td><td>Used when a new requester account is created.</td></tr>
-        <tr><td class="fw-semibold">Status</td><td><span class="badge bg-secondary">Optional</span></td><td>Recognises <code>open</code>/<code>new</code>, <code>in progress</code>, <code>pending</code>, <code>waiting</code>/<code>waiting on customer</code>, <code>waiting on third party</code>, <code>resolved</code> and <code>closed</code> (any case). Anything else imports as Open.</td></tr>
-        <tr><td class="fw-semibold">Priority</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched to an existing priority by name. No match means no priority (and so no SLA clock).</td></tr>
-        <tr><td class="fw-semibold">Assigned Agent</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched to an existing user by <strong>full name</strong>. An unknown name creates a new <strong>Agent</strong> account with a placeholder email (<code>first.last@imported.local</code>). <code>No Agent</code> is ignored.</td></tr>
+        <tr><td class="fw-semibold">Статус</td><td><span class="badge bg-secondary">Optional</span></td><td>Recognises <code>open</code>/<code>new</code>, <code>in progress</code>, <code>pending</code>, <code>waiting</code>/<code>waiting on customer</code>, <code>waiting on third party</code>, <code>resolved</code> and <code>closed</code> (any case). Anything else imports as Open.</td></tr>
+        <tr><td class="fw-semibold">Приоритет</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched to an existing priority by name. No match means no priority (and so no SLA clock).</td></tr>
+        <tr><td class="fw-semibold">Assigned Agent</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched to an existing user by <strong>full name</strong>. An unknown name creates a new <strong>Инженер</strong> account with a placeholder email (<code>first.last@imported.local</code>). <code>No Agent</code> is ignored.</td></tr>
         <tr><td class="fw-semibold">Group</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched by name. No match falls back to the type's default group, then the system Default Group. Groups are never created.</td></tr>
         <tr><td class="fw-semibold">Ticket Type</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched by name; unknown types are created.</td></tr>
-        <tr><td class="fw-semibold">Location</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched by name; unknown locations are created.</td></tr>
+        <tr><td class="fw-semibold">Площадка</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched by name; unknown locations are created.</td></tr>
         <tr><td class="fw-semibold">Created Date</td><td><span class="badge bg-secondary">Optional</span></td><td>Preserves the original creation time. Blank uses the time of import.</td></tr>
         <tr><td class="fw-semibold">Due Date</td><td><span class="badge bg-secondary">Optional</span></td><td>The date part is kept.</td></tr>
         <tr><td class="fw-semibold">Last Updated</td><td><span class="badge bg-secondary">Optional</span></td><td>Defaults to the created date.</td></tr>
@@ -90,11 +90,11 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Things to Know</h5>
 <ul class="text-muted mb-0">
-    <li><strong>Requester accounts.</strong> A Submitter Email that matches an existing user links the ticket to them. Otherwise a new <strong>User</strong> account is created with a random password; the person can set one with <em>Forgot password?</em> on the login page, or sign in with Microsoft 365 if SSO is set up.</li>
+    <li><strong>Requester accounts.</strong> A Submitter Email that matches an existing user links the ticket to them. Otherwise a new <strong>User</strong> account is created with a random password; the person can set one with <em>Забыли пароль?</em> on the login page, or sign in with Microsoft 365 if SSO is set up.</li>
     <li><strong>No notifications.</strong> Imported tickets send no emails or alerts, and automations, AI routing and auto-assignment don't run on them. Each ticket gets a single <em>Ticket created (imported from legacy system)</em> timeline entry.</li>
     <li><strong>Skipped rows.</strong> Rows missing a subject or submitter email are skipped. After the import, the Import Tickets page offers a <strong>Skipped Rows Available</strong> download listing them with the reason; it can be downloaded once.</li>
     <li><strong>No undo.</strong> The import can't be reversed from the app. Test with a small sample file first, and take a backup before a large import.</li>
-    <li>Each import is recorded in the <a href="/admin/audit-log">Audit Log</a> as <code>ticket.import_confirmed</code> with the counts and SLA choices.</li>
+    <li>Each import is recorded in the <a href="/admin/audit-log">Журнал действий</a> as <code>ticket.import_confirmed</code> with the counts and SLA choices.</li>
 </ul>
 </div>
 </div>
@@ -109,19 +109,19 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <table class="table table-sm mb-0">
     <thead class="table-light"><tr><th style="width:170px">Field</th><th>Required</th><th>How it is used</th></tr></thead>
     <tbody class="text-muted">
-        <tr><td class="fw-semibold">Email Address</td><td><span class="badge bg-danger">Required</span></td><td>Rows without one are skipped.</td></tr>
+        <tr><td class="fw-semibold">Электронная почта</td><td><span class="badge bg-danger">Required</span></td><td>Rows without one are skipped.</td></tr>
         <tr><td class="fw-semibold">First Name / Last Name</td><td><span class="badge bg-secondary">Optional</span></td><td>&nbsp;</td></tr>
         <tr><td class="fw-semibold">Full Name</td><td><span class="badge bg-secondary">Optional</span></td><td>Split into first and last name when those aren't mapped.</td></tr>
         <tr><td class="fw-semibold">Role</td><td><span class="badge bg-secondary">Optional</span></td><td>A permission level's name as stored (e.g. <code>user</code>, <code>agent</code>, <code>power_user</code>, <code>admin</code>, or a custom level). Unknown values, and levels you aren't allowed to assign, become <strong>User</strong>.</td></tr>
         <tr><td class="fw-semibold">Work Phone</td><td><span class="badge bg-secondary">Optional</span></td><td>&nbsp;</td></tr>
-        <tr><td class="fw-semibold">Location</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched by name; unknown locations are created.</td></tr>
+        <tr><td class="fw-semibold">Площадка</td><td><span class="badge bg-secondary">Optional</span></td><td>Matched by name; unknown locations are created.</td></tr>
     </tbody>
 </table>
 </div>
 <ul class="text-muted mb-0">
     <li>The preview counts total rows, new users, existing emails and new locations, lists the emails that already exist, and shows the first 15 rows.</li>
     <li>Existing accounts (matched by email) are <strong>skipped</strong>, never overwritten.</li>
-    <li>New accounts get a random password; users set their own with <em>Forgot password?</em> or sign in with SSO. No welcome email is sent.</li>
+    <li>New accounts get a random password; users set their own with <em>Забыли пароль?</em> or sign in with SSO. No welcome email is sent.</li>
     <li>New staff accounts aren't added to any group, so they see no tickets until you add them to one (see <a href="/admin/docs/users">Users &amp; Roles</a>).</li>
     <li>The import is all-or-nothing and is recorded in the Audit Log as <code>user.import_confirmed</code>.</li>
 </ul>

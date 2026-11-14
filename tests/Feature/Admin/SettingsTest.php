@@ -145,7 +145,7 @@ class SettingsTest extends TestCase
     {
         $r = $this->get($this->adminClient(), '/admin/locations');
         $this->assertOk($r);
-        $this->assertSee('Locations', $r);
+        $this->assertSee('Площадки', $r);
     }
 
     public function test_create_location_form_loads(): void

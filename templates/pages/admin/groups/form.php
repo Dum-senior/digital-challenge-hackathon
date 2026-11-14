@@ -31,7 +31,7 @@ $roleColors = ['admin' => 'danger', 'agent' => 'primary'];
             </div>
 
             <div class="mb-3">
-                <label for="description" class="form-label fw-semibold">Description</label>
+                <label for="description" class="form-label fw-semibold">Описание</label>
                 <textarea class="form-control" id="description" name="description" rows="3"><?= e(old('description', $editing['description'] ?? '')) ?></textarea>
             </div>
 
@@ -178,7 +178,7 @@ $roleColors = ['admin' => 'danger', 'agent' => 'primary'];
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update Group' : 'Create Group' ?>
                 </button>
-                <a href="/admin/groups" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/groups" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>
@@ -241,7 +241,7 @@ $roleColors = ['admin' => 'danger', 'agent' => 'primary'];
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-warning text-white" id="confirmConfidentialAddBtn">
                     <i class="bi bi-check-lg me-1"></i>Confirm & Notify Members
                 </button>

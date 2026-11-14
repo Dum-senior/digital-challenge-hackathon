@@ -20,7 +20,7 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
     <thead class="table-light"><tr><th style="width:150px;">Field</th><th>Notes</th></tr></thead>
     <tbody class="text-muted">
         <tr><td class="fw-semibold">Title</td><td>Optional. Shown in bold above the message.</td></tr>
-        <tr><td class="fw-semibold">Severity</td><td><em>Info</em> (FYI or planned maintenance), <em>Warning</em> (active issue, workarounds available) or <em>Critical</em> (major outage). Sets the colour and icon. Critical banners are listed first.</td></tr>
+        <tr><td class="fw-semibold">Severity</td><td><em>Info</em> (FYI or planned maintenance), <em>Warning</em> (active issue, workarounds available) or <em>Критический</em> (major outage). Sets the colour and icon. Critical banners are listed first.</td></tr>
         <tr><td class="fw-semibold">Message</td><td>Required. Rich text: bold, links and lists. Scripts and unsafe links are stripped.</td></tr>
         <tr><td class="fw-semibold">Branches</td><td>Leave on <em>All branches (global)</em>, or tick one or more locations. Location rows named "System Wide" or "All Branches" are hidden here because <em>All branches</em> already covers them.</td></tr>
         <tr><td class="fw-semibold">Show from / Auto-hide at</td><td>Both optional. Blank means show now, until someone clears it.</td></tr>
@@ -80,9 +80,9 @@ $breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/ad
 <ul class="text-muted mb-3">
     <li><strong>Always on, no admin keys.</strong> There is no switch to enable it and no key screen. A user signs in with <code>POST /api/v1/auth/login</code> using their own email and password, plus their 2FA code if they use two-factor sign-in. They receive a bearer token valid for 90 days. <code>POST /api/v1/auth/rotate</code> swaps it for a fresh one, and <code>POST /api/v1/auth/logout</code> revokes it. Accounts that only sign in with Microsoft 365 have no password and can't use the API.</li>
     <li><strong>Same access as the website.</strong> The API applies the user's permission level and ticket visibility: groups, confidential types, and own tickets only for portal users.</li>
-    <li><strong>Revoking access.</strong> When a user resets their password with <em>Forgot password?</em> or changes it on My Profile, all their API tokens are revoked.</li>
+    <li><strong>Revoking access.</strong> When a user resets their password with <em>Забыли пароль?</em> or changes it on My Profile, all their API tokens are revoked.</li>
     <li><strong>Limits.</strong> Failed API sign-ins are throttled: 5 per email or 10 per IP address in 15 minutes. Each user is capped at <code>API_RATE_LIMIT_PER_MIN</code> requests per minute, set in <code>.env</code> (default 120, <code>0</code> turns the cap off). Over the cap, requests get HTTP 429 with a <code>Retry-After</code> header.</li>
-    <li><strong>Audit trail.</strong> API sign-ins, failed sign-ins, token creation and rotation appear in the <a href="/admin/audit-log">Audit Log</a>.</li>
+    <li><strong>Audit trail.</strong> API sign-ins, failed sign-ins, token creation and rotation appear in the <a href="/admin/audit-log">Журнал действий</a>.</li>
 </ul>
 <p class="text-muted small mb-0">The <code>/api/...</code> routes without <code>v1</code> belong to the web interface and won't accept a bearer token. The satisfaction-survey webhook (<code>/api/csat/webhook</code>) is separate and is covered in <a href="/admin/docs/csat#webhook">Satisfaction Surveys</a>.</p>
 </div>

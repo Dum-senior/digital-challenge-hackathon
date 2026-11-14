@@ -52,8 +52,8 @@ $breadcrumbs  = [
                 <tr>
                     <th><?= label('location.singular') ?></th>
                     <th class="text-center">Total Tickets</th>
-                    <th class="text-center">Open</th>
-                    <th class="text-center">Resolved</th>
+                    <th class="text-center">Открыта</th>
+                    <th class="text-center">Решена</th>
                     <th class="text-center">Resolution Rate</th>
                     <th class="text-center">Avg Resolution Time</th>
                     <th class="text-center">SLA Compliance</th>

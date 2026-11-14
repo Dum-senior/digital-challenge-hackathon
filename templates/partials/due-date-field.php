@@ -43,7 +43,7 @@ $ddFirstName = strtok(trim((string) ($ticket['creator_name'] ?? '')), ' ') ?: 't
                 <textarea class="form-control" id="dueDateReplyText" rows="9" aria-label="Reply to the customer"></textarea>
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary me-auto" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary me-auto" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="dueDateSaveOnly">Save without replying</button>
                 <button type="button" class="btn btn-sm text-white" style="background:var(--ld-primary);" id="dueDateSendSave">
                     <i class="bi bi-send me-1"></i>Send reply &amp; save

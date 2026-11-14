@@ -36,7 +36,7 @@ $th = static fn(string $col, string $text): string =>
         <a href="<?= e('/inventory?' . http_build_query(array_merge($filterParams, ['export' => 'csv']))) ?>" class="btn btn-sm btn-outline-secondary" title="Download the filtered list as CSV">
             <i class="bi bi-download me-1"></i>CSV
         </a>
-        <a href="/inventory/reports" class="btn btn-sm btn-outline-secondary" title="Warranty, audit, age, assignment and activity reports"><i class="bi bi-bar-chart me-1"></i>Reports</a>
+        <a href="/inventory/reports" class="btn btn-sm btn-outline-secondary" title="Warranty, audit, age, assignment and activity reports"><i class="bi bi-bar-chart me-1"></i>Отчёты</a>
         <?php if (Assets::canManage()): ?>
         <?php
         // No ticks: print the whole filtered list (or open the chooser when unfiltered). Ticks override (see JS below).
@@ -68,7 +68,7 @@ $th = static fn(string $col, string $text): string =>
         <form method="GET" action="/inventory">
             <input type="hidden" name="q" value="<?= e($qFilter) ?>">
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Category</label>
+                <label class="form-label small fw-semibold mb-1">Категория</label>
                 <div class="filter-checklist">
                     <?php foreach ($categories as $c): ?>
                     <label class="filter-check-item">
@@ -79,7 +79,7 @@ $th = static fn(string $col, string $text): string =>
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold mb-1">Status</label>
+                <label class="form-label small fw-semibold mb-1">Статус</label>
                 <div class="filter-checklist">
                     <?php foreach ($statuses as $s): ?>
                     <label class="filter-check-item">
@@ -357,7 +357,7 @@ $th = static fn(string $col, string $text): string =>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);"><i class="bi bi-box-arrow-right me-1"></i>Check out</button>
             </div>
         </form>
@@ -417,7 +417,7 @@ document.getElementById('coModal').addEventListener('show.bs.modal', function (e
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);"><i class="bi bi-check-lg me-1"></i>Update <span id="bulkCount2"></span></button>
             </div>
         </form>

@@ -93,7 +93,7 @@ $breadcrumbs  = [
                                placeholder="Brief summary of the new issue" required>
                     </div>
                     <div class="mb-3">
-                        <label for="description" class="form-label fw-semibold">Description</label>
+                        <label for="description" class="form-label fw-semibold">Описание</label>
                         <textarea class="form-control" id="description" name="description"
                                   rows="5"
                                   placeholder="Describe the issue in detail..."><?= e($_POST['description'] ?? '') ?></textarea>
@@ -112,7 +112,7 @@ $breadcrumbs  = [
                             </select>
                         </div>
                         <div class="col-sm-6">
-                            <label for="priority_id" class="form-label fw-semibold">Priority</label>
+                            <label for="priority_id" class="form-label fw-semibold">Приоритет</label>
                             <select class="form-select" id="priority_id" name="priority_id">
                                 <option value="">— None —</option>
                                 <?php foreach ($priorities as $pri): ?>
@@ -152,14 +152,14 @@ $breadcrumbs  = [
             <div class="alert alert-info small py-2">
                 <i class="bi bi-info-circle me-1"></i>
                 The new ticket will inherit the <strong><?= e($ticket['location_name'] ?? 'same') ?></strong> location.
-                Its status will be set to <strong>Open</strong>.
+                Its status will be set to <strong>Открыта</strong>.
             </div>
 
             <div class="d-flex gap-2">
                 <button type="submit" class="btn text-white px-4" style="background:var(--ld-primary);">
                     <i class="bi bi-scissors me-1"></i>Split &amp; Create New Ticket
                 </button>
-                <a href="/admin/tickets/<?= (int) $ticket['id'] ?>" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/tickets/<?= (int) $ticket['id'] ?>" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </div>
 

@@ -68,7 +68,7 @@ $breadcrumbs = [
                         <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                             <i class="bi bi-shield-check me-1"></i>Enable 2FA
                         </button>
-                        <a href="/profile" class="btn btn-outline-secondary">Cancel</a>
+                        <a href="/profile" class="btn btn-outline-secondary">Отмена</a>
                     </div>
                 </form>
             </div>

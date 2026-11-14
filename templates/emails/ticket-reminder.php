@@ -37,7 +37,7 @@
                                 <td style="font-size:13px; color:#1e293b; font-weight:600;"><?= (int) $ticketId ?></td>
                             </tr>
                             <tr>
-                                <td style="font-size:13px; color:#64748b; padding:2px 0;">Subject</td>
+                                <td style="font-size:13px; color:#64748b; padding:2px 0;">Тема</td>
                                 <td style="font-size:13px; color:#1e293b;"><?= htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                         </table>

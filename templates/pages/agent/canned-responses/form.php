@@ -73,7 +73,7 @@ $breadcrumbs  = [
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Save Changes' : 'Create Response' ?>
                 </button>
-                <a href="/agent/canned-responses" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/agent/canned-responses" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>

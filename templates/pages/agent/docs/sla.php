@@ -71,7 +71,7 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'SLAs 
 <h5 class="fw-semibold mb-3"><i class="bi bi-check2-circle text-primary me-2"></i>What stops each clock</h5>
 <ul class="text-muted mb-0">
     <li>The <strong>First Response</strong> clock stops the instant an agent posts the ticket's first <strong>public reply</strong>. Internal notes don't count &mdash; the requester has to actually hear from you.</li>
-    <li>The <strong>Resolution</strong> clock stops when the ticket moves to a closed status, such as <strong>Resolved</strong> or <strong>Closed</strong>.</li>
+    <li>The <strong>Resolution</strong> clock stops when the ticket moves to a closed status, such as <strong>Решена</strong> or <strong>Закрыта</strong>.</li>
 </ul>
 <p class="text-muted mb-0 mt-2"><strong>If a closed ticket is reopened,</strong> what happens to its clocks depends on your organisation's settings: the original due dates may stay as they were, carry on from where they stopped, or restart from scratch (sometimes with a new first response needed).</p>
 </div>
@@ -105,8 +105,8 @@ $breadcrumbs  = [['label' => 'Help', 'url' => '/agent/help'], ['label' => 'SLAs 
 <div class="card border-0 shadow-sm mb-4" id="pausing">
 <div class="card-body p-4">
 <h5 class="fw-semibold mb-3"><i class="bi bi-pause-circle text-primary me-2"></i>Pausing &amp; resuming (waiting on the requester)</h5>
-<p class="text-muted mb-2">It's not fair for your clock to keep running while you're waiting on someone else. So the SLA timer automatically <strong>pauses</strong> whenever you move a ticket to a status flagged as "Pauses SLA" &mdash; out of the box that's <em>Pending</em>, <em>Waiting on Customer</em>, and <em>Waiting on Third Party</em>.</p>
-<p class="text-muted mb-0">The moment the ticket moves back to an active status (such as <em>Open</em> or <em>In Progress</em>), the clock resumes and the deadline is pushed out by however long it was paused. While paused, the SLA card shows a <strong>Paused</strong> badge.</p>
+<p class="text-muted mb-2">It's not fair for your clock to keep running while you're waiting on someone else. So the SLA timer automatically <strong>pauses</strong> whenever you move a ticket to a status flagged as "Pauses SLA" &mdash; out of the box that's <em>Ожидает</em>, <em>Waiting on Customer</em>, and <em>Waiting on Third Party</em>.</p>
+<p class="text-muted mb-0">The moment the ticket moves back to an active status (such as <em>Открыта</em> or <em>В работе</em>), the clock resumes and the deadline is pushed out by however long it was paused. While paused, the SLA card shows a <strong>Paused</strong> badge.</p>
 </div>
 </div>
 

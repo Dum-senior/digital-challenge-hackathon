@@ -308,7 +308,7 @@ $targetOutranksEditor = $isEdit && !Auth::isAdmin()
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update User' : 'Create User' ?>
                 </button>
-                <a href="/admin/users" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/users" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>
@@ -395,7 +395,7 @@ if ($storedSlug !== '' && !isset($roleCaps[$storedSlug])) {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-warning text-white" id="userConfirmConfidentialAddBtn">
                     <i class="bi bi-check-lg me-1"></i>Confirm & Notify Members
                 </button>

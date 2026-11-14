@@ -53,7 +53,7 @@ $breadcrumbs  = [
                     <?php endif; ?>
 
                     <div class="mb-3">
-                        <label for="reauth_password" class="form-label">Password</label>
+                        <label for="reauth_password" class="form-label">Пароль</label>
                         <input type="password" class="form-control" id="reauth_password" name="reauth_password"
                                required autofocus placeholder="Enter your password">
                     </div>

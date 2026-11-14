@@ -81,7 +81,7 @@ $ttClock = static fn(int $s): string => sprintf('%02d:%02d:%02d', intdiv($s, 360
             <label class="form-label small mb-0" for="ttDate">Date worked</label>
             <input type="date" class="form-control form-control-sm mb-2" id="ttDate" name="work_date" max="<?= $ttToday ?>" value="<?= $ttToday ?>">
             <input type="text" class="form-control form-control-sm mb-2" name="note" maxlength="500" placeholder="Note (optional)" aria-label="Note">
-            <button type="submit" class="btn btn-sm text-white w-100" style="background:var(--ld-primary);">Save</button>
+            <button type="submit" class="btn btn-sm text-white w-100" style="background:var(--ld-primary);">Сохранить</button>
         </form>
         <?php endif; ?>
 

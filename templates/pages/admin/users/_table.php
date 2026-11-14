@@ -29,7 +29,7 @@
                     <th>Phone</th>
                     <th><a href="<?= sortUrl('location', $sort, $dir, $filterParams, '/admin/users') ?>" class="text-decoration-none text-dark"><?= label('location.singular') ?> <?= sortIcon('location', $sort, $dir) ?></a></th>
                     <th><a href="<?= sortUrl('created_at', $sort, $dir, $filterParams, '/admin/users') ?>" class="text-decoration-none text-dark">Created <?= sortIcon('created_at', $sort, $dir) ?></a></th>
-                    <th style="width:110px">Actions</th>
+                    <th style="width:110px">Действия</th>
                 </tr>
             </thead>
             <tbody>

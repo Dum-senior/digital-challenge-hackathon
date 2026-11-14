@@ -344,7 +344,7 @@ $groupBar = static function (array $extra = [], string $before = '') use ($tab, 
 <?php elseif ($tab === 'people'): ?>
 <form method="GET" action="/inventory/reports" class="d-flex align-items-center gap-2 flex-wrap mb-3">
     <input type="hidden" name="tab" value="people">
-    <label for="repCat" class="small text-muted">Category</label>
+    <label for="repCat" class="small text-muted">Категория</label>
     <select id="repCat" name="category" class="form-select form-select-sm w-auto">
         <option value="0">Any</option>
         <?php foreach ($categories as $c): ?><option value="<?= (int) $c['id'] ?>" <?= (int) $c['id'] === $cat ? 'selected' : '' ?>><?= e($c['name']) ?></option><?php endforeach; ?>

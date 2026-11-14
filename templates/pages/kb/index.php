@@ -6,7 +6,7 @@ $breadcrumbs = [
 ];
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-1">Help Center</h2>
+    <h2 class="fw-bold mb-1">Центр помощи</h2>
     <p class="text-muted mb-0">Browse our knowledge base to find answers and guides.</p>
 </div>
 

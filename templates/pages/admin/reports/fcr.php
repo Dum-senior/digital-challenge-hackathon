@@ -81,8 +81,8 @@ $breadcrumbs  = [
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Agent</th>
-                            <th class="text-center">Resolved</th>
+                            <th>Инженер</th>
+                            <th class="text-center">Решена</th>
                             <th class="text-center">FCR</th>
                             <th class="text-center">FCR %</th>
                         </tr>
@@ -120,7 +120,7 @@ $breadcrumbs  = [
                     <thead class="table-light">
                         <tr>
                             <th>Type</th>
-                            <th class="text-center">Resolved</th>
+                            <th class="text-center">Решена</th>
                             <th class="text-center">FCR</th>
                             <th class="text-center">FCR %</th>
                         </tr>

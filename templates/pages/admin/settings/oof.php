@@ -27,7 +27,7 @@ $defaultTemplateNoDate =
     "We appreciate your patience.";
 ?>
 <div class="mb-4">
-    <h2 class="fw-bold mb-0">Settings</h2>
+    <h2 class="fw-bold mb-0">Настройки</h2>
 </div>
 
 <?php require ROOT_DIR . '/templates/partials/settings-nav.php'; ?>
@@ -192,7 +192,7 @@ $defaultTemplateNoDate =
         <button type="submit" class="btn text-white px-4" style="background:var(--ld-primary);">
             <i class="bi bi-check-lg me-1"></i>Save Settings
         </button>
-        <a href="/admin/settings" class="btn btn-outline-secondary">Cancel</a>
+        <a href="/admin/settings" class="btn btn-outline-secondary">Отмена</a>
     </div>
 </form>
 <?php endif; ?>
@@ -214,8 +214,8 @@ $defaultTemplateNoDate =
             <table class="table table-sm mb-0 align-middle">
                 <thead>
                     <tr class="small text-muted">
-                        <th class="ps-3">Agent</th>
-                        <th>Status</th>
+                        <th class="ps-3">Инженер</th>
+                        <th>Статус</th>
                         <th>Until</th>
                         <th class="pe-3">Last checked</th>
                     </tr>

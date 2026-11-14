@@ -39,7 +39,7 @@ $pageTitle = 'Reset Password';
                     <?= csrfField() ?>
 
                     <div class="mb-3">
-                        <label for="email" class="form-label fw-semibold">Email Address</label>
+                        <label for="email" class="form-label fw-semibold">Электронная почта</label>
                         <div class="input-group">
                             <span class="input-group-text" aria-hidden="true"><i class="bi bi-envelope"></i></span>
                             <input type="email" class="form-control" id="email" name="email"

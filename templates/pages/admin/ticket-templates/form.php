@@ -96,13 +96,13 @@ if ($rawBody !== '' && ltrim($rawBody)[0] !== '<') {
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
-                        <label for="subject" class="form-label fw-semibold">Subject</label>
+                        <label for="subject" class="form-label fw-semibold">Тема</label>
                         <input type="text" class="form-control" id="subject" name="subject"
                                value="<?= e(old('subject', $editing['subject'] ?? '')) ?>"
                                placeholder="Pre-filled ticket subject">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Description</label>
+                        <label class="form-label fw-semibold">Описание</label>
                         <div id="tpl-body-editor"></div>
                         <input type="hidden" id="body" name="body" value="<?= e($rawBody) ?>">
                         <div class="form-text">Pre-filled ticket description. Use placeholders like [Employee Name] for fields the submitter should fill in. The submitter can edit this text before submitting.</div>
@@ -121,7 +121,7 @@ if ($rawBody !== '' && ltrim($rawBody)[0] !== '<') {
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="priority_id" class="form-label fw-semibold">Priority</label>
+                            <label for="priority_id" class="form-label fw-semibold">Приоритет</label>
                             <select class="form-select" id="priority_id" name="priority_id">
                                 <option value="">— None —</option>
                                 <?php foreach ($priorities as $pri): ?>
@@ -159,7 +159,7 @@ if ($rawBody !== '' && ltrim($rawBody)[0] !== '<') {
                 <button type="submit" class="btn text-white" style="background:var(--ld-primary);">
                     <i class="bi bi-check-lg me-1"></i><?= $isEdit ? 'Update Template' : 'Create Template' ?>
                 </button>
-                <a href="/admin/ticket-templates" class="btn btn-outline-secondary">Cancel</a>
+                <a href="/admin/ticket-templates" class="btn btn-outline-secondary">Отмена</a>
             </div>
         </form>
     </div>
