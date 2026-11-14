@@ -130,6 +130,10 @@ try {
         ) p WHERE roles.slug = 'power_user'");
     echo "[OK] 4 roles + 19 permissions + grants seeded.\n";
 
+    // These migrations also populate data absent from the schema snapshot.
+    (require __DIR__ . '/migrations/048_ticket_bulk_permissions.php')($pdo);
+    (require __DIR__ . '/migrations/088_assets.php')($pdo);
+
     // ── Locations ────────────────────────────────────────────────
     $locStmt = $pdo->prepare('INSERT INTO locations (name, address, description) VALUES (?, ?, ?)');
     $locations = [
