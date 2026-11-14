@@ -815,7 +815,7 @@
                     "Tickets"
                 ],
                 "summary": "Find engineering guidance with KB and solved-ticket citations",
-                "description": "Staff only. Confidential current tickets are always rejected. Generation requires ENGINEER_AI_GENERATION_ENABLED=true and a configured AI provider. Disabled/failed generation returns sources_only; no evidence returns no_sources without a model call. Responses use Cache-Control: private, no-store.",
+                "description": "Staff only. Confidential current tickets are always rejected. Generation requires ENGINEER_AI_GENERATION_ENABLED=true and a reachable local Ollama service. Disabled/failed generation returns sources_only; no evidence returns no_sources without a model call. Responses use Cache-Control: private, no-store.",
                 "security": [
                     {
                         "BearerAuth": []

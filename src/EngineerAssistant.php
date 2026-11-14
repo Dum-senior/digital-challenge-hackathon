@@ -31,12 +31,7 @@ final class EngineerAssistant
         if ($sources) {
             try {
                 if ($generate === null && env('ENGINEER_AI_GENERATION_ENABLED', 'false') === 'true') {
-                    $provider = AIClassifierFactory::fromSettings();
-                    if ($provider instanceof BaseAIClassifier) {
-                        $timeout = max(2, min(20, (int) getSetting('ai_timeout_seconds', '5')));
-                        $generate = static fn(string $system, string $prompt): string =>
-                            $provider->chat($system, $prompt, 1800, $timeout);
-                    }
+                    $generate = self::ollama(...);
                 }
                 if ($generate !== null) {
                     $system = 'Ты помощник инженера. Ответь по-русски только JSON-объектом '
@@ -67,6 +62,41 @@ final class EngineerAssistant
             'latency_ms' => (int) ((microtime(true) - $started) * 1000),
         ]), (int) $user['id']);
         return $result;
+    }
+
+    private static function ollama(string $system, string $prompt): string
+    {
+        $url = rtrim(env('ENGINEER_OLLAMA_URL', 'http://127.0.0.1:11434'), '/');
+        $request = curl_init($url . '/api/chat');
+        $body = json_encode([
+            'model' => env('ENGINEER_OLLAMA_MODEL', 'qwen3:0.6b'),
+            'messages' => [
+                ['role' => 'system', 'content' => $system],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+            'format' => 'json', 'stream' => false, 'think' => false,
+            'options' => ['num_ctx' => 4096, 'num_predict' => 420, 'temperature' => 0],
+        ], JSON_THROW_ON_ERROR);
+        curl_setopt_array($request, [
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 2,
+            CURLOPT_TIMEOUT => 25,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_PROXY => '',
+        ]);
+        $response = curl_exec($request);
+        $status = curl_getinfo($request, CURLINFO_RESPONSE_CODE);
+        curl_close($request);
+        if ($status !== 200 || !is_string($response)) {
+            throw new RuntimeException('Ollama unavailable');
+        }
+        $content = json_decode($response, true, 32, JSON_THROW_ON_ERROR)['message']['content'] ?? null;
+        if (!is_string($content)) {
+            throw new RuntimeException('Invalid Ollama reply');
+        }
+        return $content;
     }
 
     private static function limit(PDO $db, int $userId): void
@@ -163,7 +193,7 @@ final class EngineerAssistant
                 'title' => self::text($row['subject'], 255),
                 'url' => '/' . $panel . '/tickets/' . (int) $row['id'] . '#timeline-entry-' . (int) $row['solution_id'],
                 'excerpt' => $excerpt];
-            if (++$count === 3) { break; }
+            if (++$count === 2) { break; }
         }
         return $sources;
     }

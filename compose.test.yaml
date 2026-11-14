@@ -24,6 +24,9 @@ services:
     ports:
       - '127.0.0.1:8085:8000'
     environment:
+      ENGINEER_AI_GENERATION_ENABLED: ${ENGINEER_AI_GENERATION_ENABLED:-false}
+      ENGINEER_OLLAMA_URL: ${ENGINEER_OLLAMA_URL:-http://host.docker.internal:11434}
+      ENGINEER_OLLAMA_MODEL: ${ENGINEER_OLLAMA_MODEL:-qwen3:0.6b}
       TEST_BASE_URL: http://127.0.0.1:8000
     depends_on:
       db:
