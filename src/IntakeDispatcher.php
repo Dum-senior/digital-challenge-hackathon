@@ -45,6 +45,7 @@ final class IntakeDispatcher
     {
         $url = (string) env('INTAKE_AI_URL', 'http://127.0.0.1:8091/api/hackathon/v1/intake/analyze');
         $secret = (string) env('INTAKE_SERVICE_TOKEN', '');
+        $standalone = env('INTAKE_API_MODE', '') === 'dispatcher';
         $parts = parse_url($url);
         $allowedHosts = array_filter(array_map('trim', explode(',', (string) env('INTAKE_AI_ALLOWED_HOSTS', '127.0.0.1,localhost,intake-ai'))));
         if (!$parts || ($parts['scheme'] ?? '') !== 'http' || !in_array($parts['host'] ?? '', $allowedHosts, true)
@@ -55,7 +56,7 @@ final class IntakeDispatcher
         $context = stream_context_create(['http' => [
             'method' => 'POST',
             'header' => "Content-Type: application/json\r\nAuthorization: Bearer {$secret}\r\nConnection: close\r\n",
-            'content' => self::json(['text' => $text, 'source' => $source]),
+            'content' => self::json($standalone ? ['text' => $text] : ['text' => $text, 'source' => $source]),
             'timeout' => min(20, max(1, (int) env('INTAKE_AI_TIMEOUT_SECONDS', '8'))),
             'ignore_errors' => true,
             'follow_location' => 0,
@@ -66,6 +67,14 @@ final class IntakeDispatcher
             throw new RuntimeException('Private AI service unavailable');
         }
         $result = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+        if ($standalone && is_array($result)) {
+            $result += [
+                'source' => $source, 'status' => 'awaiting_review', 'priority' => 'medium',
+                'missing_fields' => [], 'analysis_mode' => 'private_llm',
+                'fields' => ['object' => $result['object'] ?? null, 'room' => $result['room'] ?? null,
+                    'incident_time' => $result['started_at'] ?? null],
+            ];
+        }
         if (!is_array($result) || !in_array($result['category'] ?? null, self::CATEGORIES, true)
             || !in_array($result['priority'] ?? null, ['low', 'medium', 'high', 'critical'], true)
             || !in_array($result['status'] ?? null, ['awaiting_review', 'needs_clarification', 'failed'], true)
@@ -95,36 +104,52 @@ final class IntakeDispatcher
         $danger = (bool) preg_match('/дым|задым|горит|пожар|искрит|запах гар[иья]|вымогател|шифровальщик|выкуп за файл|ransomware/u', $lower);
         $mass = (bool) preg_match('/нескольк(?:их|о)\s+(?:скважин|отделов|пользователей)|во\s+вс[её]м\s+корпус|у\s+всех|массов|нескольких\s+скважин/u', $lower);
         $category = $model['category'];
-        $priority = $model['priority'];
-        if ($danger) {
-            $priority = 'critical';
-            $model['priority_reason'] = 'Признаки угрозы безопасности: демо-правило, требуется немедленная оценка диспетчером';
-        } elseif ($mass && in_array($priority, ['low', 'medium'], true)) {
-            $priority = 'high';
-            $model['priority_reason'] = 'Возможно затронуто несколько объектов/пользователей';
+        $priority = $danger ? 'critical' : ($category === 'unknown' ? null : 'medium');
+        $reason = $danger ? 'Явный признак опасности; требуется немедленная проверка'
+            : ($mass ? 'Затронуто несколько пользователей или объектов'
+                : ($priority === null ? 'Недостаточно сведений для оценки' : 'Работа нарушена, явных признаков аварии нет'));
+        if (!$danger && !$mass && $priority !== null && preg_match('/есть запасн|работа продолжается|не мешает работе|планов/u', $lower)) {
+            $priority = 'low';
+            $reason = 'Работа продолжается или доступен обходной вариант';
         }
         $fields = self::safeFields($text, $model['fields']);
         $missing = array_values(array_unique(array_map('strval', array_slice($model['missing_fields'], 0, 12))));
         $questions = self::questions($category, $lower, $fields, $missing);
         $location = self::matchLocation($db, $text);
+        if ($location['id'] === null) {
+            $questions[] = empty($location['candidates']) ? 'Уточните название НТП, корпуса или офиса.'
+                : 'Уточните адрес: найдено несколько подходящих мест.';
+            $questions = array_values(array_unique($questions));
+        }
         $typeId = self::matchType($db, $category);
-        $priorityId = self::matchPriority($db, $priority);
-        $assignment = self::suggest($db, $category);
+        $priorityId = $priority === null ? null : self::matchPriority($db, $priority);
+        $assignment = self::suggest($db, $category, $priority === 'critical');
+        preg_match_all('/сч[её]тчик(?:а|у|е|ом)?\s*(?:№\s*|номер\s*)?(\d[\p{L}0-9-]{0,30})(?![\p{L}0-9-])/iu', $text, $meters);
+        $numbers = array_values(array_unique($meters[1]));
+        $meter = count($numbers) === 1 ? $numbers[0] : null;
+        $tag = self::categoryTag($category);
+        $tagStmt = $db->prepare('SELECT id FROM ticket_tags WHERE name = ?');
+        $tagStmt->execute([$tag]);
+        $tagId = $tagStmt->fetchColumn();
+        $facts = array_values(array_filter($model['facts'] ?? [], static fn($fact) =>
+            is_string($fact) && trim($fact) !== '' && mb_strlen($fact) <= 180 && mb_stripos($text, $fact) !== false
+            && !in_array($fact, [$meter, $fields['incident_time'], $fields['object']], true)));
         $subject = mb_substr(preg_replace('/\s+/u', ' ', trim($text)), 0, 140);
         return [
             'subject' => $subject, 'description' => $text, 'raw_text' => $text, 'category' => $category,
-            'type_id' => $typeId, 'tags' => [$category], 'location_name' => $location['name'],
-            'location_id' => $location['id'], 'object' => $fields['object'], 'floor' => $fields['floor'],
+            'type_id' => $typeId, 'tags' => $tag === null ? [] : [$tag], 'tag_ids' => $tagId ? [(int) $tagId] : [], 'location_name' => $location['name'],
+            'location_id' => $location['id'], 'object' => $location['name'] ?? $fields['object'], 'location' => $location, 'meter_number' => $meter,
+            'started_at' => $fields['incident_time'], 'useful_notes' => implode("\n", array_slice($facts, 0, 4)), 'floor' => $fields['floor'],
             'room' => $fields['room'], 'equipment' => $fields['equipment'],
             'serial_number' => $fields['serial_number'], 'ip_addresses' => $fields['ip_addresses'],
             'error_codes' => $fields['error_codes'], 'symptoms' => $fields['symptoms'],
             'incident_time' => $fields['incident_time'], 'affected_scope' => $fields['affected_scope'],
             'priority' => $priority, 'priority_id' => $priorityId,
-            'severity_reason' => (string) ($model['priority_reason'] ?? 'Требуется ручная оценка'),
+            'severity_reason' => $reason,
             'is_potential_emergency' => $danger,
             'recommended_group_id' => $assignment['group_id'],
-            'recommended_assignee_id' => $failure ? null : $assignment['assignee_id'],
-            'assignment_reason' => $failure ? 'Модель недоступна; назначение не предлагается' : $assignment['reason'],
+            'recommended_assignee_id' => ($failure && !$danger) ? null : $assignment['assignee_id'],
+            'assignment_reason' => ($failure && !$danger) ? 'Модель недоступна; назначение не предлагается' : $assignment['reason'],
             'missing_fields' => $missing, 'questions' => $questions, 'requires_human_review' => true,
             'analysis_mode' => $failure ? 'failed' : ($model['analysis_mode'] ?? 'rules_only'),
             'model_error' => $failure,
@@ -188,11 +213,26 @@ final class IntakeDispatcher
 
     private static function matchLocation(PDO $db, string $text): array
     {
+        $normalize = static function (string $value): string {
+            $value = preg_replace('/\b(корпус|офис)(?:е|а)\b/iu', '$1', mb_strtolower($value));
+            return ' ' . trim(preg_replace('/[^\p{L}0-9]+|(?<=\p{L})(?=\d)|(?<=\d)(?=\p{L})/u', ' ', $value)) . ' ';
+        };
+        $normalized = $normalize($text);
         $matches = [];
-        foreach ($db->query('SELECT id, name FROM locations ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $item) {
-            if (mb_strlen($item['name']) >= 3 && mb_stripos($text, $item['name']) !== false) $matches[] = $item;
+        foreach ($db->query('SELECT id,name,address,place_type FROM locations ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $item) {
+            if ($item['place_type'] !== null && mb_strlen($item['name']) >= 3 && str_contains($normalized, $normalize($item['name']))) {
+                $item['id'] = (int) $item['id'];
+                $matches[] = $item;
+            }
         }
-        return count($matches) === 1 ? ['id' => (int) $matches[0]['id'], 'name' => $matches[0]['name']] : ['id' => null, 'name' => null];
+        return count($matches) === 1 ? $matches[0]
+            : ['id' => null, 'name' => null, 'address' => null, 'candidates' => $matches];
+    }
+
+    private static function categoryTag(string $category): ?string
+    {
+        return ['peripherals'=>'Печать', 'telemetry'=>'Телеметрия', 'automation'=>'OPC', 'network'=>'Сеть',
+            'security'=>'ИБ', 'access'=>'Доступ', 'database'=>'База данных'][$category] ?? null;
     }
 
     private static function matchType(PDO $db, string $category): ?int
@@ -203,8 +243,10 @@ final class IntakeDispatcher
             'security' => ['информационная безопасность', 'иб', 'security'], 'access' => ['доступ', 'access'],
             'database' => ['база данных', 'database', 'бд'],
         ];
+        $canonical = self::categoryTag($category);
         $matches = [];
         foreach ($db->query('SELECT id, name FROM ticket_types WHERE is_confidential = 0 ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if ($row['name'] === $canonical) return (int) $row['id'];
             foreach ($terms[$category] ?? [] as $term) {
                 if (mb_strtolower($row['name']) === $term) { $matches[] = (int) $row['id']; break; }
             }
@@ -212,22 +254,33 @@ final class IntakeDispatcher
         return count($matches) === 1 ? $matches[0] : null;
     }
 
-    private static function matchPriority(PDO $db, string $severity): ?int
+    public static function matchPriority(PDO $db, string $severity): ?int
     {
-        $names = [
-            'low' => ['low', 'низкий', 'низкая'], 'medium' => ['normal', 'medium', 'средний', 'обычный'],
-            'high' => ['high', 'высокий', 'высокая'], 'critical' => ['critical', 'критический', 'аварийный'],
-        ];
-        $matches = [];
-        foreach ($db->query('SELECT id, name FROM ticket_priorities ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            if (in_array(mb_strtolower($row['name']), $names[$severity] ?? [], true)) $matches[] = (int) $row['id'];
-        }
-        return count($matches) === 1 ? $matches[0] : null;
+        $name = ['low'=>'Низкий', 'medium'=>'Средний', 'critical'=>'Авария'][$severity] ?? null;
+        if ($name === null) return null;
+        $stmt = $db->prepare('SELECT MIN(id) FROM ticket_priorities WHERE name = ?');
+        $stmt->execute([$name]);
+        return (int) $stmt->fetchColumn() ?: null;
     }
 
     /** Current live skills + non-closed ticket counts; never a second personnel catalog. */
-    public static function suggest(PDO $db, string $category): array
+    public static function suggest(PDO $db, string $category, bool $emergency = false): array
     {
+        if ($emergency) {
+            $active = ticketStatusSqlIn(ticketClosedBucketSlugs(), 't.status', true);
+            $choice = $db->query("SELECT u.id, g.id AS group_id, COUNT(DISTINCT t.id) AS workload
+                FROM users u
+                JOIN group_user_map m ON m.user_id = u.id
+                JOIN `groups` g ON g.id = m.group_id AND g.is_confidential = 0
+                LEFT JOIN agent_oof_status o ON o.user_id = u.id
+                LEFT JOIN tickets t ON t.assigned_to = u.id AND $active
+                WHERE u.is_available = 1 AND COALESCE(o.is_oof,0) = 0 AND " . staffRoleSqlIn('u.role') . "
+                GROUP BY u.id, g.id ORDER BY workload, u.id, g.id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            return $choice
+                ? ['group_id' => (int) $choice['group_id'], 'assignee_id' => (int) $choice['id'],
+                    'reason' => 'Авария: доступный инженер с минимальной нагрузкой. Открытых заявок: ' . $choice['workload']]
+                : ['group_id' => null, 'assignee_id' => null, 'reason' => 'Нет доступных инженеров. Эскалируйте диспетчеру'];
+        }
         $keywords = [
             'peripherals' => ['принтер', 'печать', 'printer'], 'telemetry' => ['телеметр', 'счётчик', 'счетчик'],
             'automation' => ['opc', 'асу', 'автоматиз'], 'network' => ['сеть', 'связь', 'network'],
@@ -274,7 +327,7 @@ final class IntakeDispatcher
         }
         $groupId = (int) $matches[0];
         $sql = "SELECT u.id, u.is_available, COALESCE(o.is_oof, 0) AS is_oof,
-                      s.name AS skill_name
+                      s.name AS skill_name, usm.proficiency
                 FROM group_user_map gum
                 JOIN users u ON u.id = gum.user_id
                 LEFT JOIN agent_oof_status o ON o.user_id = u.id
@@ -287,25 +340,34 @@ final class IntakeDispatcher
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $entry) {
             $id = (int) $entry['id'];
             $candidates[$id] ??= ['id' => $id, 'available' => ((int) $entry['is_available'] === 1 && (int) $entry['is_oof'] === 0), 'skills' => []];
-            if ($entry['skill_name'] !== null) $candidates[$id]['skills'][] = mb_strtolower($entry['skill_name']);
+            if ($entry['skill_name'] !== null) $candidates[$id]['skills'][] = [mb_strtolower($entry['skill_name']), (int) $entry['proficiency']];
         }
-        $eligible = array_filter($candidates, static function ($e) use ($keywords): bool {
-            if (!$e['available']) return false;
-            foreach ($e['skills'] as $skill) foreach ($keywords as $needle) if (mb_stripos($skill, $needle) !== false) return true;
-            return false;
-        });
-        if ($eligible === []) return ['group_id' => $groupId, 'assignee_id' => null, 'reason' => 'Группа найдена, но доступных сотрудников с подтверждённым навыком нет'];
-        $ids = array_keys($eligible);
+        $levels = [];
+        foreach ($candidates as $id => $candidate) {
+            if (!$candidate['available']) continue;
+            $level = 0;
+            foreach ($candidate['skills'] as [$skill, $proficiency]) {
+                foreach ($keywords as $needle) {
+                    if (mb_stripos($skill, $needle) !== false) $level = max($level, $proficiency);
+                }
+            }
+            $levels[$id] = $level;
+        }
+        if (!$levels) return ['group_id' => $groupId, 'assignee_id' => null,
+            'reason' => 'В подразделении нет доступных инженеров'];
+        $ids = array_keys($levels);
         $holders = implode(',', array_fill(0, count($ids), '?'));
         $active = ticketStatusSqlIn(ticketClosedBucketSlugs(), 't.status', true);
         $stmt = $db->prepare("SELECT t.assigned_to, COUNT(*) AS count_open FROM tickets t WHERE t.assigned_to IN ({$holders}) AND {$active} GROUP BY t.assigned_to");
         $stmt->execute($ids);
         $counts = array_fill_keys($ids, 0);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) $counts[(int) $row['assigned_to']] = (int) $row['count_open'];
-        usort($ids, static fn(int $a, int $b): int => ($counts[$a] <=> $counts[$b]) ?: ($a <=> $b));
+        usort($ids, static fn(int $a, int $b): int =>
+            ($levels[$b] <=> $levels[$a]) ?: ($counts[$a] <=> $counts[$b]) ?: ($a <=> $b));
         $choice = $ids[0];
+        $reason = [0=>'Подбор по нагрузке в подразделении', 1=>'Базовый навык', 2=>'Уверенный навык', 3=>'Эксперт по направлению'][$levels[$choice]] ?? 'Подтверждённый навык';
         return ['group_id' => $groupId, 'assignee_id' => $choice,
-            'reason' => "Подтверждён навык, сотрудник доступен; открытых заявок: {$counts[$choice]} (живая БД). Назначение только после confirm"];
+            'reason' => "$reason. Открытых заявок: {$counts[$choice]}"];
     }
 
     public static function validateApproved(PDO $db, array $approved, int $ownerId, bool $canAssign): array
@@ -365,7 +427,7 @@ final class IntakeDispatcher
             throw new InvalidArgumentException('Invalid structured fields');
         }
         $fieldNames = ['object', 'floor', 'room', 'equipment', 'serial_number', 'incident_time',
-            'affected_scope', 'symptoms', 'ip_addresses', 'error_codes'];
+            'affected_scope', 'symptoms', 'ip_addresses', 'error_codes', 'meter_number', 'started_at', 'useful_notes'];
         if (array_diff(array_keys($out['fields']), $fieldNames) !== []) {
             throw new InvalidArgumentException('Unknown structured field');
         }
@@ -383,6 +445,9 @@ final class IntakeDispatcher
         if (isset($out['fields']['incident_time']) && $out['fields']['incident_time'] !== null
             && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $out['fields']['incident_time'])) {
             throw new InvalidArgumentException('Invalid incident time');
+        }
+        if (isset($out['fields']['started_at']) && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $out['fields']['started_at'])) {
+            throw new InvalidArgumentException('Invalid start time');
         }
         $out['tag_ids'] = $approved['tag_ids'] ?? [];
         if (!is_array($out['tag_ids']) || count($out['tag_ids']) > 12) throw new InvalidArgumentException('Invalid tags');

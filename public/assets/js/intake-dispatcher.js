@@ -71,12 +71,20 @@
       button.setAttribute('aria-current', String(Number(button.dataset.id) === d.draft_id));
     }
     const facts = el('intakeFacts'); facts.replaceChildren();
-    for (const [field, value] of Object.entries(d.extracted || {})) {
-      const detail = Array.isArray(value) ? value.join(', ') : value;
-      if (!labels.has(field) || typeof detail !== 'string' || !detail || field === 'description') continue;
-      add(facts, 'dt', labels.get(field));
-      add(facts, 'dd', detail);
+    const info = d.approved?.fields || d.extracted || {};
+    const location = d.extracted?.location;
+    for (const [label, value] of Object.entries({
+      'Название': info.object, 'Адрес': location?.address, 'Счётчик': info.meter_number,
+      'Начало': info.started_at ?? info.incident_time, 'Кабинет': info.room, 'Важное': info.useful_notes
+    })) {
+      if (!value) continue;
+      add(facts, 'dt', label);
+      add(facts, 'dd', value);
     }
+    el('intakeFactsTitle').hidden = !facts.children.length;
+    el('intakeSolution').hidden = true;
+    const priority = el('intakePriorityReason');
+    priority.textContent = d.extracted?.severity_reason || '';
     const emergency = el('intakeEmergency');
     emergency.hidden = !d.extracted?.is_potential_emergency;
     emergency.textContent = d.extracted?.is_potential_emergency ? 'Потенциальная авария: действуйте по утверждённому регламенту. ИИ не разрешает опасные действия.' : '';
@@ -88,8 +96,8 @@
       const a = d.approved || {};
       el('reviewSubject').value = a.subject || d.extracted?.subject || '';
       el('reviewDescription').value = a.description || d.raw_text || '';
-      el('reviewIps').value = (a.fields?.ip_addresses || []).join(', ');
-      el('reviewErrors').value = (a.fields?.error_codes || []).join(', ');
+      el('reviewMeter').value = a.fields?.meter_number || '';
+      el('reviewNotes').value = a.fields?.useful_notes || '';
       el('reviewReason').value = '';
       select('reviewType', meta.types || [], a.type_id);
       select('reviewPriority', meta.priorities || [], a.priority_id);
@@ -97,9 +105,9 @@
       select('reviewGroup', meta.groups || [], a.group_id);
       select('reviewAssignee', (meta.agents || []).filter(x => !selectedNumber('reviewGroup') || Number(x.group_id) === selectedNumber('reviewGroup')).map(x => ({ id:x.id, name:x.first_name + ' ' + x.last_name })), a.assigned_to);
       const af = a.fields || d.extracted || {};
-      const fieldMap = {reviewObject:'object',reviewEquipment:'equipment',reviewIncidentTime:'incident_time',
-        reviewFloor:'floor', reviewRoom:'room',reviewSerial:'serial_number',reviewScope:'affected_scope'};
-      for (const [input,field] of Object.entries(fieldMap)) el(input).value = af[field] || '';
+      el('reviewObject').value = af.object || '';
+      el('reviewRoom').value = af.room || '';
+      el('reviewIncidentTime').value = af.started_at || af.incident_time || '';
       const tagBox = el('reviewTags'); tagBox.replaceChildren();
       for (const tag of (meta.tags || [])) {
         const option = document.createElement('option');
@@ -152,7 +160,7 @@
     busy = value;
     record.disabled = busy && recorder?.state !== 'recording';
     upload.disabled = analyze.disabled = textInput.readOnly = busy;
-    el('intakeClarify').disabled = el('reviewConfirm').disabled = el('intakeReload').disabled = busy;
+    el('intakeResolve').disabled = el('intakeClarify').disabled = el('reviewConfirm').disabled = el('intakeReload').disabled = busy;
   }
 
   async function run(action) {
@@ -282,7 +290,7 @@
     const reason = el('reviewReason').value.trim();
     const priority = selectedNumber('reviewPriority');
     const emergency = current.extracted?.is_potential_emergency;
-    if (emergency && priority === null) throw new Error('Выберите приоритет для возможной аварии.');
+    if (priority === null) throw new Error('Выберите приоритет заявки.');
     if ((current.status !== 'awaiting_review' || (emergency && current.recommendation?.priority_id != null
       && Number(current.recommendation.priority_id) !== priority)) && reason.length < 20) {
       throw new Error('Добавьте обоснование ручного решения, минимум 20 символов.');
@@ -300,16 +308,27 @@
           assigned_to: selectedNumber('reviewAssignee'),
           tag_ids: Array.from(el('reviewTags').selectedOptions, option => Number(option.value)),
           fields: { ...((current.approved || {}).fields || {}),
-            object: el('reviewObject').value || null, equipment: el('reviewEquipment').value || null,
-            incident_time: el('reviewIncidentTime').value || null, floor: el('reviewFloor').value || null,
-            room: el('reviewRoom').value || null, serial_number: el('reviewSerial').value || null,
-            affected_scope: el('reviewScope').value || null,
-            ip_addresses: el('reviewIps').value.split(',').map(value => value.trim()).filter(Boolean),
-            error_codes: el('reviewErrors').value.split(',').map(value => value.trim()).filter(Boolean) }
+            object: el('reviewObject').value || null, meter_number: el('reviewMeter').value || null,
+            started_at: el('reviewIncidentTime').value || null, incident_time: null,
+            room: el('reviewRoom').value || null, useful_notes: el('reviewNotes').value || null }
         }
       });
     renderDraft({ ...current, ...output });
     await loadQueue();
+  }));
+  el('intakeResolve').addEventListener('click', () => run(async () => {
+    if (!current) return;
+    const solution = el('intakeSolution');
+    solution.hidden = true;
+    const description = meta?.can_confirm && current.status !== 'created' ? el('reviewDescription').value : current.raw_text;
+    const result = await req('/intake/resolve', 'POST', {draft_id: current.draft_id, text: description});
+    if (result.status !== 'suggested' || !result.steps?.length || !result.sources?.length) return;
+    for (const [id, values] of [['intakeSteps', result.steps], ['intakeSources', result.sources.map(source => source.section)]]) {
+      const list = el(id);
+      list.replaceChildren();
+      for (const value of values) add(list, 'li', value);
+    }
+    solution.hidden = false;
   }));
   el('intakeReload').addEventListener('click', () => run(refresh));
   async function refresh() {

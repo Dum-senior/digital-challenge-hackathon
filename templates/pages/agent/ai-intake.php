@@ -35,7 +35,9 @@ $layout = 'dispatcher';
     <p id="intakeStatus" class="badge"></p>
     <p id="intakeEmergency" class="alert alert-danger" hidden></p>
     <p id="intakeOriginal" class="message"></p>
+    <p id="intakePriorityReason" class="message"></p>
     <p id="intakeRecommendation" class="message" hidden></p>
+    <h3 id="intakeFactsTitle" hidden>Полезная информация</h3>
     <dl id="intakeFacts"></dl>
     <div id="intakeClarification" hidden>
     <h3>Уточняющие вопросы</h3><ul id="intakeQuestions"></ul>
@@ -55,24 +57,22 @@ $layout = 'dispatcher';
         <div><label for="reviewGroup">Группа</label><select id="reviewGroup"></select></div>
         <div><label for="reviewAssignee">Инженер</label><select id="reviewAssignee"></select></div>
       </div>
-      <details class="mt-3"><summary class="fw-semibold mb-2">Дополнительные поля</summary>
-      <div class="row">
-        <div><label for="reviewObject">Объект</label><input id="reviewObject" maxlength="200"></div>
-        <div><label for="reviewEquipment">Оборудование</label><input id="reviewEquipment" maxlength="200"></div>
-        <div><label for="reviewIncidentTime">Время события (ЧЧ:ММ)</label><input id="reviewIncidentTime" placeholder="09:00" maxlength="5"></div>
-        <div><label for="reviewFloor">Этаж</label><input id="reviewFloor" maxlength="100"></div>
-        <div><label for="reviewRoom">Кабинет</label><input id="reviewRoom" maxlength="100"></div>
-        <div><label for="reviewSerial">Серийный номер</label><input id="reviewSerial" maxlength="120"></div>
-        <div><label for="reviewIps">IP-адреса через запятую</label><input id="reviewIps" maxlength="500"></div>
-        <div><label for="reviewErrors">Коды ошибок через запятую</label><input id="reviewErrors" maxlength="500"></div>
-        <div class="col-12"><label for="reviewScope">Масштаб отказа</label><input id="reviewScope" maxlength="500"></div>
-        <div class="col-12"><label for="reviewTags">Теги</label><select id="reviewTags" multiple size="3"></select></div>
-      </div>
+      <details class="mt-3" open><summary>Полезная информация</summary>
+        <div class="row">
+          <div><label for="reviewObject">Название</label><input id="reviewObject" maxlength="200"></div>
+          <div><label for="reviewMeter">Счётчик</label><input id="reviewMeter" maxlength="40"></div>
+          <div><label for="reviewIncidentTime">Начало (ЧЧ:ММ)</label><input id="reviewIncidentTime" placeholder="09:00" maxlength="5"></div>
+          <div><label for="reviewRoom">Кабинет</label><input id="reviewRoom" maxlength="100"></div>
+          <div class="col-12"><label for="reviewNotes">Важное, по одному тезису на строку</label><textarea id="reviewNotes" rows="3" maxlength="1200"></textarea></div>
+          <div class="col-12"><label for="reviewTags">Теги</label><select id="reviewTags" multiple size="3"></select></div>
+        </div>
       </details>
       <div class="mt-2"><label for="reviewReason">Обоснование ручного решения</label><textarea id="reviewReason" maxlength="500" rows="2"></textarea></div>
       <div class="form-check my-2"><input id="reviewAcknowledge" type="checkbox"><label for="reviewAcknowledge">Я проверил данные заявки</label></div>
       <button type="button" id="reviewConfirm" class="primary">Подтвердить и создать заявку</button>
     </div>
+    <button type="button" id="intakeResolve" class="mt-3">Найти решение</button>
+    <div id="intakeSolution" hidden><h3>Решение</h3><ol id="intakeSteps"></ol><ul id="intakeSources"></ul></div>
     <p id="intakeCreated" class="mt-3" hidden></p>
   </section>
 

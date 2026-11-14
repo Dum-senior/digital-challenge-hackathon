@@ -69,9 +69,9 @@ function _intakeDefaultEdited(array $analysis, bool $hasStaff): array
         'location_id' => $analysis['location_id'],
         'group_id' => $hasStaff ? $analysis['recommended_group_id'] : null,
         'assigned_to' => $hasStaff ? $analysis['recommended_assignee_id'] : null,
-        'tag_ids' => [],
+        'tag_ids' => $analysis['tag_ids'] ?? [],
         'fields' => array_intersect_key($analysis, array_flip(['object','floor','room','equipment',
-            'serial_number','incident_time','affected_scope','symptoms','ip_addresses','error_codes'])),
+            'serial_number','incident_time','affected_scope','symptoms','ip_addresses','error_codes','meter_number','started_at','useful_notes'])),
     ];
 }
 
@@ -281,8 +281,9 @@ $intakeConfirm = static function (array $p): void {
         if ($row['status'] !== 'awaiting_review' && mb_strlen(trim($manualReason)) < 20) {
             $db->rollBack(); _intakeReply(['error' => 'Clarification/AI failure requires documented manual review reason (20+ characters)'], 422);
         }
-        if (($analysis['is_potential_emergency'] ?? false) && $approved['priority_id'] === null) {
-            $db->rollBack(); _intakeReply(['error' => 'Potential emergency requires dispatcher-selected priority_id'], 422);
+        $priorityIds = array_map(static fn($level) => IntakeDispatcher::matchPriority($db, $level), ['low','medium','critical']);
+        if ($approved['priority_id'] === null || !in_array($approved['priority_id'], $priorityIds, true)) {
+            $db->rollBack(); _intakeReply(['error' => 'Выберите приоритет заявки'], 422);
         }
         if (($analysis['is_potential_emergency'] ?? false) && ($analysis['priority_id'] ?? null) !== null
             && $analysis['priority_id'] !== $approved['priority_id'] && mb_strlen(trim($manualReason)) < 20) {
@@ -291,9 +292,9 @@ $intakeConfirm = static function (array $p): void {
         $groupId = resolveTicketGroup($db, $approved['group_id'], $approved['type_id']);
         $assignedTo = $approved['assigned_to'];
         $extra = [];
-        $labels = ['object'=>'Объект', 'floor'=>'Этаж', 'room'=>'Кабинет', 'equipment'=>'Оборудование',
-            'serial_number'=>'Серийный номер', 'incident_time'=>'Время события', 'affected_scope'=>'Масштаб',
-            'ip_addresses'=>'IP', 'error_codes'=>'Коды ошибки'];
+        $labels = ['object'=>'Название', 'meter_number'=>'Счётчик', 'started_at'=>'Начало',
+            'room'=>'Кабинет', 'useful_notes'=>'Важное'];
+        if (!isset($approved['fields']['started_at'])) $labels['incident_time'] = 'Начало';
         foreach ($labels as $field => $label) {
             $v = $approved['fields'][$field] ?? null;
             if (is_array($v)) $v = implode(', ', $v);
@@ -301,7 +302,7 @@ $intakeConfirm = static function (array $p): void {
                 $extra[] = $label . ': ' . htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             }
         }
-        $ticketDescription = $approved['description'] . ($extra ? "\n\nПроверенные диспетчером сведения:\n" . implode("\n", $extra) : '');
+        $ticketDescription = $approved['description'] . ($extra ? "\n\nПолезная информация\n" . implode("\n", $extra) : '');
         if (mb_strlen($ticketDescription) > 10000) throw new InvalidArgumentException('Description with structured fields is too long');
         $stmt = $db->prepare('INSERT INTO tickets
             (subject, description, created_by, submitted_by, status, type_id, priority_id, location_id, group_id, assigned_to)
@@ -415,9 +416,36 @@ $router->get('/intake/meta', static function (): void {
                   FROM users u JOIN group_user_map m ON m.user_id = u.id
                   WHERE ' . staffRoleSqlIn('u.role') . ' ORDER BY u.first_name, u.last_name')->fetchAll(PDO::FETCH_ASSOC) : [];
     _intakeReply(['can_confirm' => $staff, 'types' => array_map(static fn($x) => ['id' => $x['id'], 'name' => $x['name']], $types),
-        'priorities' => $db->query('SELECT id, name FROM ticket_priorities ORDER BY sort_order, id')->fetchAll(PDO::FETCH_ASSOC),
-        'locations' => $db->query('SELECT id, name FROM locations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC),
+        'priorities' => array_values(array_filter(array_map(static fn($level, $name) =>
+            ['id' => IntakeDispatcher::matchPriority($db, $level), 'name' => $name],
+            ['low','medium','critical'], ['Низкий','Средний','Авария']), static fn($priority) => $priority['id'] !== null)),
+        'locations' => $db->query('SELECT id, name, address FROM locations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC),
         'tags' => $staff ? $db->query('SELECT id, name FROM ticket_tags ORDER BY name')->fetchAll(PDO::FETCH_ASSOC) : [],
         'groups' => $groups, 'agents' => $agents,
         'ticket_url_prefix' => roleIsAdmin($actor['role'] ?? null) ? '/admin/tickets/' : (roleIsStaff($actor['role'] ?? null) ? '/agent/tickets/' : '/portal/tickets/')]);
+});
+
+$router->post('/intake/resolve', static function (): void {
+    $actor = _intakeActor();
+    $input = _intakeBody();
+    $draftId = $input['draft_id'] ?? null;
+    $text = $input['text'] ?? null;
+    if (!is_int($draftId) || !is_string($text) || mb_strlen(trim($text)) < 3 || mb_strlen($text) > 6000) {
+        _intakeReply(['error' => 'Проверьте текст обращения'], 422);
+    }
+    _intakeFetch(Database::connect(), $draftId, $actor);
+    $token = env('INTAKE_SERVICE_TOKEN', '');
+    if ($token === '' || env('INTAKE_API_MODE', '') !== 'dispatcher') {
+        _intakeReply(['error' => 'Поиск временно недоступен'], 503);
+    }
+    session_write_close();
+    $context = stream_context_create(['http' => [
+        'method' => 'POST', 'timeout' => 105, 'follow_location' => 0,
+        'header' => "Content-Type: application/json\r\nAuthorization: Bearer {$token}\r\nConnection: close\r\n",
+        'content' => IntakeDispatcher::json(['text' => $text]),
+    ]]);
+    $response = @file_get_contents('http://127.0.0.1:8092/resolve', false, $context, 0, 65536);
+    $result = $response === false ? null : json_decode($response, true);
+    if (!is_array($result)) _intakeReply(['error' => 'Поиск временно недоступен'], 503);
+    _intakeReply($result);
 });
