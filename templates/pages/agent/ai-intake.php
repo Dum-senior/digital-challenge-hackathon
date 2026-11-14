@@ -25,14 +25,16 @@
   </div>
   <div id="intakeError" class="alert alert-warning" role="alert" hidden></div>
   <section id="intakeDraft" class="card" hidden><div class="card-body">
-    <h2 class="h5">Черновик №<span id="intakeDraftId"></span> · версия <span id="intakeRevision"></span></h2>
+    <h2 class="h5">Черновик №<span id="intakeDraftId"></span></h2>
     <p id="intakeStatus" class="fw-bold"></p>
     <p id="intakeEmergency" class="alert alert-danger" hidden></p>
     <dl id="intakeFacts" class="row small"></dl>
+    <div id="intakeClarification" hidden>
     <h3 class="h6">Уточняющие вопросы</h3><ul id="intakeQuestions"></ul>
     <label for="intakeAnswer" class="form-label">Ответ на уточнение</label>
     <textarea id="intakeAnswer" class="form-control" maxlength="2000" rows="2"></textarea>
-    <button type="button" id="intakeClarify" class="btn btn-outline-primary mt-2">Сохранить ответ и повторно проверить</button>
+    <button type="button" id="intakeClarify" class="btn btn-outline-primary mt-2">Ответить</button>
+    </div>
     <div id="intakeReview" class="mt-4" hidden>
       <h3 class="h5">Проверка диспетчером</h3>
       <p class="text-muted">Поля и приоритет можно изменить. Подтверждение создаёт реальную заявку.</p>
