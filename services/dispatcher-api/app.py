@@ -328,6 +328,11 @@ def resolve(incident: Incident):
         return {"status": "suggested", "emergency": True,
                 "steps": source_actions(source), "sources": [source]}
     text = incident.text.casefold()
+    if re.fullmatch(
+        r"\s*(?:помогите[!,. ]+)?(?:ничего не работает|вс[её] сломалось|"
+        r"не работает|что-то сломалось|нужна помощь)[.!?\s]*", text
+    ):
+        return clarification()
     if re.search(r"принтер|печать|картридж|тонер", text) and CONSUMABLE.search(text):
         source = knowledge_section("printing-11")
         return {"status": "suggested", "steps": source_actions(source), "sources": [source]}
