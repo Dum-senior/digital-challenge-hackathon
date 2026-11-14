@@ -5,7 +5,7 @@ repo=/srv/helpdesk-preview-source
 shared=/srv/helpdesk-preview
 releases=/srv/helpdesk-preview-releases
 live=/srv/helpdesk-preview-live
-git -C "$repo" fetch --quiet origin codex/preview-autodeploy
+git -C "$repo" fetch --quiet origin kitaru/preview-autodeploy
 sha=$(git -C "$repo" rev-parse FETCH_HEAD)
 release="$releases/$sha"
 if [[ "$(readlink "$live" || true)" == "$release" ]]; then
