@@ -1395,7 +1395,7 @@ $router->get('/', function () {
             }
             unset($_SESSION['sso_needs_location']);
         }
-        redirect('/intake');
+        redirect(Auth::isStaff() ? '/workspace' : '/intake');
     }
     redirect('/login');
 });
@@ -3634,3 +3634,4 @@ require ROOT_DIR . '/src/routes/api.php';
 
 /* Dispatcher AI intake, 02_дем */
 require ROOT_DIR . '/src/routes/intake.php';
+require ROOT_DIR . '/src/routes/dispatcher.php';

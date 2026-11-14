@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field, ValidationError
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.json"
 LLAMA = os.environ.get("DISPATCHER_LLAMA")
+CHAT_URL = os.environ.get("DISPATCHER_CHAT_URL", "http://127.0.0.1:11436")
+EMBED_URL = os.environ.get("DISPATCHER_EMBED_URL", "http://127.0.0.1:11437")
+WHISPER_URL = os.environ.get("DISPATCHER_WHISPER_URL", "http://127.0.0.1:8090/inference")
 OLLAMA = "http://127.0.0.1:11435"
 MODEL = "qwen2.5:1.5b-instruct"
 EMBED = "bge-m3"
@@ -75,7 +78,7 @@ def request_json(url, **kwargs):
 
 def embed(values):
     if LLAMA:
-        result = request_json("http://127.0.0.1:11437/v1/embeddings", json={"input": values})
+        result = request_json(f"{EMBED_URL}/v1/embeddings", json={"input": values})
         return [row["embedding"] for row in result["data"]]
     result = request_json(f"{OLLAMA}/api/embed", json={"model": EMBED, "input": values})
     return result["embeddings"]
@@ -89,7 +92,7 @@ def complete(schema, prompt, data):
         "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 280},
     }
     if LLAMA:
-        reply = request_json("http://127.0.0.1:11436/v1/chat/completions", json={
+        reply = request_json(f"{CHAT_URL}/v1/chat/completions", json={
             "messages": payload["messages"], "temperature": 0, "max_tokens": 280,
             "response_format": {"type": "json_schema", "schema": schema.model_json_schema()},
         })
@@ -165,7 +168,7 @@ def transcribe(file: UploadFile):
         if not seconds:
             raise HTTPException(422, "Empty audio track")
         with output.open("rb") as audio:
-            result = request_json("http://127.0.0.1:8090/inference",
+            result = request_json(WHISPER_URL,
                                   files={"file": ("speech.wav", audio, "audio/wav")},
                                   data={"language": "ru", "response_format": "json"})
     text = result.get("text", "").strip()

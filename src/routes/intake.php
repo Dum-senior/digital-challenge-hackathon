@@ -444,7 +444,7 @@ $router->post('/intake/resolve', static function (): void {
         'header' => "Content-Type: application/json\r\nAuthorization: Bearer {$token}\r\nConnection: close\r\n",
         'content' => IntakeDispatcher::json(['text' => $text]),
     ]]);
-    $response = @file_get_contents('http://127.0.0.1:8092/resolve', false, $context, 0, 65536);
+    $response = @file_get_contents(rtrim(env('DISPATCHER_INFERENCE_URL','http://127.0.0.1:8092'),'/').'/resolve', false, $context, 0, 65536);
     $result = $response === false ? null : json_decode($response, true);
     if (!is_array($result)) _intakeReply(['error' => 'Поиск временно недоступен'], 503);
     _intakeReply($result);

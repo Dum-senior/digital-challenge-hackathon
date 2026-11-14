@@ -1,3 +1,5 @@
-**
-!docker/
-!docker/php.Dockerfile
+.git
+.env
+vendor
+storage
+**/__pycache__

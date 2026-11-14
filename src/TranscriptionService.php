@@ -77,6 +77,8 @@ final class TranscriptionService
         $request = curl_init($url);
         curl_setopt_array($request, [
             CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => env('INTAKE_API_MODE') === 'dispatcher' && env('DISPATCHER_INFERENCE_URL') !== ''
+                ? ['Authorization: Bearer ' . env('INTAKE_SERVICE_TOKEN')] : [],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_TIMEOUT => 45,
