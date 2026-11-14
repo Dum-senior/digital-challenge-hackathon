@@ -1,0 +1,715 @@
+<?php
+$layout       = 'app';
+$pageTitle    = 'Request #' . $ticket['id'];
+$sidebarItems = portalSidebar('tickets');
+// Demo mode: the /portal/tour/demo-ticket route renders this template with a
+// fully synthetic $ticket so the onboarding tour can spotlight every element
+// (escalate button, solution banner, attachments, …) without a real ticket
+// row existing. All write actions are disabled; nothing is saved or sent.
+$demoMode     = !empty($demoMode);
+$breadcrumbs  = !empty($fromFloor) ? [] : [
+    ['label' => label('portal.nav.help', 'Help'), 'url' => '/portal'],
+    ['label' => label('portal.request.my_plural', 'My Requests'), 'url' => '/portal/tickets'],
+    ['label' => '#' . $ticket['id']],
+];
+// Portal uses friendlier labels than agents see; only the seeded slugs have
+// portal.status.* overrides — custom admin-added statuses fall back to their
+// configured label via ticketStatusLabel().
+$portalLabelOverrides = [
+    'open'                   => label('portal.status.open', 'Submitted'),
+    'in_progress'            => label('portal.status.in_progress', "We're working on it"),
+    'pending'                => label('portal.status.pending', "We're waiting on someone else"),
+    'waiting_on_customer'    => label('portal.status.waiting_on_customer', 'Waiting on you'),
+    'waiting_on_third_party' => label('portal.status.waiting_on_third_party', "We're waiting on someone else"),
+    'resolved'               => label('portal.status.resolved', 'Done'),
+    'closed'                 => label('portal.status.closed', 'Closed'),
+];
+$statusLabels = [];
+foreach (ticketActiveStatuses() as $__s) {
+    $statusLabels[$__s['slug']] = $portalLabelOverrides[$__s['slug']] ?? $__s['label'];
+}
+unset($__s);
+$actionIcons  = ['created' => 'bi-plus-circle text-success', 'assigned' => 'bi-person-check text-primary', 'status_changed' => 'bi-arrow-repeat text-warning', 'priority_changed' => 'bi-flag text-danger', 'comment' => 'bi-chat-dots text-info', 'edited' => 'bi-pencil text-secondary', 'escalated' => 'bi-arrow-up-circle text-danger'];
+
+// Resolve the marked-solution timeline row (if any). The portal $timeline
+// already excludes is_internal rows, so this lookup will simply not find
+// the entry if the marked comment was somehow flipped internal — and the
+// "Go to solution" link is suppressed.
+$solutionTimelineId = (int) ($ticket['solution_timeline_id'] ?? 0);
+$solutionEntry      = null;
+if ($solutionTimelineId > 0) {
+    foreach ($timeline as $__solRow) {
+        if ((int) $__solRow['id'] === $solutionTimelineId) {
+            $solutionEntry = $__solRow;
+            break;
+        }
+    }
+}
+?>
+<style>
+.ld-timeline-solution { border-left: 4px solid #198754 !important; background: rgba(25,135,84,.06); }
+[data-bs-theme="dark"] .ld-timeline-solution { background: rgba(25,135,84,.16); }
+.ld-timeline-solution:target { box-shadow: inset 0 0 0 9999px rgba(25,135,84,.12); transition: box-shadow .8s ease; }
+</style>
+<link rel="stylesheet" href="/assets/vendor/ckeditor5/ckeditor5.css">
+<?php if (!empty($fromFloor)): ?>
+<style>
+.main-content { padding-top: 1rem !important; }
+#floor-close {
+    position: fixed;
+    top: max(.85rem, env(safe-area-inset-top, .85rem));
+    right: max(.85rem, env(safe-area-inset-right, .85rem));
+    z-index: 1050;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: #fff; color: #1e293b;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 4px 12px rgba(15,23,42,.18);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; text-decoration: none;
+}
+#floor-close:hover { background: #f1f5f9; color: #1e293b; }
+[data-bs-theme="dark"] #floor-close { background: #212529; color: #f8f9fa; border-color: #495057; }
+[data-bs-theme="dark"] #floor-close:hover { background: #2b3035; color: #fff; }
+</style>
+<a id="floor-close" href="/portal/floor/tickets/<?= (int) $ticket['id'] ?>"
+   aria-label="Close detailed view and return to floor mode" title="Back to floor view">
+    <i class="bi bi-x-lg" aria-hidden="true"></i>
+</a>
+<?php endif; ?>
+<?php if ($demoMode): ?>
+<div class="alert alert-info d-flex align-items-center gap-3 mb-3" id="tour-demo-notice">
+    <i class="bi bi-mortarboard-fill fs-4" aria-hidden="true"></i>
+    <div>
+        <strong>This is a practice request used by the tour.</strong>
+        It isn't a real ticket — the buttons here are switched off, and nothing you click will be saved or sent.
+        <a href="/portal" class="alert-link">Back to your dashboard</a>
+    </div>
+</div>
+<?php endif; ?>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1"><?= e($ticket['subject']) ?></h2>
+        <div class="d-flex gap-2 align-items-center" id="tour-ticket-status">
+            <span class="badge fs-6" style="<?= ticketStatusBadgeStyle($ticket['status']) ?>">
+                <?= e($statusLabels[$ticket['status']] ?? $ticket['status']) ?>
+            </span>
+            <?php if ((int) ($ticket['escalation_level'] ?? 0) > 0): ?>
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6"
+                  title="This ticket has been escalated.">
+                <i class="bi bi-arrow-up-circle me-1"></i>Escalated — Level <?= (int) $ticket['escalation_level'] ?>
+            </span>
+            <?php endif; ?>
+            <?php if ($ticket['priority_name']): ?>
+            <span class="badge fs-6" style="background:<?= e($ticket['priority_color']) ?>;">
+                <?= e($ticket['priority_name']) ?>
+            </span>
+            <?php endif; ?>
+            <span class="text-muted">Request #<?= $ticket['id'] ?></span>
+        </div>
+    </div>
+    <div class="d-flex gap-2" id="tour-ticket-actions">
+        <?php if ($isOwner && $ticket['status'] !== 'closed'): ?>
+        <a href="<?= $demoMode ? '#' : '/portal/tickets/' . $ticket['id'] . '/edit' ?>"
+           id="tour-ticket-edit"
+           class="btn btn-outline-primary btn-sm<?= $demoMode ? ' disabled' : '' ?>"
+           <?= $demoMode ? 'aria-disabled="true" tabindex="-1"' : '' ?>>
+            <i class="bi bi-pencil me-1"></i>Edit
+        </a>
+        <?php if ($hasEscalationPath && escalateButtonVisible($ticket['sla_state'] ?? null)): ?>
+        <?php
+            $escCanEscalate = !in_array($ticket['status'], ['resolved', 'closed'], true) && empty($ticket['merged_into_ticket_id']);
+            if (!$escCanEscalate) {
+                $escTitle = 'Closed tickets cannot be escalated.';
+            } elseif (!$nextEscalationStep) {
+                $escTitle = 'This ticket is already at the top of its escalation chain.';
+            } else {
+                $escTitle = 'Escalate this ticket — it will be reassigned to ' . $nextEscalationStep['user_name'] . ' (Level ' . $nextEscalationStep['step_order'] . ').';
+            }
+            $escalateDisabled = !$escCanEscalate || !$nextEscalationStep;
+        ?>
+        <button type="button"
+                id="escalateBtn"
+                class="btn btn-outline-danger btn-sm"
+                title="<?= e($escTitle) ?>"
+                <?= $escalateDisabled ? 'disabled' : '' ?>
+                data-bs-toggle="modal"
+                data-bs-target="#escalateModal">
+            <i class="bi bi-arrow-up-circle me-1"></i>Escalate
+        </button>
+        <?php endif; ?>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="tour-ticket-close"
+                data-bs-toggle="modal" data-bs-target="#closeTicketModal">
+            <i class="bi bi-x-circle me-1"></i><?= e(label('portal.action.close', 'Close this request')) ?>
+        </button>
+        <?php endif; ?>
+        <a href="/portal/tickets" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+    </div>
+
+    <?php if ($isOwner && $nextEscalationStep): ?>
+    <div class="modal fade" id="escalateModal" tabindex="-1" aria-labelledby="escalateModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title fw-semibold" id="escalateModalLabel">
+                        <i class="bi bi-arrow-up-circle me-2 text-danger"></i>Escalate this request
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        If you feel this request needs more attention, you can escalate it to the next person in the escalation chain.
+                    </p>
+                    <div class="p-3 bg-body-tertiary rounded mb-3">
+                        <div class="small text-muted mb-1">This ticket will be escalated to:</div>
+                        <div>
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
+                                Level <?= (int) $nextEscalationStep['step_order'] ?>
+                            </span>
+                            <strong><?= e($nextEscalationStep['user_name']) ?></strong>
+                        </div>
+                        <?php if (!empty($nextEscalationStep['label'])): ?>
+                        <div class="text-muted small mt-1"><?= e($nextEscalationStep['label']) ?></div>
+                        <?php endif; ?>
+                    </div>
+
+                    <label for="escalateReason" class="form-label small text-muted">Reason <span class="text-muted">(optional — helps the person you're escalating to)</span></label>
+                    <textarea id="escalateReason" class="form-control" rows="3" maxlength="2000"
+                              placeholder="What isn't working? What have you tried or been told so far?"></textarea>
+
+                    <div id="escalateError" class="alert alert-danger mt-3 d-none" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="escalateConfirmBtn" class="btn btn-danger"
+                            <?= $demoMode ? 'disabled title="Disabled in this practice view"' : '' ?>>
+                        <i class="bi bi-arrow-up-circle me-1"></i>Escalate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var btn = document.getElementById('escalateConfirmBtn');
+        var err = document.getElementById('escalateError');
+        var txt = document.getElementById('escalateReason');
+        if (!btn) return;
+        var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        btn.addEventListener('click', function () {
+            err.classList.add('d-none');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Escalating…';
+            fetch('/api/tickets/<?= (int) $ticket['id'] ?>/escalate', {
+                method:  'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+                body:    JSON.stringify({reason: (txt && txt.value) ? txt.value.trim() : ''}),
+            }).then(function (r) { return r.json().then(function (b) { return {ok: r.ok, body: b}; }); })
+              .then(function (res) {
+                  if (!res.ok || !res.body.success) {
+                      err.textContent = (res.body && res.body.error) || 'Escalation failed.';
+                      err.classList.remove('d-none');
+                      btn.disabled = false;
+                      btn.innerHTML = '<i class="bi bi-arrow-up-circle me-1"></i>Retry';
+                      return;
+                  }
+                  window.location.reload();
+              })
+              .catch(function () {
+                  err.textContent = 'Network error. Please try again.';
+                  err.classList.remove('d-none');
+                  btn.disabled = false;
+                  btn.innerHTML = '<i class="bi bi-arrow-up-circle me-1"></i>Retry';
+              });
+        });
+    })();
+    </script>
+    <?php endif; ?>
+</div>
+
+<?php if ($solutionEntry): ?>
+<a href="#timeline-entry-<?= (int) $solutionEntry['id'] ?>"
+   id="tour-ticket-solution"
+   class="alert alert-success d-flex align-items-center gap-2 mb-4 text-decoration-none"
+   role="note"
+   style="border-left:4px solid #198754;">
+    <i class="bi bi-check-circle-fill fs-5"></i>
+    <div class="flex-grow-1">
+        <strong><?= e(label('portal.solution.available', 'Answer available')) ?></strong> &middot;
+        <?= e(label('portal.solution.posted_by', 'posted by')) ?>
+        <?= e($solutionEntry['user_name'] ?: label('portal.solution.staff', 'our team')) ?>
+        <?= e(label('portal.solution.on', 'on')) ?>
+        <?= date('M j, Y g:i A', strtotime($solutionEntry['created_at'])) ?>
+    </div>
+    <span class="btn btn-sm btn-success">
+        <i class="bi bi-arrow-down-circle me-1"></i><?= e(label('portal.solution.go', 'Go to answer')) ?>
+    </span>
+</a>
+<?php endif; ?>
+
+<?php if ($isOwner && $ticket['status'] === 'open'): ?>
+<div class="alert border-0 shadow-sm mb-4" role="note" id="tour-ticket-whatnext"
+     style="background:#eef2ff;border-left:4px solid var(--ld-primary) !important;">
+    <div class="d-flex gap-3">
+        <i class="bi bi-info-circle-fill fs-4" style="color:var(--ld-primary);" aria-hidden="true"></i>
+        <div>
+            <h6 class="fw-semibold mb-2"><?= e(label('portal.what_next.title', 'What happens next?')) ?></h6>
+            <ul class="mb-0 ps-3 small">
+                <li><?= e(label('portal.what_next.line1', 'Your request is in the queue.')) ?></li>
+                <li><?= e(label('portal.what_next.line2', 'Someone from the team will review it and reply here.')) ?></li>
+                <li><?= e(label('portal.what_next.line3', "You'll get an email when there's an update — no need to phone or email to confirm.")) ?></li>
+            </ul>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<div class="row g-4">
+    <!-- Left column: Description + Tags + Timeline -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm mb-4" id="tour-ticket-description">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-text-paragraph me-2"></i>Description</h5>
+            </div>
+            <div class="card-body">
+                <?php $desc = $ticket['description'] ?? ''; ?>
+                <?php if ($desc !== '' && ltrim($desc)[0] === '<'): ?>
+                <div class="ck-content"><?= sanitizeRichHtml($desc) ?></div>
+                <?php else: ?>
+                <div style="white-space:pre-wrap;"><?= linkify($desc) ?></div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if (!empty($customFields)): ?>
+        <?php
+            // Helper: resolve option ID to label
+            function resolveOptLabel(int $optId, array $opts): string {
+                foreach ($opts as $o) {
+                    if ((int) $o['id'] === $optId) return $o['label'];
+                }
+                return '';
+            }
+            $hasAnyValue = false;
+            foreach ($customFields as $cf) {
+                if (isset($fieldValues[$cf['id']]) && $fieldValues[$cf['id']] !== '') { $hasAnyValue = true; break; }
+            }
+        ?>
+        <?php if ($hasAnyValue): ?>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-list-check me-2"></i>Additional Details</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                <?php foreach ($customFields as $cf):
+                    if (!isset($fieldValues[$cf['id']]) || $fieldValues[$cf['id']] === '') continue;
+                    $raw = $fieldValues[$cf['id']];
+                    $cfOpts = $fieldOptions[$cf['id']] ?? [];
+                    if ($cf['field_type'] === 'checkbox') {
+                        $display = $raw === '1' ? 'Yes' : 'No';
+                    } elseif ($cf['field_type'] === 'user_picker') {
+                        // Name only here — the portal is the requester's own
+                        // view and has no reason to hand out addresses.
+                        $upPerson = userPickerDisplay(Database::connect(), $raw);
+                        $display  = $upPerson ? $upPerson['name'] : '';
+                    } elseif ($cf['field_type'] === 'dropdown') {
+                        $display = resolveOptLabel((int) $raw, $cfOpts);
+                        if (!$display) $display = $raw;
+                    } elseif ($cf['field_type'] === 'dependent') {
+                        $dep = json_decode($raw, true) ?? [];
+                        $parts = [];
+                        foreach (['l1','l2','l3'] as $lk) {
+                            if (!empty($dep[$lk])) {
+                                $lbl = resolveOptLabel((int) $dep[$lk], $cfOpts);
+                                if ($lbl) $parts[] = $lbl;
+                            }
+                        }
+                        $display = implode(' › ', $parts);
+                    } elseif ($cf['field_type'] === 'date_range') {
+                        $dr = json_decode($raw, true) ?? [];
+                        $drFrom = $dr['from'] ?? '';
+                        $drTo   = $dr['to']   ?? '';
+                        $display = ($drFrom || $drTo) ? $drFrom . ' — ' . $drTo : '';
+                    } else {
+                        $display = $raw;
+                    }
+                ?>
+                    <dt class="col-sm-4 text-muted fw-normal"><?= e($cf['label']) ?></dt>
+                    <dd class="col-sm-8"><?= e($display) ?></dd>
+                <?php endforeach; ?>
+                </dl>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
+
+        <?php if (!empty($attachments)): ?>
+        <div class="card border-0 shadow-sm mb-4" id="tour-ticket-attachments">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2"></i>Attachments</h5>
+            </div>
+            <div class="list-group list-group-flush">
+                <?php foreach ($attachments as $att): ?>
+                <a href="<?= $demoMode ? '#' : '/portal/attachments/' . $att['id'] . '/download' ?>"
+                   <?= $demoMode ? 'onclick="return false;"' : '' ?>
+                   class="list-group-item list-group-item-action d-flex align-items-center gap-3">
+                    <?php // Demo mode's attachment rows are fabricated (id 0, no file on disk),
+                          // so a thumbnail there would just be a broken image. ?>
+                    <?php if (!$demoMode && attachmentShowsThumb($att['mime_type'])): ?>
+                    <?php $attUrl = '/portal/attachments/' . $att['id'] . '/download'; $attThumbMax = 96; ?>
+                    <?php require ROOT_DIR . '/templates/partials/attachment-thumb.php'; ?>
+                    <?php else: ?>
+                    <i class="bi <?= getFileIcon($att['mime_type']) ?> fs-4"></i>
+                    <?php endif; ?>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold"><?= e($att['original_name']) ?></div>
+                        <small class="text-muted"><?= formatFileSize($att['file_size']) ?></small>
+                    </div>
+                    <i class="bi bi-download text-muted"></i>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (getSetting('tags_enabled', '1') === '1' && !empty($ticket['tags'])): ?>
+        <div class="mb-4">
+            <?php foreach ($ticket['tags'] as $tag): ?>
+            <span class="badge bg-light text-dark border me-1 mb-1">
+                <i class="bi bi-hash"></i><?= e($tag) ?>
+            </span>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php $timelineSort = getUserTimelineSort((int) Auth::id()); ?>
+        <div class="card border-0 shadow-sm" id="tour-ticket-timeline">
+            <div class="card-header bg-white border-bottom">
+                <button type="button" id="timelineSortToggle"
+                        class="btn btn-link p-0 border-0 text-reset text-decoration-none h5 mb-0 fw-semibold d-inline-flex align-items-center"
+                        title="Sort: <?= $timelineSort === 'asc' ? 'oldest first — click to show newest first' : 'newest first — click to show oldest first' ?>">
+                    <i class="bi bi-clock-history me-2"></i>Timeline
+                    <i class="bi <?= $timelineSort === 'asc' ? 'bi-sort-up' : 'bi-sort-down' ?> ms-2 small" id="timelineSortIcon"></i>
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <?php if (empty($timeline)): ?>
+                <div class="text-center py-4 text-muted">No timeline entries.</div>
+                <?php else:
+                // Render in the user's chosen direction. SQL gives newest-first;
+                // reverse for oldest-first. The collapser always keeps the first
+                // 10 (in reading order) visible and tucks the overflow — and its
+                // toggle — at the bottom, so the very oldest entry sits at the top
+                // in oldest-first mode instead of hiding behind a "show older" link.
+                $display    = $timelineSort === 'asc' ? array_values(array_reverse($timeline)) : $timeline;
+                $tlHidden   = max(0, count($display) - 10);
+                $tlMoreWord = $timelineSort === 'asc' ? 'newer' : 'older';
+                ?>
+                <div class="list-group list-group-flush" id="timelineList">
+                    <?php foreach ($display as $tlIdx => $entry):
+                        $isSolution = $solutionTimelineId > 0 && (int) $entry['id'] === $solutionTimelineId;
+                        // Never let the marked solution be hidden inside the
+                        // older-updates collapser — the requester needs to be
+                        // able to land directly on it via the green link above.
+                        $isOlder    = !$isSolution && $tlIdx >= 10;
+                        $tlClass    = $isSolution ? 'ld-timeline-solution' : '';
+                    ?>
+                    <div class="list-group-item px-4 py-3 <?= $tlClass ?><?= $isOlder ? ' timeline-older-item' : '' ?>"
+                         id="timeline-entry-<?= (int) $entry['id'] ?>"
+                         <?= $isOlder ? 'style="display:none;"' : '' ?>>
+                        <div class="d-flex gap-3">
+                            <div class="pt-1">
+                                <?php if ($isSolution): ?>
+                                <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+                                <?php else: ?>
+                                <i class="bi <?= $actionIcons[$entry['action']] ?? 'bi-circle text-muted' ?> fs-5"></i>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <span class="fw-semibold"><?= e($entry['user_name'] ?: 'System') ?></span>
+                                        <span class="text-muted ms-1"><?= e(str_replace('_', ' ', ucfirst($entry['action']))) ?></span>
+                                        <?php if ($isSolution): ?>
+                                        <span class="badge ms-1 bg-success"><i class="bi bi-check-circle me-1"></i><?= e(label('portal.solution.badge', 'Answer')) ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <small class="text-muted"><?= date('M j, Y g:i A', strtotime($entry['created_at'])) ?></small>
+                                </div>
+                                <?php if ($entry['details']): ?>
+                                <?php if (str_starts_with(ltrim($entry['details']), '<')): ?>
+                                <div class="mt-1 ck-content"><?= sanitizeRichHtml($entry['details']) ?></div>
+                                <?php else: ?>
+                                <div class="mt-1 text-muted" style="white-space:pre-wrap;"><?= linkify($entry['details']) ?></div>
+                                <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                    <?php if ($tlHidden > 0): ?>
+                    <div class="list-group-item px-3 py-2 text-center bg-light border-top-0" id="timeline-expand-row">
+                        <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none" id="timeline-expand-btn">
+                            <i class="bi bi-chevron-up me-1" id="timeline-expand-icon"></i>
+                            <span id="timeline-expand-label">Show <?= $tlHidden ?> <?= $tlMoreWord ?> update<?= $tlHidden !== 1 ? 's' : '' ?></span>
+                        </button>
+                    </div>
+                    <script>
+                    (function() {
+                        var btn      = document.getElementById('timeline-expand-btn');
+                        var icon     = document.getElementById('timeline-expand-icon');
+                        var label    = document.getElementById('timeline-expand-label');
+                        var items    = document.querySelectorAll('.timeline-older-item');
+                        var n        = <?= $tlHidden ?>;
+                        var word     = <?= json_encode($tlMoreWord) ?>;
+                        var expanded = false;
+                        btn.addEventListener('click', function() {
+                            expanded = !expanded;
+                            items.forEach(function(el) { el.style.display = expanded ? '' : 'none'; });
+                            icon.className    = expanded ? 'bi bi-chevron-down me-1' : 'bi bi-chevron-up me-1';
+                            label.textContent = expanded ? 'Show fewer updates' : 'Show ' + n + ' ' + word + ' update' + (n !== 1 ? 's' : '');
+                        });
+                    })();
+                    </script>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <script>
+        // Clicking the "Timeline" heading flips the sort order. We persist the
+        // new default and reload so the server re-renders in the right order with
+        // the collapser tucked at the bottom — the server owns ordering, so the
+        // oldest entry truly sits at the top in oldest-first mode.
+        (function () {
+            var btn = document.getElementById('timelineSortToggle');
+            if (!btn) return;
+            if (<?= $demoMode ? 'true' : 'false' ?>) return; // demo: sort toggle would reload mid-tour
+            var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            var next = <?= json_encode($timelineSort === 'asc' ? 'desc' : 'asc') ?>;
+            btn.addEventListener('click', function () {
+                btn.disabled = true;
+                fetch('/profile/setting', {
+                    method:  'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body:    '_token=' + encodeURIComponent(csrf) + '&field=timeline_sort&value=' + next,
+                }).then(function () { location.reload(); })
+                  .catch(function () { location.reload(); });
+            });
+        })();
+        </script>
+
+        <!-- Add Comment -->
+        <div class="card border-0 shadow-sm mt-4" id="tour-ticket-comment">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-chat-dots me-2"></i>Add Comment</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/portal/tickets/<?= $ticket['id'] ?>/comment" enctype="multipart/form-data" id="portalReplyForm">
+                    <?= csrfField() ?>
+                    <div id="portalReplyDraftNote" class="alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 small d-none">
+                        <span><i class="bi bi-arrow-counterclockwise me-1"></i>Restored your unsent comment.</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="portalReplyDraftDiscard">Discard</button>
+                    </div>
+                    <div class="mb-3">
+                        <textarea class="form-control" name="message" id="portalReplyMessage" rows="3" required
+                                  placeholder="Add an update or ask a question..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <input type="file" class="form-control" name="attachments[]" id="portalReplyFiles" multiple>
+                        <div class="form-text">Max <?= UPLOAD_MAX_SIZE / 1024 / 1024 ?>MB per file</div>
+                    </div>
+                    <button type="submit" class="btn text-white" style="background:var(--ld-primary);"
+                            <?= $demoMode ? 'disabled title="Disabled in this practice view"' : '' ?>>
+                        <i class="bi bi-send me-1"></i>Post Comment
+                    </button>
+                </form>
+                <?php if (!$demoMode): ?>
+                <script src="/assets/js/ticket-draft.js"></script>
+                <script src="/assets/js/undo-send.js"></script>
+                <script>
+                (function () {
+                    // Autosave the in-progress comment server-side so closing the
+                    // window (or finishing later) doesn't lose it. The comment
+                    // handler deletes the draft once it's actually posted.
+                    var ta   = document.getElementById('portalReplyMessage');
+                    var form = document.getElementById('portalReplyForm');
+                    TicketDraft.init({
+                        context:      'portal_reply',
+                        ticketId:     <?= (int) $ticket['id'] ?>,
+                        form:         form,
+                        isEmpty:      function () { return ta.value.trim() === ''; },
+                        noteEl:       document.getElementById('portalReplyDraftNote'),
+                        discardBtn:   document.getElementById('portalReplyDraftDiscard'),
+                        statusAnchor: ta,
+                        onDiscarded:  function () { ta.value = ''; ta.focus(); },
+                    });
+
+                    <?php if (!empty($warnNotRequester)): ?>
+                    // Not the requester (viewing via "My Location"): confirm
+                    // before they start typing or pick a file. One OK per page.
+                    // The modal markup and the bootstrap bundle both come after
+                    // this script in the page, so resolve them at click time.
+                    var files   = document.getElementById('portalReplyFiles');
+                    var warnOk  = false;
+                    var pending = null;
+                    function gate(el, e) {
+                        if (warnOk) return;
+                        e.preventDefault();
+                        el.blur();
+                        pending = el;
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('notRequesterModal')).show();
+                    }
+                    ta.addEventListener('focus', function (e) { gate(ta, e); });
+                    files.addEventListener('click', function (e) { gate(files, e); });
+                    document.addEventListener('click', function (e) {
+                        if (!e.target.closest('#notRequesterProceed')) return;
+                        var warnEl = document.getElementById('notRequesterModal');
+                        warnOk = true;
+                        warnEl.addEventListener('hidden.bs.modal', function () {
+                            if (pending === files) files.click(); else ta.focus();
+                        }, { once: true });
+                        bootstrap.Modal.getInstance(warnEl).hide();
+                    });
+                    <?php endif; ?>
+
+                    // Undo send: hold the post behind the countdown toast. The
+                    // expiry send uses the native form.submit(), which skips
+                    // this listener, so it can't loop.
+                    form.addEventListener('submit', function (e) {
+                        if (e.defaultPrevented) return;
+                        if (window.UndoSend && UndoSend.hold(form, {
+                                seconds: <?= undoSendSeconds() ?>,
+                                label:   'Posting comment',
+                            })) {
+                            e.preventDefault();
+                        }
+                    });
+                })();
+                </script>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: Metadata -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm" id="tour-ticket-details">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle me-2"></i>Details</h5>
+            </div>
+            <div class="card-body">
+                <dl class="mb-0">
+                    <dt class="text-muted small">Status</dt>
+                    <dd>
+                        <span class="badge" style="<?= ticketStatusBadgeStyle($ticket['status']) ?>">
+                            <?= e($statusLabels[$ticket['status']] ?? $ticket['status']) ?>
+                        </span>
+                    </dd>
+
+                    <dt class="text-muted small">Priority</dt>
+                    <dd>
+                        <?php if ($ticket['priority_name']): ?>
+                        <span class="badge" style="background:<?= e($ticket['priority_color']) ?>;"><?= e($ticket['priority_name']) ?></span>
+                        <?php else: ?>
+                        <span class="text-muted">Not set</span>
+                        <?php endif; ?>
+                    </dd>
+
+                    <dt class="text-muted small">Type</dt>
+                    <dd><?php if ($ticket['type_name']): ?><span class="badge" style="background:<?= e($ticket['type_color'] ?: '#6c757d') ?>;"><?= e($ticket['type_name']) ?></span><?php else: ?><span class="text-muted">Not Set</span><?php endif; ?></dd>
+
+                    <dt class="text-muted small"><?= label('location.singular') ?></dt>
+                    <dd><?= e($ticket['location_name'] ?? 'Not set') ?></dd>
+
+                    <dt class="text-muted small">Assigned To</dt>
+                    <dd><?= e($ticket['agent_name'] ?: 'Unassigned') ?></dd>
+
+                    <?php if ((int) ($ticket['escalation_level'] ?? 0) > 0): ?>
+                    <dt class="text-muted small">Escalation</dt>
+                    <dd>
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                            <i class="bi bi-arrow-up-circle me-1"></i>Level <?= (int) $ticket['escalation_level'] ?>
+                        </span>
+                    </dd>
+                    <?php endif; ?>
+
+                    <dt class="text-muted small">Created</dt>
+                    <dd><?= date('M j, Y g:i A', strtotime($ticket['created_at'])) ?></dd>
+                </dl>
+            </div>
+        </div>
+
+        <?php if (!empty($ccUsers)): ?>
+        <div class="card border-0 shadow-sm mt-4" id="tour-ticket-cc">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2"></i>CC</h5>
+            </div>
+            <div class="card-body">
+                <?php foreach ($ccUsers as $cc): ?>
+                <div class="mb-1">
+                    <span class="fw-semibold small"><?= e($cc['first_name'] . ' ' . $cc['last_name']) ?></span>
+                    <span class="text-muted small"><?= e($cc['email']) ?></span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if (!empty($warnNotRequester) && !$demoMode): ?>
+<!-- Not-the-requester warning (location-visible tickets) -->
+<div class="modal fade" id="notRequesterModal" tabindex="-1" aria-labelledby="notRequesterModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="notRequesterModalLabel">
+                    <i class="bi bi-info-circle me-2"></i>This isn't your ticket
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>You can see this ticket because it was opened at your <?= e(strtolower(label('location.singular', 'Location'))) ?>, but it wasn't opened by you.</p>
+                <p class="mb-0">Comments from many different people on one ticket get confusing for the person who opened it and for the staff working on it. If you have your own issue, please open a new ticket instead.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn text-white px-4" style="background:var(--ld-primary);" id="notRequesterProceed">
+                    I want to add a comment anyway
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Close Request Modal -->
+<div class="modal fade" id="closeTicketModal" tabindex="-1" aria-labelledby="closeTicketModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="closeTicketModalLabel">
+                    <i class="bi bi-x-circle me-2"></i><?= e(label('portal.action.close', 'Close this request')) ?>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Are you sure you want to close this request?</p>
+            </div>
+            <div class="modal-footer">
+                <form method="POST" action="/portal/tickets/<?= $ticket['id'] ?>/close">
+                    <?= csrfField() ?>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-secondary px-4"
+                            <?= $demoMode ? 'disabled title="Disabled in this practice view"' : '' ?>>
+                        <i class="bi bi-x-circle me-1"></i><?= e(label('portal.action.close', 'Close this request')) ?>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

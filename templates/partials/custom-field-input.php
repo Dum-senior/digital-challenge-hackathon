@@ -1,0 +1,221 @@
+<?php
+/**
+ * Shared custom field rendering partial.
+ *
+ * Expected variables in scope:
+ *   $cf         — the ticket_form_fields row (definition only — no per-type flags)
+ *   $cfKey      — 'field_<id>'
+ *   $cfOpts     — options array (for dropdown/dependent)
+ *   $cfRequired — bool: required *for the currently selected ticket type*
+ *                 (the form-create page sets this from the layout table)
+ *   $portalMode — (optional) bool, true if rendering on the portal form
+ */
+$portalMode = $portalMode ?? false;
+$cfRequired = $cfRequired ?? false;
+$requiredAttr = ($portalMode && $cfRequired) ? 'required' : '';
+// Optional per-field settings from the form builder: text `format` ('phone'),
+// number/decimal `min`.
+$cfCfg   = $cf['config'] ? (is_string($cf['config']) ? (json_decode($cf['config'], true) ?: []) : $cf['config']) : [];
+$minAttr = isset($cfCfg['min']) && is_numeric($cfCfg['min']) ? 'min="' . e((string) $cfCfg['min']) . '"' : '';
+?>
+<?php if ($cf['field_type'] === 'text_block'):
+    $tbCfg = $cf['config'] ? (is_string($cf['config']) ? json_decode($cf['config'], true) : $cf['config']) : [];
+?>
+<div class="mb-3 custom-field-wrap" data-field-id="<?= (int) $cf['id'] ?>">
+    <?php if (!empty($cf['label'])): ?>
+    <p class="fw-semibold mb-1"><?= e($cf['label']) ?></p>
+    <?php endif; ?>
+    <?php
+        $tbContent = (string) ($tbCfg['content'] ?? '');
+        // Content authored in CKEditor is HTML (starts with a tag). Legacy blocks
+        // are plain text — escape those and preserve their line breaks.
+        $tbIsHtml = $tbContent !== '' && ltrim($tbContent)[0] === '<';
+    ?>
+    <div class="border rounded p-3 bg-light text-secondary small ld-text-block">
+        <?php if ($tbIsHtml): ?>
+            <?= sanitizeRichHtml($tbContent) ?>
+        <?php else: ?>
+            <span style="white-space:pre-wrap;"><?= e($tbContent) ?></span>
+        <?php endif; ?>
+    </div>
+</div>
+<?php elseif ($cf['field_type'] === 'image'):
+    $imgCfg = $cf['config'] ? (is_string($cf['config']) ? json_decode($cf['config'], true) : $cf['config']) : [];
+?>
+<div class="mb-3 custom-field-wrap" data-field-id="<?= (int) $cf['id'] ?>">
+    <?php if (!empty($imgCfg['image_path'])): ?>
+    <img src="/uploads/field-images/<?= e($imgCfg['image_path']) ?>"
+         alt="<?= e($cf['label']) ?>" class="img-fluid rounded" style="max-height:400px;">
+    <?php if (!empty($cf['label'])): ?>
+    <p class="text-muted small mt-1"><?= e($cf['label']) ?></p>
+    <?php endif; ?>
+    <?php endif; ?>
+</div>
+<?php else: ?>
+<div class="mb-3 custom-field-wrap" data-field-id="<?= (int) $cf['id'] ?>">
+    <label class="form-label fw-semibold">
+        <?= e($cf['label']) ?>
+        <span class="text-danger ms-1 field-required-star" <?= $cfRequired ? '' : 'style="display:none;"' ?>>*</span>
+    </label>
+
+    <?php if ($cf['field_type'] === 'text' && ($cfCfg['format'] ?? '') === 'phone'): ?>
+    <input type="tel" class="form-control" name="<?= e($cfKey) ?>" data-format="phone"
+           inputmode="numeric" autocomplete="tel-national" maxlength="14"
+           pattern="\(\d{3}\) \d{3}-\d{4}" title="Phone number as (###) ###-####"
+           placeholder="<?= e($cf['placeholder'] ?: '(###) ###-####') ?>"
+           value="<?= e(old($cfKey)) ?>" <?= $requiredAttr ?>>
+    <script>
+    // Format phone fields as (###) ###-#### while typing. Registered once per page.
+    if (!window.ldPhoneFormat) {
+        window.ldPhoneFormat = true;
+        document.addEventListener('input', function (e) {
+            var el = e.target;
+            if (!el.matches || !el.matches('input[data-format="phone"]')) return;
+            // North American area codes never start with 0 or 1, so a leading
+            // 1 is the country code (typed or pasted as +1) and is dropped.
+            var d = el.value.replace(/\D/g, '').replace(/^[01]+/, '').slice(0, 10);
+            el.value = d.length < 4 ? (d ? '(' + d : '')
+                : '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + (d.length > 6 ? '-' + d.slice(6) : '');
+        });
+    }
+    </script>
+
+    <?php elseif ($cf['field_type'] === 'text'): ?>
+    <input type="text" class="form-control" name="<?= e($cfKey) ?>"
+           placeholder="<?= e($cf['placeholder'] ?? '') ?>"
+           value="<?= e(old($cfKey)) ?>" <?= $requiredAttr ?>>
+
+    <?php elseif ($cf['field_type'] === 'textarea'): ?>
+    <textarea class="form-control" name="<?= e($cfKey) ?>" rows="3"
+              placeholder="<?= e($cf['placeholder'] ?? '') ?>" <?= $requiredAttr ?>><?= e(old($cfKey)) ?></textarea>
+
+    <?php elseif ($cf['field_type'] === 'checkbox'): ?>
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="<?= e($cfKey) ?>" value="1"
+               id="<?= e($cfKey) ?>" <?= old($cfKey) ? 'checked' : '' ?>>
+        <label class="form-check-label" for="<?= e($cfKey) ?>">Yes</label>
+    </div>
+
+    <?php elseif ($cf['field_type'] === 'dropdown'): ?>
+    <select class="form-select" name="<?= e($cfKey) ?>" <?= $requiredAttr ?>>
+        <option value="">— Select —</option>
+        <?php foreach ($cfOpts as $opt): ?>
+        <option value="<?= (int) $opt['id'] ?>"
+            <?= old($cfKey) == $opt['id'] ? 'selected' : '' ?>>
+            <?= e($opt['label']) ?>
+        </option>
+        <?php endforeach; ?>
+    </select>
+
+    <?php elseif ($cf['field_type'] === 'date'): ?>
+    <input type="date" class="form-control" name="<?= e($cfKey) ?>"
+           value="<?= e(old($cfKey)) ?>" <?= $requiredAttr ?>>
+
+    <?php elseif ($cf['field_type'] === 'date_range'): ?>
+    <div class="row g-2">
+        <div class="col">
+            <label class="form-label small">From</label>
+            <input type="date" class="form-control" name="<?= e($cfKey) ?>_from"
+                   value="<?= e(old($cfKey . '_from')) ?>" <?= $requiredAttr ?>>
+        </div>
+        <div class="col">
+            <label class="form-label small">To</label>
+            <input type="date" class="form-control" name="<?= e($cfKey) ?>_to"
+                   value="<?= e(old($cfKey . '_to')) ?>" <?= $requiredAttr ?>>
+        </div>
+    </div>
+
+    <?php elseif ($cf['field_type'] === 'number'): ?>
+    <input type="number" step="1" class="form-control" name="<?= e($cfKey) ?>"
+           placeholder="<?= e($cf['placeholder'] ?? '') ?>"
+           value="<?= e(old($cfKey)) ?>" <?= $minAttr ?> <?= $requiredAttr ?>>
+
+    <?php elseif ($cf['field_type'] === 'decimal'): ?>
+    <input type="number" step="0.01" class="form-control" name="<?= e($cfKey) ?>"
+           placeholder="<?= e($cf['placeholder'] ?? '') ?>"
+           value="<?= e(old($cfKey)) ?>" <?= $minAttr ?> <?= $requiredAttr ?>>
+
+    <?php elseif ($cf['field_type'] === 'user_picker'):
+        // Stores the chosen user's id, never the typed text — the typed text is
+        // only ever a search box. old() holds the id after a failed submit, so
+        // the label has to be resolved back for redisplay.
+        $upId    = (string) old($cfKey);
+        $upLabel = '';
+        if ($upId !== '' && ctype_digit($upId)) {
+            $upStmt = Database::connect()->prepare(
+                'SELECT CONCAT(first_name, " ", last_name) AS n, email FROM users WHERE id = ?'
+            );
+            $upStmt->execute([(int) $upId]);
+            if ($upRow = $upStmt->fetch()) {
+                $upLabel = $upRow['n'] . ' <' . $upRow['email'] . '>';
+            } else {
+                $upId = '';   // stale id — don't redisplay a user that's gone
+            }
+        }
+    ?>
+    <div class="position-relative user-picker" data-field-id="<?= (int) $cf['id'] ?>" style="max-width:400px;">
+        <input type="text" class="form-control user-picker-search"
+               id="up_input_<?= (int) $cf['id'] ?>"
+               placeholder="<?= e($cf['placeholder'] ?: 'Start typing a name…') ?>"
+               value="<?= e($upLabel) ?>" autocomplete="off"
+               <?= $cfRequired ? 'data-required="1"' : '' ?>>
+        <input type="hidden" class="user-picker-value" name="<?= e($cfKey) ?>"
+               id="up_value_<?= (int) $cf['id'] ?>" value="<?= e($upId) ?>">
+        <div id="up_drop_<?= (int) $cf['id'] ?>" class="mention-dropdown"
+             style="display:none;position:absolute;top:100%;left:0;z-index:1050;width:100%;"></div>
+    </div>
+
+    <?php elseif ($cf['field_type'] === 'cc'): ?>
+    <div id="cc_badges_<?= (int) $cf['id'] ?>" class="d-flex flex-wrap gap-2 mb-2"></div>
+    <div id="cc_hidden_<?= (int) $cf['id'] ?>"></div>
+    <div class="position-relative" style="max-width:400px;">
+        <input type="text" class="form-control cc-field-input"
+               id="cc_input_<?= (int) $cf['id'] ?>"
+               data-field-id="<?= (int) $cf['id'] ?>"
+               placeholder="Search by name or email…" autocomplete="off"
+               <?= $cfRequired ? 'data-required="1"' : '' ?>>
+        <div id="cc_drop_<?= (int) $cf['id'] ?>" class="mention-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:1050;width:100%;"></div>
+    </div>
+
+    <?php elseif ($cf['field_type'] === 'dependent'):
+        $config  = $cf['config'] ? (is_string($cf['config']) ? json_decode($cf['config'], true) : $cf['config']) : [];
+        $levels  = (int) ($config['levels']   ?? 3);
+        $l1Label = $config['l1_label'] ?? 'Category';
+        $l2Label = $config['l2_label'] ?? 'Subcategory';
+        $l3Label = $config['l3_label'] ?? 'Item';
+        $l1Opts  = array_filter($cfOpts, fn($o) => !$o['parent_option_id']);
+    ?>
+    <div class="row g-2" id="dep_wrap_<?= (int) $cf['id'] ?>">
+        <div class="col-md-4">
+            <label class="form-label small"><?= e($l1Label) ?></label>
+            <select class="form-select form-select-sm dep-l1"
+                    name="<?= e($cfKey) ?>_l1"
+                    data-field="<?= (int) $cf['id'] ?>" <?= $requiredAttr ?>>
+                <option value="">— Select —</option>
+                <?php foreach ($l1Opts as $opt): ?>
+                <option value="<?= (int) $opt['id'] ?>"><?= e($opt['label']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-md-4" id="dep_l2_wrap_<?= (int) $cf['id'] ?>" style="display:none;">
+            <label class="form-label small"><?= e($l2Label) ?></label>
+            <select class="form-select form-select-sm dep-l2"
+                    name="<?= e($cfKey) ?>_l2"
+                    data-field="<?= (int) $cf['id'] ?>">
+                <option value="">— Select —</option>
+            </select>
+        </div>
+        <?php if ($levels >= 3): ?>
+        <div class="col-md-4" id="dep_l3_wrap_<?= (int) $cf['id'] ?>" style="display:none;">
+            <label class="form-label small"><?= e($l3Label) ?></label>
+            <select class="form-select form-select-sm dep-l3"
+                    name="<?= e($cfKey) ?>_l3"
+                    data-field="<?= (int) $cf['id'] ?>">
+                <option value="">— Select —</option>
+            </select>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>

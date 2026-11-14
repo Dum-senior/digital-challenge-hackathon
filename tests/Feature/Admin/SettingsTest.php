@@ -1,0 +1,325 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\Admin;
+
+use Tests\Support\TestCase;
+
+/**
+ * Admin settings pages — general, locations, priorities, types, groups,
+ * business hours, branding, CSAT, automations, escalations, SLA, custom fields,
+ * danger zone.
+ * All of these are admin-only and must return 403 for agents/portal users.
+ */
+class SettingsTest extends TestCase
+{
+    // ── Settings pages load ───────────────────────────────────────────────────
+
+    /** @dataProvider settingsPages */
+    public function test_settings_page_loads_for_admin(string $path, string $keyword): void
+    {
+        $r = $this->get($this->adminClient(), $path);
+        $this->assertOk($r, " — $path");
+        $this->assertSee($keyword, $r, " — expected «{$keyword}» on {$path}");
+    }
+
+    public static function settingsPages(): array
+    {
+        return [
+            ['/admin/settings',                     'Settings'],
+            ['/admin/settings/branding',            'Branding'],
+            ['/admin/settings/business-hours',      'Business Hours'],
+            ['/admin/settings/csat',                'CSAT'],
+            ['/admin/settings/email-templates',     'Email'],
+            ['/admin/settings/sla-policies',        'SLA'],
+            ['/admin/settings/automations',         'Automations'],
+            ['/admin/settings/escalations',         'Escalation'],
+            ['/admin/settings/scheduled-reports',   'Scheduled'],
+            ['/admin/settings/backup',              'Backup'],
+            ['/admin/workflows/ticket-fields',      'Custom'],
+            ['/admin/settings/ticket-statuses',     'Ticket Statuses'],
+            ['/admin/settings/danger-zone',         'Danger Zone'],
+        ];
+    }
+
+    // ── Branding-specific ─────────────────────────────────────────────────────
+
+    public function test_branding_page_shows_navbar_icon_field(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/branding');
+        $this->assertSee('navbar_icon', $r, ' — navbar icon input must be present on branding page');
+    }
+
+    public function test_branding_theme_save_apply_delete(): void
+    {
+        $admin    = $this->adminClient();
+        $original = getSetting('branding_primary_color', '#4f46e5');
+        try {
+            $this->post($admin, '/admin/settings/branding/themes', ['save' => '1', 'theme_name' => '[TEST] Theme']);
+            $this->assertSee('[TEST] Theme', $this->get($admin, '/admin/settings/branding'));
+
+            setSetting('branding_primary_color', '#123456');
+            $this->post($admin, '/admin/settings/branding/themes', ['apply' => '[TEST] Theme']);
+            $stmt = \Database::connect()->prepare('SELECT setting_value FROM settings WHERE setting_key = ?');
+            $stmt->execute(['branding_primary_color']);
+            $this->assertSame($original, $stmt->fetchColumn(), ' — applying the theme restores the saved colour');
+        } finally {
+            setSetting('branding_primary_color', $original);
+            $this->post($admin, '/admin/settings/branding/themes', ['delete' => '[TEST] Theme']);
+        }
+        $this->assertNotSee('[TEST] Theme', $this->get($admin, '/admin/settings/branding'));
+    }
+
+    /** @dataProvider brandIcons */
+    public function test_normalize_brand_icon(string $raw, string $expected): void
+    {
+        $this->assertSame($expected, normalizeBrandIcon($raw));
+    }
+
+    public static function brandIcons(): array
+    {
+        return [
+            ['bi-building',                         'bi-building'],
+            ['building',                            'bi-building'],
+            ['<i class="bi bi-laptop"></i>',        'bi-laptop'],
+            ['fa-solid fa-house',                   'fa-solid fa-house'],
+            ['fa-house',                            'fa-solid fa-house'],
+            ['fab fa-github',                       'fa-brands fa-github'],
+            ['<i class="fa-regular fa-bell"></i>',  'fa-regular fa-bell'],
+            ['bi-x" onmouseover="alert(1)',         'bi-x'],
+            ['  ',                                  ''],
+        ];
+    }
+
+    public function test_sanitize_svg_strips_script_and_whitens_icons(): void
+    {
+        $out = sanitizeSvg(
+            '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10">'
+            . '<script>alert(1)</script><foreignObject><div>x</div></foreignObject>'
+            . '<a href="javascript:alert(1)"><path d="M1 1"/></a>'
+            . '<path d="M0 0" onclick="alert(1)" ONLOAD="alert(1)" stroke="currentColor"/>'
+            . '<use xlink:href="javascript:alert(1)"/><use href="data:image/svg+xml,x"/><use href="#ok"/>'
+            . '<animate attributeName="href" to="javascript:alert(1)"/></svg>'
+        );
+        $this->assertNotNull($out);
+        foreach (['script', 'foreignObject', '<a', 'onclick', 'ONLOAD', 'javascript', 'data:', 'animate', 'currentColor'] as $bad) {
+            $this->assertStringNotContainsStringIgnoringCase($bad, $out);
+        }
+        $this->assertStringContainsString('<path d="M0 0"', $out);
+        $this->assertStringContainsString('href="#ok"', $out);
+        $this->assertStringContainsString('fill="#fff"', $out);
+        $this->assertStringContainsString('stroke="#fff"', $out);
+
+        $this->assertNull(sanitizeSvg('<!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="http://www.w3.org/2000/svg">&x;</svg>'));
+        $this->assertNull(sanitizeSvg('<html><body>not an svg</body></html>'));
+        $this->assertNull(sanitizeSvg('<svg>missing namespace</svg>'));
+        $this->assertNull(sanitizeSvg('not xml'));
+    }
+
+    // ── Email templates-specific ──────────────────────────────────────────────
+
+    public function test_email_templates_page_shows_csat_template(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/email-templates');
+        $this->assertSee('CSAT', $r, ' — CSAT Survey template must appear on email templates page');
+    }
+
+    public function test_email_templates_page_shows_customer_reminder_template(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/email-templates');
+        $this->assertSee('Customer Reminder', $r, ' — Customer Reminder template must appear on email templates page');
+    }
+
+    // ── Danger zone-specific ──────────────────────────────────────────────────
+
+    public function test_danger_zone_shows_reset_button(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/danger-zone');
+        $this->assertSee('Reset', $r, ' — Reset button must be present on danger zone page');
+    }
+
+    // ── Location CRUD ─────────────────────────────────────────────────────────
+
+    public function test_locations_list_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/locations');
+        $this->assertOk($r);
+        $this->assertSee('Locations', $r);
+    }
+
+    public function test_create_location_form_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/locations/create');
+        $this->assertOk($r);
+    }
+
+    public function test_create_and_delete_location(): void
+    {
+        $r = $this->post($this->adminClient(), '/admin/locations/create', [
+            'name' => '[TEST] Auto Location',
+        ]);
+        $this->assertTrue(in_array($r->getStatusCode(), [200, 302]));
+
+        $db  = \Database::connect();
+        $row = $db->prepare("SELECT id FROM locations WHERE name = '[TEST] Auto Location' LIMIT 1");
+        $row->execute();
+        if ($loc = $row->fetch()) {
+            $this->post($this->adminClient(), '/admin/locations/' . $loc['id'] . '/delete', []);
+        }
+    }
+
+    // ── Priority CRUD ─────────────────────────────────────────────────────────
+
+    public function test_priorities_list_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/priorities');
+        $this->assertOk($r);
+        $this->assertSee('Priorities', $r);
+    }
+
+    public function test_create_priority_form_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/priorities/create');
+        $this->assertOk($r);
+    }
+
+    public function test_create_and_delete_priority(): void
+    {
+        $r = $this->post($this->adminClient(), '/admin/priorities/create', [
+            'name'  => '[TEST] Auto Priority',
+            'color' => '#aabbcc',
+        ]);
+        $this->assertTrue(in_array($r->getStatusCode(), [200, 302]));
+
+        $db  = \Database::connect();
+        $row = $db->prepare("SELECT id FROM ticket_priorities WHERE name = '[TEST] Auto Priority' LIMIT 1");
+        $row->execute();
+        if ($p = $row->fetch()) {
+            $this->post($this->adminClient(), '/admin/priorities/' . $p['id'] . '/delete', []);
+        }
+    }
+
+    // ── Type CRUD ─────────────────────────────────────────────────────────────
+
+    public function test_types_list_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/types');
+        $this->assertOk($r);
+        $this->assertSee('Ticket Types', $r);
+    }
+
+    public function test_create_type_form_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/types/create');
+        $this->assertOk($r);
+    }
+
+    public function test_create_and_delete_type(): void
+    {
+        $r = $this->post($this->adminClient(), '/admin/types/create', [
+            'name' => '[TEST] Auto Type',
+        ]);
+        $this->assertTrue(in_array($r->getStatusCode(), [200, 302]));
+
+        $db  = \Database::connect();
+        $row = $db->prepare("SELECT id FROM ticket_types WHERE name = '[TEST] Auto Type' LIMIT 1");
+        $row->execute();
+        if ($t = $row->fetch()) {
+            $this->post($this->adminClient(), '/admin/types/' . $t['id'] . '/delete', []);
+        }
+    }
+
+    // ── Group CRUD ────────────────────────────────────────────────────────────
+
+    public function test_groups_list_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/groups');
+        $this->assertOk($r);
+        $this->assertSee('Groups', $r);
+    }
+
+    public function test_create_group_form_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/groups/create');
+        $this->assertOk($r);
+    }
+
+    public function test_create_and_delete_group(): void
+    {
+        $r = $this->post($this->adminClient(), '/admin/groups/create', [
+            'name' => '[TEST] Auto Group',
+        ]);
+        $this->assertTrue(in_array($r->getStatusCode(), [200, 302]));
+
+        $db  = \Database::connect();
+        $row = $db->prepare("SELECT id FROM groups WHERE name = '[TEST] Auto Group' LIMIT 1");
+        $row->execute();
+        if ($g = $row->fetch()) {
+            $this->post($this->adminClient(), '/admin/groups/' . $g['id'] . '/delete', []);
+        }
+    }
+
+    // ── Automation CRUD ───────────────────────────────────────────────────────
+
+    public function test_automations_list_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/automations');
+        $this->assertOk($r);
+    }
+
+    public function test_create_automation_form_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/automations/create');
+        $this->assertOk($r);
+    }
+
+    // ── Escalation CRUD ───────────────────────────────────────────────────────
+
+    public function test_escalations_list_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/escalations');
+        $this->assertOk($r);
+    }
+
+    public function test_create_escalation_form_loads(): void
+    {
+        $r = $this->get($this->adminClient(), '/admin/settings/escalations/create');
+        $this->assertOk($r);
+    }
+
+    // ── Role enforcement ──────────────────────────────────────────────────────
+
+    /** @dataProvider settingsPagePaths */
+    public function test_agent_cannot_access_settings_pages(string $path): void
+    {
+        $r = $this->get($this->agentClient(), $path, follow: false);
+        $this->assertForbidden($r, " — agent should not access $path");
+    }
+
+    /** @dataProvider settingsPagePaths */
+    public function test_portal_cannot_access_settings_pages(string $path): void
+    {
+        $r = $this->get($this->portalClient(), $path, follow: false);
+        $this->assertForbidden($r, " — portal should not access $path");
+    }
+
+    public static function settingsPagePaths(): array
+    {
+        return [
+            // /admin/settings itself is a staff landing as of v2.66.0 — every staff
+            // role may open it (it shows only their permitted nav). The gated config
+            // sub-pages below are what non-permitted staff are blocked from.
+            ['/admin/settings/branding'],
+            ['/admin/settings/business-hours'],
+            ['/admin/settings/sla-policies'],
+            ['/admin/settings/automations'],
+            ['/admin/settings/escalations'],
+            ['/admin/settings/danger-zone'],
+            ['/admin/locations'],
+            ['/admin/priorities'],
+            ['/admin/types'],
+            ['/admin/groups'],
+        ];
+    }
+}

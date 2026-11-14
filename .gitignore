@@ -1,0 +1,54 @@
+.env
+/vendor/
+/public/uploads/avatars/*
+/public/uploads/field-images/*
+/public/uploads/branding/*
+!/public/uploads/avatars/.gitkeep
+*.log
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+export_sample.csv
+.VSCodeCounter/
+kb_articles.csv
+/storage/backups/*.zip
+/storage/pwa/*
+!/storage/pwa/.gitkeep
+/storage/attachments/*
+# Single-instance lock files for the cron scripts (see src/CronRun.php) —
+# runtime state, recreated on demand.
+/storage/locks/
+.phpunit.result.cache
+test-results*.txt
+
+# Rescue script — canonical copy lives in scripts/admin/rescue.php.
+# Never commit a working copy at the webroot or project root.
+/public/rescue.php
+/rescue.php
+
+# Local-only ops/credential helpers — these hold production secrets (e.g. the
+# deploy SSH/sudo password) and must NEVER be committed, especially before the
+# public GitHub push.
+/pw.txt
+/check_prod.py
+/scripts/_prod_run.py
+.claude/*
+
+.claude/settings.json
+
+# Internal deploy script — contains production host/path details.
+# Keep this out of the public repo.
+/scripts/deploy.py
+scripts/generate_schema_diagram.py
+
+# Video walkthrough working files (screenshots, audio, video edits).
+/docs/screenshots/agent-walkthrough/
+.playwright-mcp/
+
+# Local-only credits roll (easter egg) + its music bed. Keep off GitHub.
+# The route file is conditionally require()d, so its absence is harmless.
+/src/routes/credits.php
+/docs/screenshots/agent-walkthrough/audio/Frolic - Luciano Michelini.mp3

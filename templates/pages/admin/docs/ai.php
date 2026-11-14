@@ -1,0 +1,383 @@
+<?php
+$layout       = 'app';
+$pageTitle    = 'Docs: AI Classification';
+$sidebarItems = adminSidebar('docs');
+$breadcrumbs  = [['label'=>'Admin','url'=>'/admin'],['label'=>'Docs','url'=>'/admin/docs'],['label'=>'AI Classification']];
+?>
+<div class="row g-4">
+<div class="col-lg-3"><?php require ROOT_DIR . '/templates/partials/docs-nav.php'; ?></div>
+<div class="col-lg-9">
+
+<h2 class="fw-bold mb-1">AI Classification</h2>
+<p class="text-muted mb-3">OpenHelpDesk can use a large language model (Anthropic Claude or OpenAI) to triage tickets. There are five features:</p>
+<ul class="text-muted mb-3">
+    <li><strong>Skill classification</strong> decides which agent skills a new ticket needs and feeds the <a href="/admin/docs/automations#group-auto-assign">AI Skill-Based</a> auto-assign strategy.</li>
+    <li><a href="#no-wrong-door"><strong>"No Wrong Door" routing</strong></a> picks the right group for tickets of a catch-all type.</li>
+    <li><a href="#duplicate-detection"><strong>Duplicate detection</strong></a> warns the person submitting a ticket that it may already have been reported.</li>
+    <li><a href="#similar-tickets"><strong>Similar past tickets</strong></a> shows agents earlier tickets about the same problem.</li>
+    <li><strong>Sentiment priority bump</strong> raises the priority of angry or urgent tickets.</li>
+</ul>
+<div class="alert alert-info small mb-4"><i class="bi bi-info-circle me-2"></i>
+    Every feature needs <strong>Enable AI ticket classification</strong> switched on and an API key saved at <a href="/admin/settings/ai"><strong>Settings → Automation → AI Classification</strong></a>, which needs the <strong>Manage AI classification</strong> permission. Confidential ticket types are never sent to the provider.
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-diagram-3 text-primary me-2"></i>How Skill Classification Works</h5>
+<ol class="text-muted mb-0">
+    <li>A new ticket arrives from the portal, a staff form, the API or floor mode. Tickets created from inbound email are classified too, unless you switch off <strong>Classify tickets created from inbound email</strong>.</li>
+    <li>If AI is enabled and the ticket type is <strong>not</strong> confidential, OpenHelpDesk sends the subject + body plus the candidate skill list (global skills + the destination group's skills) to the configured provider.</li>
+    <li>The provider returns JSON: <code>skill_ids</code>, a confidence score, and a sentiment label.</li>
+    <li>Result is stored in <code>ai_classifications</code> and pointed at by <code>tickets.ai_classification_id</code>. The ticket also gets a denormalised <code>ai_sentiment</code> for fast filtering.</li>
+    <li>If the group's auto-assign strategy is <strong>AI Skill-Based</strong> AND confidence ≥ threshold, the routing engine picks the least-loaded group member who holds <em>all</em> the suggested skills. Otherwise it falls through to the group's configured fallback (load-based, round-robin, or leave unassigned).</li>
+    <li>If the AI flagged sentiment as "angry" or "urgent" and the bump toggle is on, ticket priority is bumped one notch and a timeline entry is recorded.</li>
+</ol>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" id="no-wrong-door">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-signpost-split text-info me-2"></i>"No Wrong Door" — Let AI Pick the Group</h5>
+<p class="text-muted mb-3">Some patron requests don't fit a clear category — the patron knows they need help but doesn't know which team handles it. The skill classifier above picks <em>which agent</em> handles a ticket within a group it's already in; the <strong>No Wrong Door</strong> flag adds a layer above that, picking <em>which group</em> handles the ticket in the first place.</p>
+
+<h6 class="fw-semibold mt-3 mb-2">When to use it</h6>
+<ul class="text-muted mb-3">
+    <li>You have a generic portal entry like <em>"I'm not sure who handles this"</em> or <em>"Help — anything"</em> and want patrons to use it without picking a category.</li>
+    <li>You want a single inbox for ambiguous requests but don't want a human triager to read each one — AI fans them out to the right team automatically.</li>
+    <li>Your library has departments with clearly distinct domains (Branch IT, Cataloguing, Facilities, HR, Programming, etc.) and the body of a ticket usually makes the right group obvious.</li>
+</ul>
+
+<h6 class="fw-semibold mt-3 mb-2">How it works</h6>
+<ol class="text-muted mb-3">
+    <li>Edit a ticket type at <a href="/admin/types"><strong>Settings → Organization → Ticket Types</strong></a> and tick <strong><i class="bi bi-signpost-split me-1"></i>Let AI route this to the best group ("No Wrong Door")</strong>. The flag is mutually exclusive with <strong>Confidential</strong> — confidential bodies are never sent to a third-party provider.</li>
+    <li>Set the type's <strong>Default Group</strong> to your <em>fallback queue</em> — the team whose members handle anything AI couldn't route. This doubles as the "No Wrong Door" team. Make sure it has agents in it.</li>
+    <li>At <a href="/admin/groups"><strong>Settings → Organization → Groups</strong></a>, give every group that should be a routing candidate a <strong>clear, specific description</strong>. <em>This is the only signal AI uses to pick.</em> Groups with an empty description are excluded from the candidate pool.</li>
+    <li>When a patron submits a ticket of that type, AI receives the subject + body plus every non-confidential group's name &amp; description and returns one of: a chosen <code>group_id</code>, or <code>null</code> if it can't decide. The ticket is moved to the chosen group <strong>only if</strong> the model's confidence clears the same threshold the skill classifier uses (default 0.7). Below that — or if AI returns null — the ticket stays in the <strong>Default Group</strong> queue.</li>
+    <li>Once the group is settled, the existing skill classifier runs against <em>that</em> group's skills, and auto-assignment proceeds normally. So a ticket can be routed to "Branch IT" by AI, then assigned to the on-shift Branch IT agent who holds the matching skill.</li>
+</ol>
+
+<h6 class="fw-semibold mt-3 mb-2">Audit trail</h6>
+<p class="text-muted mb-2">Every routing decision, applied or skipped, is recorded. It appears as an <strong>AI Group Routing</strong> card on the admin ticket page, above the AI Classification card, and as a staff-only timeline note. The card shows:</p>
+<ul class="text-muted mb-3">
+    <li><span class="badge bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle me-1"></i>Routed to <em>Group</em></span> — AI picked confidently and the ticket was moved.</li>
+    <li><span class="badge bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-question-circle me-1"></i>No confident match</span> — AI returned <code>null</code>; ticket stayed in the Default Group.</li>
+    <li><span class="badge bg-warning bg-opacity-10 text-warning"><i class="bi bi-dash-circle me-1"></i>Suggested <em>Group</em> (below threshold)</span> — AI picked a group but its confidence was below the threshold, so the ticket stayed in the Default Group.</li>
+</ul>
+<p class="text-muted mb-0">The card also shows the AI's one-sentence reasoning, the provider/model, and call latency. Use the audit trail to tune your group descriptions: if you keep seeing "Suggested X (below threshold)" pointing at the right group, your description for X is too vague to satisfy the threshold — sharpen it. If you see confident routes to the wrong group, the descriptions are misleading or overlapping.</p>
+
+<h6 class="fw-semibold mt-3 mb-2">Spotting AI-routed types in the list</h6>
+<p class="text-muted mb-0">The <a href="/admin/types">Ticket Types</a> list shows a small <i class="bi bi-signpost-split text-info"></i> icon beside every type with <strong>No Wrong Door</strong> on, alongside the <i class="bi bi-shield-lock text-warning"></i> for confidential types. Hover for a tooltip. The <a href="/admin/types/matrix">Type Settings Matrix</a> shows every type's AI settings side by side.</p>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" id="type-save-check">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-plug text-warning me-2"></i>Connection Check When Saving a Ticket Type</h5>
+<p class="text-muted mb-2">When you save a ticket type with <em>No Wrong Door</em>, <em>Check for duplicates on submit</em> or <em>Show similar past tickets to agents</em> ticked, OpenHelpDesk first runs a live test against your AI provider. If AI is switched off, has no key, or the test fails, a warning explains why and links to the AI settings and these docs. You can then:</p>
+<ul class="text-muted mb-2">
+    <li><strong>Close and edit</strong> to go back to the form, or</li>
+    <li><strong>Save anyway</strong>. Until AI works, tickets of that type simply stay in the type's Default Group, with no AI routing or duplicate checks.</li>
+</ul>
+<p class="text-muted mb-0">Confidential types can't use these features, so no test runs for them.</p>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" id="duplicate-detection">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-files text-info me-2"></i>Duplicate-Ticket Detection</h5>
+<p class="text-muted mb-3">Sites with multiple shifts often file the same ticket twice — staff don't routinely scan every open ticket before opening their own. Duplicate detection asks the AI, at submit time, whether the new ticket looks like one that already exists, and warns the submitter before the duplicate is created.</p>
+
+<h6 class="fw-semibold mt-3 mb-2">How it works</h6>
+<ol class="text-muted mb-3">
+    <li>When someone clicks <strong>Submit</strong> on a ticket type with duplicate detection on, AI compares the new subject and description with up to 30 recent candidates. Candidates are open tickets created in the last 14 days that are not merged, not of a confidential type, and visible to the person submitting. For staff that means the tickets they can see. For requesters it means their own tickets, plus their location's tickets if they have Location Ticket Visibility.</li>
+    <li>Any match scoring above the type's confidence threshold is shown in a warning card on the create form: <em>"Oops! It looks like someone else might have already submitted a ticket for this issue."</em></li>
+    <li>The submitter can click <strong>Click here to see this ticket</strong> to preview the matched ticket — subject, status, when it was opened, who reported it, description, and reply count — in a modal, without leaving the form.</li>
+    <li>If it really is a different issue, they click <strong>Create anyway — This is a Different Issue</strong> to override and submit normally.</li>
+</ol>
+
+<h6 class="fw-semibold mt-3 mb-2">Turning it on</h6>
+<p class="text-muted mb-2">Duplicate detection is configured <strong>per ticket type</strong>, not globally. Edit a ticket type at <a href="/admin/types"><strong>Settings → Organization → Ticket Types</strong></a>:</p>
+<ul class="text-muted mb-3">
+    <li>Tick <strong>Check for duplicates on submit</strong> to enable it for that type.</li>
+    <li>Set the <strong>Match confidence threshold</strong> (0.50–0.99, default 0.75) — higher means only very close matches are flagged.</li>
+    <li>The toggle is blocked while <strong>Confidential</strong> is checked — confidential bodies are never sent to an AI provider, and confidential tickets never appear as candidate matches.</li>
+</ul>
+
+<div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-2"></i>
+    The check is wired into all three create paths (portal, agent/admin form, and floor-mode quick-create) — it is <strong>not</strong> a customer-only feature; agents creating a ticket see the same warning. The popup only appears when <strong>both</strong> conditions hold for the chosen ticket type: <strong>Check for duplicates on submit</strong> is enabled on that type, <em>and</em> AI is switched on with a key saved. If either is missing — or if a near-duplicate simply isn't found — no popup shows for anyone, agent or portal. The check also <strong>soft-fails</strong>: if the provider times out or errors, the ticket is created normally — duplicate detection never blocks submission. When a submitter overrides the warning, an <code>ai_duplicate_warned</code> note is added to the new ticket's timeline (visible to admins) recording which tickets it was flagged against.
+</div>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" id="similar-tickets">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-diagram-3 text-info me-2"></i>Similar Past Tickets</h5>
+<p class="text-muted mb-3">Duplicate detection (above) fires at <em>submit</em> time and looks only at recent open tickets. <strong>Similar past tickets</strong> is the agent-facing counterpart: when an agent or admin <em>opens</em> a ticket, a sidebar panel surfaces the most relevant tickets from the <em>whole</em> archive — including resolved and closed ones — so they can reuse an earlier fix instead of solving the same problem from scratch.</p>
+
+<h6 class="fw-semibold mt-3 mb-2">How it works</h6>
+<ol class="text-muted mb-3">
+    <li>The panel loads <strong>asynchronously</strong> after the ticket page renders, so the AI call never blocks the page.</li>
+    <li><strong>Stage 1 — retrieval (no API call).</strong> A MySQL <code>FULLTEXT</code> index on <code>tickets(subject, description)</code> narrows the archive to roughly the 20 most lexically-similar candidates.</li>
+    <li><strong>Stage 2 — rerank.</strong> Those candidates go to the configured provider, which scores each for relevance and writes a one-line note on how it relates. Results are scoped to what the viewing agent is allowed to see.</li>
+    <li>The result is cached per ticket in <code>ai_similarity_classifications</code>, so the LLM runs <strong>once per ticket</strong>, not once per page view. A refresh button forces a recompute.</li>
+    <li>Matches scored below <strong>Minimum match to show</strong> (on the AI settings page, under the master switch) are hidden. The default is 0, which shows every match. Set it to 80, for example, to list only tickets the AI rates 80% or higher. The filter runs when the panel loads, so a new value applies to cached results straight away, with no new AI call.</li>
+</ol>
+
+<h6 class="fw-semibold mt-3 mb-2">Turning it on — a global switch <em>and</em> a per-type switch</h6>
+<p class="text-muted mb-2">The feature has two independent controls that work together:</p>
+<ul class="text-muted mb-3">
+    <li><strong>Global master switch</strong> — <a href="/admin/settings/ai"><strong>Settings → Automation → AI Classification</strong></a> → <strong>Show similar past tickets to agents on the ticket view</strong> (off by default). This is the master: while it's <strong>off</strong>, the panel is hidden on <em>every</em> ticket regardless of any per-type setting.</li>
+    <li><strong>Per-ticket-type toggle</strong> — edit a type at <a href="/admin/types"><strong>Settings → Organization → Ticket Types</strong></a> → <strong>Show similar past tickets to agents</strong>. When the master switch is on, the panel appears only on the ticket types whose own toggle is also on. New types default to <strong>on</strong>.</li>
+</ul>
+<p class="text-muted mb-3">So the effective rule is <strong>AI on <em>and</em> master on <em>and</em> per-type on <em>and</em> not confidential</strong>. Under the master switch, the AI settings page lists which types have it on, which have it off, and which are excluded as confidential. That summary updates as you flip the switch, before you save. The per-type toggle switches itself off when a type is marked <strong>Confidential</strong>, as duplicate detection and "No Wrong Door" routing do. The <a href="/admin/types/matrix">Type Settings Matrix</a> has an <strong>AI similar tickets</strong> column so you can see every type's setting at a glance.</p>
+
+<div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-2"></i>
+    Confidential ticket types are <strong>never</strong> scanned and never appear as candidate matches — the same guarantee as duplicate detection. Like the other AI features it soft-fails: if the provider errors or times out, the panel simply shows nothing; the ticket page is unaffected.
+</div>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-shield-lock text-success me-2"></i>Privacy &amp; Confidential Tickets</h5>
+<ul class="text-muted mb-0">
+    <li>Tickets whose <strong>type is marked Confidential</strong> are <em>never</em> sent to the AI provider — the classifier short-circuits before any HTTP call. No exception, no override, no admin opt-in.</li>
+    <li>Ticket subjects are truncated to 200 characters and bodies to 4,000 before sending. HTML is stripped.</li>
+    <li>API keys are stored in the <code>settings</code> table (same place as your SMTP password) and never displayed in clear text after first save.</li>
+    <li>The classifier uses HTTPS to <code>api.anthropic.com</code> or <code>api.openai.com</code> — review each provider's data-handling policy for retention details.</li>
+</ul>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-broadcast text-primary me-2"></i>Choosing a Provider</h5>
+<div class="table-responsive">
+<table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Provider</th><th>Default model</th><th>Notes</th></tr></thead>
+    <tbody class="text-muted">
+        <tr>
+            <td><strong>Anthropic Claude</strong> <span class="badge bg-secondary ms-1">recommended</span></td>
+            <td><code>claude-haiku-4-5</code></td>
+            <td>Fast, low cost, strong on classification. Switch to Sonnet 4.6 for trickier libraries with overlapping skill names.</td>
+        </tr>
+        <tr>
+            <td><strong>OpenAI</strong></td>
+            <td><code>gpt-4o-mini</code></td>
+            <td>Use if you already have an OpenAI account or need GPT-specific behaviours. Forces <code>response_format=json_object</code>.</td>
+        </tr>
+    </tbody>
+</table>
+</div>
+<div class="alert alert-info small mt-3 mb-0"><i class="bi bi-info-circle me-2"></i>
+    The model dropdown is auto-populated from each provider's API. Click <strong>Refresh model list</strong> on <a href="/admin/settings/ai">Settings → Automation → AI Classification</a> after a provider releases something new — no code change needed.
+</div>
+
+<h6 class="fw-semibold mt-4 mb-2">Cost comparison (Anthropic)</h6>
+<p class="text-muted small mb-2">Approximate per-classification cost at ~500 input + ~100 output tokens (typical ticket).</p>
+<div class="table-responsive">
+<table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Model</th><th>Per ticket</th><th>Per 1,000 tickets</th><th>When to use</th></tr></thead>
+    <tbody class="text-muted">
+        <tr>
+            <td><code>claude-haiku-4-5</code> <span class="badge bg-secondary ms-1">recommended</span></td>
+            <td>~$0.001</td>
+            <td>~$1</td>
+            <td>Day-to-day classification. Fast and accurate enough for the skill-matching task.</td>
+        </tr>
+        <tr>
+            <td><code>claude-sonnet-4-6</code></td>
+            <td>~$0.005</td>
+            <td>~$5</td>
+            <td>If Haiku misclassifies repeatedly on tickets with overlapping skill names or subtle context.</td>
+        </tr>
+        <tr>
+            <td><code>claude-opus-4-7</code></td>
+            <td>~$0.015</td>
+            <td>~$15</td>
+            <td>Overkill for routine classification — use only if you've measured Sonnet getting things wrong on real tickets.</td>
+        </tr>
+    </tbody>
+</table>
+</div>
+<div class="alert alert-warning small mt-3 mb-0"><i class="bi bi-exclamation-triangle me-2"></i>
+    Default to Haiku unless you have evidence it's wrong. A fresh install picks Haiku, but if you accidentally tested with Opus and saved that, your $25 of Anthropic credit will burn through ~10× faster.
+</div>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-sliders text-primary me-2"></i>Setting It Up</h5>
+<ol class="text-muted mb-3">
+    <li>Go to <a href="/admin/settings/ai"><strong>Settings → Automation → AI Classification</strong></a>.</li>
+    <li>Pick your provider, paste the API key, and click <strong>Refresh model list</strong> (this also validates the key). Leave the key box blank later to keep the saved key.</li>
+    <li>Pick a model from the dropdown and click <strong>Test connection</strong> — you should see a green success flash with the round-trip time.</li>
+    <li>Review <strong>Routing &amp; Tuning</strong> (below).</li>
+    <li>Tick <strong>Enable AI ticket classification</strong> at the top and click <strong>Save settings</strong>.</li>
+    <li>Edit each group whose tickets should be auto-routed via AI: <a href="/admin/groups">Settings → Organization → Groups → Edit</a> → set strategy to <strong>AI Skill-Based</strong>.</li>
+    <li>Optionally run <strong>Classify existing tickets</strong> at the bottom of the AI settings page to back-fill open tickets created before the feature was on.</li>
+</ol>
+<h6 class="fw-semibold mb-2">Routing &amp; Tuning</h6>
+<div class="table-responsive">
+<table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th style="width:240px;">Setting</th><th>What it does</th></tr></thead>
+    <tbody class="text-muted">
+        <tr><td class="fw-semibold">Confidence threshold</td><td>Default 0.7. Below it, skill suggestions and "No Wrong Door" picks are ignored for routing. See <a href="#confidence">Confidence Threshold</a>.</td></tr>
+        <tr><td class="fw-semibold">Max output tokens</td><td>Cap on each AI response (50&ndash;4000, default 500).</td></tr>
+        <tr><td class="fw-semibold">Wall-clock timeout (s)</td><td>2&ndash;30 seconds, default 5. A slower call is abandoned and the ticket carries on without AI.</td></tr>
+        <tr><td class="fw-semibold">Bump priority by one level&hellip;</td><td>The <a href="#sentiment">sentiment priority bump</a>.</td></tr>
+        <tr><td class="fw-semibold">Classify tickets created from inbound email</td><td>On by default. Switch it off to classify only tickets created on the website and through the API.</td></tr>
+        <tr><td class="fw-semibold">Show similar past tickets&hellip;</td><td>The master switch for <a href="#similar-tickets">Similar Past Tickets</a>.</td></tr>
+        <tr><td class="fw-semibold">Minimum match to show</td><td>0&ndash;100%, default 0 (show all). Similar past tickets scored below it are hidden.</td></tr>
+    </tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-flask text-primary me-2"></i>Testing It Works</h5>
+<p class="text-muted mb-2">Three ways to validate the integration in escalating order of scope:</p>
+<ol class="text-muted mb-0">
+    <li><strong>Single-ticket smoke test.</strong> Open any ticket from the admin ticket list → look at the right-hand sidebar → click <strong>Classify now</strong> (or <strong>Re-classify</strong>) on the AI Classification card. The card refreshes with the suggestion, confidence, sentiment, and AI reasoning. Best for "does this work the way I think it does?" before you spend any volume.</li>
+    <li><strong>Small batch (10–25 tickets).</strong> On <a href="/admin/settings/ai">Settings → Automation → AI Classification</a>, scroll to <strong>Classify existing tickets</strong>, set the count to 25, click <strong>Run backfill</strong>. Picks up open / in-progress / pending tickets that don't already have a classification, skips confidential types automatically, returns a summary of <code>classified: X / failed: Y</code>.</li>
+    <li><strong>Full sweep via cron.</strong> For larger backfills run the CLI directly: <code>php scripts/ai-classify-backfill.php --limit=200 --dry-run</code> first to preview, then drop <code>--dry-run</code>. Use <code>--statuses=open,in_progress,pending,resolved,closed</code> to include closed tickets if you're testing classification accuracy against historical data.</li>
+</ol>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-bug text-warning me-2"></i>Debugging Connection Issues</h5>
+<p class="text-muted mb-2">When the regular <strong>Test connection</strong> button comes back with a generic message and you can't tell why, use the <strong>Debug</strong> page (orange button on the AI settings page, or visit <a href="/admin/settings/ai/debug">/admin/settings/ai/debug</a>). It bypasses the classifier abstraction and makes raw HTTP calls so you see the full response — status code, response headers, body, latency, cURL error.</p>
+
+<h6 class="fw-semibold mt-3 mb-2">What it can tell you</h6>
+<ul class="text-muted mb-3">
+    <li><strong>Models list only</strong> — uses a free <code>GET /v1/models</code> endpoint that doesn't consume credits. If this works, your key is valid and your auth is fine. If it doesn't, the problem is the key itself or your network.</li>
+    <li><strong>Message only</strong> — sends a tiny <code>POST /v1/messages</code> probe. Verifies actual generation billing. If this fails after Models works, the problem is billing/quota/spend-cap, not auth.</li>
+    <li><strong>Both</strong> — runs both calls in sequence so you can see which one breaks.</li>
+</ul>
+
+<h6 class="fw-semibold mt-3 mb-2">Decoding common errors</h6>
+<div class="table-responsive">
+<table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Status</th><th>Message</th><th>Root cause</th></tr></thead>
+    <tbody class="text-muted">
+        <tr><td>200</td><td>—</td><td>Working. If OpenHelpDesk's classifier still fails, the issue is in the OpenHelpDesk side — check error logs.</td></tr>
+        <tr><td>401</td><td>Unauthorized</td><td>Wrong key, revoked key, or whitespace in the pasted value. Generate a new one.</td></tr>
+        <tr><td>403</td><td>Forbidden</td><td>Workspace permission issue or region block.</td></tr>
+        <tr><td>400</td><td>"credit balance is too low"</td><td>Workspace spend cap is $0 even though the org has credits. See the next card for the fix.</td></tr>
+        <tr><td>404</td><td>"model_not_found"</td><td>The saved model name is wrong/deprecated. Run a Models test alone to see the valid list, then update the dropdown.</td></tr>
+        <tr><td>429</td><td>"rate_limit"</td><td>Hitting the workspace's per-minute cap. Slow down or raise the cap.</td></tr>
+        <tr><td>5xx</td><td>—</td><td>Provider is having problems. Try again in a few minutes.</td></tr>
+        <tr><td>0 / cURL error</td><td>—</td><td>DNS, firewall, or outbound HTTPS blocked from the server. Test <code>curl https://api.anthropic.com</code> from the host shell.</td></tr>
+    </tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-wallet2 text-warning me-2"></i>Workspace Spend Caps (the gotcha)</h5>
+<p class="text-muted mb-2">Anthropic supports <strong>workspaces</strong> under your organization. The org-level credit balance shows up on the main billing page, but each workspace can have its own monthly spend limit — and a freshly-created workspace defaults to <strong>$0</strong>. The result: you add $25 to your org, see "$25 remaining," but the API still returns "credit balance is too low" because your API key is scoped to a workspace whose spend cap blocks every billable call.</p>
+<p class="text-muted mb-2">If <strong>Models list</strong> works on the debug page but <strong>Message</strong> returns the credit error, this is almost certainly the cause. Two ways to fix it:</p>
+<ol class="text-muted mb-0">
+    <li><strong>Raise the workspace's spend limit.</strong> In <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic Console</a> → <strong>Workspaces</strong> → click your workspace → <strong>Limits</strong> tab → set a monthly cap (or leave blank to inherit the org limit).</li>
+    <li><strong>Generate a new key in the Default workspace.</strong> Click <strong>API keys</strong> in the Console → <strong>Create Key</strong> → make sure the workspace selector says Default → paste the new key into <a href="/admin/settings/ai">OpenHelpDesk's AI settings page</a>.</li>
+</ol>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" id="confidence">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-thermometer-half text-primary me-2"></i>Confidence Threshold</h5>
+<p class="text-muted mb-2">The model returns a self-rated confidence between 0.0 and 1.0. Below your configured threshold, the suggestion is <strong>discarded</strong> for routing purposes — the ticket falls back to the group's fallback strategy or stays unassigned.</p>
+<ul class="text-muted mb-0">
+    <li><strong>0.5</strong> — accept most suggestions. Good while you're tuning.</li>
+    <li><strong>0.7</strong> (default) — only act on confident matches. Recommended starting point.</li>
+    <li><strong>0.85+</strong> — very strict. Most ambiguous tickets fall through to manual triage.</li>
+</ul>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" id="sentiment">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-emoji-frown text-warning me-2"></i>Sentiment-Driven Priority Bump</h5>
+<p class="text-muted mb-2">When the AI flags sentiment as <strong>angry</strong> or <strong>urgent</strong>, OpenHelpDesk can automatically bump priority up one level (e.g. Medium → High). Switch on <strong>Bump priority by one level when AI sentiment is "angry" or "urgent"</strong> on the AI settings page.</p>
+<ul class="text-muted mb-0">
+    <li>Bump fires on the AI verdict, regardless of group strategy — useful even when the destination group uses Round Robin or Manual.</li>
+    <li>Each ticket is bumped at most once (timeline entry <code>ai_priority_bumped</code> is the dedup marker).</li>
+    <li>"One level up" means the next priority further down the <a href="/admin/priorities">Ticket Priorities</a> list, so keep that list ordered from least to most urgent. A ticket already at the last priority isn't bumped. A ticket with no priority jumps to the last one.</li>
+    <li>"Frustrated" alone does not bump — that's a softer signal we surface for reporting only.</li>
+</ul>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-pencil-square text-primary me-2"></i>Override &amp; Re-Classify</h5>
+<p class="text-muted mb-2">The admin ticket page has an <strong>AI Classification</strong> card in the sidebar when AI is on or the ticket already has a verdict. Agents don't see this card. From there:</p>
+<ul class="text-muted mb-0">
+    <li><strong>Override</strong> — open a modal and tick the skills the ticket actually needs. Your selection replaces the AI's for routing; the original verdict stays on the record. The override is audit-logged as <code>ai.classification_override</code> and posted as an internal timeline entry.</li>
+    <li><strong>Re-classify</strong> — re-runs the AI call (e.g. after editing the subject / body). Creates a fresh <code>ai_classifications</code> row; history is preserved.</li>
+    <li><strong>Classify now</strong> — appears when a ticket has no classification yet (e.g. AI was disabled when it was created).</li>
+</ul>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-arrow-repeat text-primary me-2"></i>Backfilling Older Tickets</h5>
+<p class="text-muted mb-2">Two ways to classify tickets created before AI was enabled:</p>
+<ol class="text-muted mb-0">
+    <li><strong>UI button</strong> — at the bottom of <a href="/admin/settings/ai">Settings → Automation → AI Classification</a>. Enter how many tickets (1–200) and click <strong>Run backfill</strong>. Bounded by PHP's request timeout, but fine for batches up to ~25 with the default 5-second per-call cap.</li>
+    <li><strong>Cron / CLI</strong> — for larger backfills, run <code>php scripts/ai-classify-backfill.php --limit=N --statuses=open,in_progress,pending</code>. Add <code>--dry-run</code> to see what <em>would</em> be classified without making any API calls. The script logs to stdout; pipe to a logfile if scheduling.</li>
+</ol>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-shield-check text-primary me-2"></i>Failure Modes &amp; Resilience</h5>
+<ul class="text-muted mb-0">
+    <li><strong>Provider down / slow</strong> — the call has a hard wall-clock timeout (default 5s). If exceeded, the ticket is created normally and routing falls back. No portal user ever sees an error from a misbehaving AI provider.</li>
+    <li><strong>Bad JSON from the model</strong> — falls back. Logged to PHP error log.</li>
+    <li><strong>Skill ID hallucination</strong> — the parser strips any IDs not in the candidate list before persisting. The model can't invent skills.</li>
+    <li><strong>Confidence below threshold</strong> — verdict is stored (for reporting / override) but skipped for routing.</li>
+    <li><strong>API key missing</strong> — the factory returns null; the feature is silently disabled until configured.</li>
+</ul>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-clipboard-data text-primary me-2"></i>Audit &amp; Telemetry</h5>
+<ul class="text-muted mb-0">
+    <li>Every classification persists provider, model, latency, prompt + output token counts, and the raw provider response (for debugging).</li>
+    <li>Internal timeline entries: <code>ai_classified</code> on every classification, <code>ai_priority_bumped</code> when sentiment triggers a bump, <code>ai_override</code> when a human edits the suggestion. Portal users never see these, and staff can hide them with the <strong>AI notes</strong> switch on a ticket's timeline.</li>
+    <li>Audit log entries: <code>ai.settings_changed</code>, <code>ai.backfill_run</code>, <code>ai.classification_override</code> (visible in the <a href="/admin/audit-log">Audit Log</a>).</li>
+    <li>The Recent Classifications strip on the AI settings page surfaces the last 10 runs at a glance — handy for confirming the integration is healthy after a model swap.</li>
+    <li>The <a href="/admin/reports/ai-usage"><strong>AI Token Usage</strong></a> report totals tokens and estimated cost across all AI features. See <a href="/admin/docs/reports#ai-usage">Reports</a>.</li>
+</ul>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-magic text-primary me-2"></i>Suggesting Agent Skills</h5>
+<p class="text-muted mb-0"><strong>Suggest with AI</strong> on <a href="/admin/skills">Settings → Organization → Agent Skills</a> asks your provider to propose a skill list. It uses your <a href="/admin/settings/organization">Organization Type</a>, ticket types, groups and existing skills, and can also mine the subjects of recent tickets. Confidential types are never included. You choose which suggestions to create. See <a href="/admin/docs/users">Users &amp; Roles</a>.</p>
+</div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+<div class="card-body p-4">
+<h5 class="fw-semibold mb-3"><i class="bi bi-currency-dollar text-primary me-2"></i>Cost Sanity Check</h5>
+<p class="text-muted mb-0">A typical classification uses ~500 prompt tokens + ~100 output tokens. At the default Anthropic Haiku pricing (a fraction of a cent per call) that's well under $1 per 1,000 tickets. Monitor the latency / token counts on the Recent Classifications strip — anything wildly off suggests an unusually long ticket body or a prompt-injection attempt and is worth investigating.</p>
+</div>
+</div>
+
+</div><!-- col -->
+</div><!-- row -->

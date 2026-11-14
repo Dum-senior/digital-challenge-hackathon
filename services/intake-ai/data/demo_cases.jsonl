@@ -1,0 +1,20 @@
+{"text":"Не печатает принтер, кабинет 312","category":"peripherals","priority":"low"}
+{"text":"Принтер дымит","category":"peripherals","priority":"critical"}
+{"text":"На НТП с 09:00 нет данных счётчика","category":"telemetry","priority":"high"}
+{"text":"На КП-12 нет связи с OPC, IP 10.20.5.14","category":"automation","priority":"high"}
+{"text":"Во всём корпусе Б пропала сеть","category":"network","priority":"high"}
+{"text":"Ничего не работает","category":"unknown","priority":"medium"}
+{"text":"Не могу войти, учётка заблокирована","category":"access","priority":"medium"}
+{"text":"На компьютере требуют выкуп за файлы","category":"security","priority":"critical"}
+{"text":"VPN работает, но БД недоступна, 08001","category":"database","priority":"high"}
+{"text":"Сервер базы недоступен уже час, пострадало несколько отделов","category":"database","priority":"high"}
+{"text":"Кабинет 212: принтер мнет бумагу","category":"peripherals","priority":"low"}
+{"text":"У сотрудников истёк срок пароля","category":"access","priority":"medium"}
+{"text":"Не обновляются показания счётчика на НТП","category":"telemetry","priority":"high"}
+{"text":"Отсутствует связь OPC сервера с контроллером","category":"automation","priority":"high"}
+{"text":"Пользователи не могут открыть VPN","category":"network","priority":"medium"}
+{"text":"На принтере запах гари","category":"peripherals","priority":"critical"}
+{"text":"DNS не разрешает адрес внутреннего сервиса","category":"network","priority":"medium"}
+{"text":"Не открывается база данных по VPN","category":"database","priority":"high"}
+{"text":"Сервер БД возвращает 08001","category":"database","priority":"high"}
+{"text":"По всей сети наблюдаются перебои","category":"network","priority":"medium"}

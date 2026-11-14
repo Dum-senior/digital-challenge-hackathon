@@ -1,0 +1,384 @@
+<?php
+$layout      = 'app';
+$pageTitle   = 'My Profile';
+$breadcrumbs = [
+    ['label' => 'My Profile'],
+];
+?>
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <div class="rounded-circle bg-light text-dark d-flex align-items-center justify-content-center"
+                 style="width:56px;height:56px;font-size:1.25rem;font-weight:600;border:2px solid var(--ld-primary);">
+                <?= Auth::initials() ?>
+            </div>
+            <div>
+                <h2 class="fw-bold mb-0">My Profile</h2>
+                <span class="text-muted small"><?= e($user['email']) ?></span>
+                <span class="badge bg-primary ms-1"><?= e(ucfirst($user['role'])) ?></span>
+            </div>
+        </div>
+
+        <!-- Main profile form: name, appearance, notifications (no password fields).
+             Every control auto-saves on change via /profile/setting — there is no
+             Save button here; only the password form below still submits. -->
+        <form id="profileAutoSave" method="POST" action="/profile" data-autosave-url="/profile/setting">
+            <?= csrfField() ?>
+
+            <!-- Name -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-person me-1"></i>Personal Information
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="firstName" class="form-label">First Name</label>
+                            <input type="text" class="form-control" id="firstName" name="first_name"
+                                   value="<?= e(old('first_name', $user['first_name'])) ?>" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="lastName" class="form-label">Last Name</label>
+                            <input type="text" class="form-control" id="lastName" name="last_name"
+                                   value="<?= e(old('last_name', $user['last_name'])) ?>" required>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Appearance -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-moon-stars me-1"></i>Appearance
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="theme" id="themeLight"
+                                   value="light" <?= ($theme ?? 'light') === 'light' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="themeLight">
+                                <i class="bi bi-sun me-1"></i>Light Mode
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="theme" id="themeDark"
+                                   value="dark" <?= ($theme ?? 'light') === 'dark' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="themeDark">
+                                <i class="bi bi-moon me-1"></i>Dark Mode
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ticket Timeline -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-clock-history me-1"></i>Ticket Timeline
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Choose the default order for activity on a ticket&rsquo;s timeline. You can also
+                        flip the order at any time by clicking the &ldquo;Timeline&rdquo; heading on a ticket.
+                    </p>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="timeline_sort" id="timelineSortDesc"
+                                   value="desc" <?= ($timelineSort ?? 'desc') === 'desc' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="timelineSortDesc">
+                                <i class="bi bi-sort-down me-1"></i>Newest first
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="timeline_sort" id="timelineSortAsc"
+                                   value="asc" <?= ($timelineSort ?? 'desc') === 'asc' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="timelineSortAsc">
+                                <i class="bi bi-sort-up me-1"></i>Oldest first
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if (roleIsAdmin($user['role'])): ?>
+            <!-- System Timeline Notes (admin only) -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-gear me-1"></i>System Timeline Notes
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-start gap-3">
+                        <div class="form-check form-switch mb-0 pt-1">
+                            <input class="form-check-input" type="checkbox"
+                                   name="system_notes_visible" id="systemNotesVisible" value="1"
+                                   <?= !empty($systemNotesVisible) ? 'checked' : '' ?>>
+                        </div>
+                        <label class="mb-0 flex-grow-1" for="systemNotesVisible" style="cursor:pointer;">
+                            <div class="fw-semibold small">
+                                <i class="bi bi-eye me-1 text-muted"></i>Show system notes in ticket timelines
+                            </div>
+                            <div class="text-muted" style="font-size:.8rem;">
+                                System notes are automated timeline entries with no human author &mdash;
+                                SLA timer events, escalation reminders, automatic group assignment, and AI
+                                classifications. Turn this off to hide all of them by default &mdash; they
+                                are never deleted, and you can still show or hide them per ticket with the
+                                toggle on each timeline.
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Timeline Notes (admin only) -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-robot me-1"></i>AI Timeline Notes
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-start gap-3">
+                        <div class="form-check form-switch mb-0 pt-1">
+                            <input class="form-check-input" type="checkbox"
+                                   name="ai_notes_visible" id="aiNotesVisible" value="1"
+                                   <?= !empty($aiNotesVisible) ? 'checked' : '' ?>>
+                        </div>
+                        <label class="mb-0 flex-grow-1" for="aiNotesVisible" style="cursor:pointer;">
+                            <div class="fw-semibold small">
+                                <i class="bi bi-eye me-1 text-muted"></i>Show AI notes in ticket timelines
+                            </div>
+                            <div class="text-muted" style="font-size:.8rem;">
+                                AI-generated system notes are added to ticket timelines automatically.
+                                Turn this off to hide them by default &mdash; they are never deleted, and
+                                you can still show or hide them per ticket with the toggle on each timeline.
+                                (Hiding all system notes above also hides these.)
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Notification Preferences -->
+            <div id="tour-portal-notifications" class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-bell me-1"></i>Email Notifications
+                </div>
+                <div class="card-body pb-1">
+                    <p class="text-muted small mb-3">Choose which events you want to receive emails about.</p>
+                    <?php $notifyUser = $profileUser; $notifyRole = $user['role'];
+                    require ROOT_DIR . '/templates/partials/notify-prefs.php'; ?>
+                </div>
+            </div>
+
+        </form>
+
+        <!-- Separate form for password change to prevent autofill interference -->
+        <form method="POST" action="/profile/password" class="mt-4">
+            <?= csrfField() ?>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-shield-lock me-1"></i>Change Password
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">Leave blank to keep your current password.</p>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="currentPassword" class="form-label">Current Password</label>
+                            <input type="password" class="form-control" id="currentPassword" name="current_password"
+                                   autocomplete="current-password">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="newPassword" class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="newPassword" name="new_password"
+                                   minlength="8" autocomplete="new-password">
+                            <div class="form-text">Minimum 8 characters.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" id="confirmPassword" name="confirm_password"
+                                   autocomplete="new-password">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-outline-secondary px-4">
+                <i class="bi bi-key me-1"></i>Update Password
+            </button>
+        </form>
+
+        <?php if (roleIsStaff($user['role'])): ?>
+        <!-- Two-Factor Authentication -->
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-transparent fw-semibold">
+                <i class="bi bi-shield-lock me-1"></i>Two-Factor Authentication
+            </div>
+            <div class="card-body">
+                <?php if ($profileUser['totp_enabled'] ?? false): ?>
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <span class="badge bg-success fs-6 px-3 py-2">
+                            <i class="bi bi-shield-check me-1"></i>2FA is enabled
+                        </span>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        Your account is protected with a time-based one-time password (TOTP) authenticator app.
+                        To disable 2FA, enter the 6-digit code from your authenticator app below.
+                    </p>
+                    <form method="POST" action="/profile/2fa/disable">
+                        <?= csrfField() ?>
+                        <div class="d-flex gap-2 align-items-end">
+                            <div>
+                                <label for="disableCode" class="form-label small fw-semibold mb-1">
+                                    Authenticator Code
+                                </label>
+                                <input type="text" class="form-control text-center fw-bold"
+                                       id="disableCode" name="code"
+                                       placeholder="000000"
+                                       maxlength="6"
+                                       inputmode="numeric"
+                                       pattern="\d{6}"
+                                       autocomplete="one-time-code"
+                                       required
+                                       style="letter-spacing:.3em;max-width:140px;">
+                            </div>
+                            <button type="button" class="btn btn-outline-danger"
+                                    data-bs-toggle="modal" data-bs-target="#disable2faModal">
+                                <i class="bi bi-shield-x me-1"></i>Disable 2FA
+                            </button>
+                        </div>
+                    </form>
+                <?php else: ?>
+                    <p class="text-muted small mb-3">
+                        Add an extra layer of security to your account by enabling two-factor authentication.
+                        You will be prompted for a 6-digit code from your authenticator app each time you sign in.
+                    </p>
+                    <a href="/profile/2fa/setup" class="btn text-white" style="background:var(--ld-primary);">
+                        <i class="bi bi-shield-plus me-1"></i>Set Up 2FA
+                    </a>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (Auth::isStaff()): ?>
+        <!-- Canned Responses (staff) — moved here from the sidebar -->
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-transparent fw-semibold">
+                <i class="bi bi-chat-square-text me-1"></i>Canned Responses
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Create and manage your personal reply snippets &mdash; pre-written responses you can
+                    drop into a ticket reply in one click. Shared team responses are available here too.
+                </p>
+                <a href="/agent/canned-responses" class="btn text-white" style="background:var(--ld-primary);">
+                    <i class="bi bi-chat-square-text me-1"></i>Manage Canned Responses
+                </a>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Disable 2FA Confirmation Modal -->
+<div class="modal fade" id="disable2faModal" tabindex="-1" aria-labelledby="disable2faModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="disable2faModalLabel">
+                    <i class="bi bi-shield-x me-2 text-danger"></i>Disable 2FA
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Are you sure you want to disable two-factor authentication? Your account will be less secure.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger px-4" id="confirmDisable2fa">
+                    <i class="bi bi-shield-x me-1"></i>Disable 2FA
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('confirmDisable2fa').addEventListener('click', function () {
+    document.getElementById('disableCode').closest('form').submit();
+});
+</script>
+
+<!-- Auto-save "saved" toast -->
+<div id="profileToast"
+     class="position-fixed bottom-0 end-0 m-4 px-3 py-2 rounded shadow-sm text-white"
+     style="z-index:1080;background:#198754;opacity:0;transform:translateY(.5rem);
+            transition:opacity .2s ease,transform .2s ease;pointer-events:none;">
+    <i class="bi bi-check-lg me-1"></i><span id="profileToastMsg">Saved</span>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('profileAutoSave');
+    if (!form) return;
+
+    const url   = form.dataset.autosaveUrl;
+    const token = form.querySelector('input[name="_token"]').value;
+    const toast = document.getElementById('profileToast');
+    const toastMsg = document.getElementById('profileToastMsg');
+    let hideTimer;
+
+    function showToast(message, isError) {
+        toastMsg.textContent = message;
+        toast.style.background = isError ? '#dc3545' : '#198754';
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(.5rem)';
+        }, 2000);
+    }
+
+    function saveField(field, value, onSuccess) {
+        const body = new URLSearchParams();
+        body.set('_token', token);
+        body.set('field', field);
+        body.set('value', value);
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: body,
+        })
+            .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+            .then(function (data) {
+                if (data && data.ok) {
+                    if (onSuccess) onSuccess();
+                    showToast(data.message || 'Saved', false);
+                } else {
+                    showToast((data && data.message) || 'Could not save', true);
+                }
+            })
+            .catch(function () { showToast('Could not save', true); });
+    }
+
+    form.addEventListener('change', function (e) {
+        const el = e.target;
+        if (!el.name || el.name === '_token') return;
+
+        let value;
+        if (el.type === 'checkbox') {
+            value = el.checked ? '1' : '0';
+        } else {
+            // Radios fire change only on the newly-selected option, so el.value
+            // is already the chosen one.
+            value = el.value;
+        }
+
+        saveField(el.name, value, function () {
+            // Apply the theme live so light↔dark flips the page immediately.
+            if (el.name === 'theme') {
+                document.documentElement.setAttribute('data-bs-theme', value);
+            }
+        });
+    });
+})();
+</script>
