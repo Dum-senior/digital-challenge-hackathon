@@ -104,6 +104,19 @@ final class IntakeDispatcher
         $danger = (bool) preg_match('/дым|задым|горит|пожар|искрит|запах гар[иья]|вымогател|шифровальщик|выкуп за файл|ransomware/u', $lower);
         $mass = (bool) preg_match('/нескольк(?:их|о)\s+(?:скважин|отделов|пользователей)|во\s+вс[её]м\s+корпус|у\s+всех|массов|нескольких\s+скважин/u', $lower);
         $category = $model['category'];
+        $signals = [
+            'automation' => '/\b(?:opc|орс)\b|асу тп/iu',
+            'telemetry' => '/сч[её]тчик|телеметр|показани/iu',
+            'peripherals' => '/принтер|печата|печать/iu',
+            'network' => '/пропала сеть|нет связи|wi-fi|wifi|\bvpn\b/iu',
+            'access' => '/уч[её]тная запись|не могу войти|access denied|\bmfa\b/iu',
+        ];
+        foreach ($signals as $candidate => $pattern) {
+            if (preg_match($pattern, $text)) {
+                $category = $candidate;
+                break;
+            }
+        }
         $priority = $danger ? 'critical' : ($category === 'unknown' ? null : 'medium');
         $reason = $danger ? 'Явный признак опасности; требуется немедленная проверка'
             : ($mass ? 'Затронуто несколько пользователей или объектов'
@@ -111,6 +124,9 @@ final class IntakeDispatcher
         if (!$danger && !$mass && $priority !== null && preg_match('/есть запасн|работа продолжается|не мешает работе|планов/u', $lower)) {
             $priority = 'low';
             $reason = 'Работа продолжается или доступен обходной вариант';
+        }
+        if (preg_match('/(?<!\w)(?:с|после)\s+((?:[01]?\d|2[0-3]):[0-5]\d)(?!\d)/iu', $text, $start)) {
+            $model['fields']['incident_time'] = str_pad($start[1], 5, '0', STR_PAD_LEFT);
         }
         $fields = self::safeFields($text, $model['fields']);
         $missing = array_values(array_unique(array_map('strval', array_slice($model['missing_fields'], 0, 12))));

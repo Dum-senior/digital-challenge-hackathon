@@ -186,7 +186,18 @@ def analyze(incident: Incident):
     if not result.facts:
         result.facts = re.findall(r"(?<!\w)(?:[0-2]\d:[0-5]\d|[A-Z]{2,}(?:-[0-9]+)?|Bad Quality|Access denied)(?!\w)",
                                   incident.text)[:8]
-    return {**result.model_dump(), **incident_details(incident.text)}
+    details = incident_details(incident.text)
+    for category, pattern in (
+        ("automation", r"\b(?:opc|орс)\b|асу тп"),
+        ("telemetry", r"сч[её]тчик|телеметр|показани"),
+        ("peripherals", r"принтер|печата|печать"),
+        ("network", r"пропала сеть|нет связи|wi-fi|wifi|\bvpn\b"),
+        ("access", r"уч[её]тная запись|не могу войти|access denied|\bmfa\b"),
+    ):
+        if re.search(pattern, incident.text, re.I):
+            result.category = category
+            break
+    return {**result.model_dump(), **details}
 
 
 def incident_details(text):
