@@ -52,6 +52,19 @@
       const name = add(facts, 'dt', labels.get(field)); name.className = 'col-sm-4';
       const val = add(facts, 'dd', value); val.className = 'col-sm-8';
     }
+    el('intakeOriginal').textContent = d.raw_text || '';
+    const summary = [
+      ['Категория', meta?.types?.find(x => Number(x.id) === Number(d.approved?.type_id ?? d.extracted?.type_id))?.name],
+      ['Приоритет', labels.get(String(d.extracted?.priority || '').replace(/^./, ch => ch.toUpperCase()))],
+      ['Почему', d.extracted?.severity_reason],
+    ];
+    const assignee = meta?.agents?.find(x => Number(x.id) === Number(d.approved?.assigned_to));
+    if (meta?.can_confirm) summary.push(['Исполнитель', assignee ? assignee.first_name + ' ' + assignee.last_name : 'Не назначен']);
+    for (const [title, value] of summary) {
+      if (!value) continue;
+      add(facts, 'dt', title).className = 'col-sm-4';
+      add(facts, 'dd', labels.get(value) || value).className = 'col-sm-8';
+    }
     const emergency = el('intakeEmergency');
     emergency.hidden = !d.extracted?.is_potential_emergency;
     emergency.textContent = d.extracted?.is_potential_emergency ? 'Потенциальная авария: действуйте по утверждённому регламенту. ИИ не разрешает опасные действия.' : '';
@@ -79,7 +92,8 @@
         option.selected = (a.tag_ids || []).includes(Number(tag.id));
         tagBox.appendChild(option);
       }
-      el('reviewAcknowledge').checked = false;
+      el('intakeEditable').hidden = true;
+      el('intakeEdit').setAttribute('aria-expanded', 'false');
     } else el('intakeReview').hidden = true;
     const created = el('intakeCreated'); created.hidden = d.status !== 'created';
     if (d.status === 'created') {
@@ -181,8 +195,14 @@
     const id = selectedNumber('reviewGroup');
     select('reviewAssignee', (meta?.agents || []).filter(x => Number(x.group_id) === id).map(x => ({id:x.id,name:x.first_name+' '+x.last_name})), null);
   });
+  el('intakeEdit').addEventListener('click', () => {
+    const fields = el('intakeEditable');
+    fields.hidden = !fields.hidden;
+    el('intakeEdit').setAttribute('aria-expanded', String(!fields.hidden));
+    if (!fields.hidden) el('reviewSubject').focus();
+  });
   el('reviewConfirm').addEventListener('click', async event => {
-    if (!current || !el('reviewAcknowledge').checked) return error('Подтверди ручную проверку заявки.');
+    if (!current) return;
     const button = event.currentTarget; btn(button, true); error('');
     try {
       const output = await req('/intake/drafts/' + current.draft_id + '/confirm', 'POST', {

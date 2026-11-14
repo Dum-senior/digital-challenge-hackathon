@@ -1,5 +1,7 @@
 <?php
-/** Safe DOM UI for /intake; no API keys and no innerHTML with LLM-originated strings. */
+$layout = 'app';
+$sidebarItems = Auth::isAdmin() ? adminSidebar('intake') : (Auth::isStaff() ? staffSidebar('intake') : portalSidebar('intake'));
+
 ?>
 <div class="container py-4 dispatcher-intake" id="ai-intake" data-csrf="<?= e(csrfToken()) ?>">
   <header class="dispatcher-intake-header">
@@ -8,15 +10,14 @@
   </header>
   <div class="dispatcher-intake-grid">
   <section class="card mb-3"><div class="card-body">
-    <label class="form-label" for="intakeText">Описание проблемы на русском</label>
-    <textarea id="intakeText" class="form-control" maxlength="4000" rows="4" placeholder="Например: На НТП с девяти утра нет данных со счётчика"></textarea>
+    <label class="form-label" for="intakeText">Опишите проблему</label>
+    <textarea id="intakeText" class="form-control" maxlength="4000" rows="4" placeholder="Например: в кабинете 312 не печатает принтер"></textarea>
     <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
       <button type="button" id="intakeRecord" class="btn btn-outline-primary" aria-pressed="false">Записать голос</button>
       <span id="intakeRecordingStatus" role="status"></span>
     </div>
-    <div class="row mt-2 g-2"><div class="col-auto"><label for="intakeSource" class="form-label">Канал</label>
-      <select id="intakeSource" class="form-select"><option value="text">Текст</option><option value="voice">Голос (исправленная транскрипция)</option><option value="phone">Телефон (проверенная транскрипция)</option></select>
-    </div><div class="col-auto d-flex align-items-end"><button type="button" id="intakeAnalyze" class="btn btn-primary">Разобрать обращение</button></div></div>
+    <select id="intakeSource" hidden aria-label="Канал обращения"><option value="text">Текст</option><option value="voice">Голос</option></select>
+    <button type="button" id="intakeAnalyze" class="btn btn-primary mt-3">Анализировать</button>
   </div></section>
   <section class="card mb-3"><div class="card-body"><details><summary class="fw-semibold mb-2">Очередь черновиков</summary>
     <button type="button" class="btn btn-sm btn-outline-secondary" id="intakeReload">Обновить</button>
@@ -28,7 +29,12 @@
     <h2 class="h5">Черновик №<span id="intakeDraftId"></span></h2>
     <p id="intakeStatus" class="fw-bold"></p>
     <p id="intakeEmergency" class="alert alert-danger" hidden></p>
-    <dl id="intakeFacts" class="row small"></dl>
+    <?php $supportPhone = trim(env('INTAKE_SUPPORT_PHONE', '')); ?>
+    <?php if ($supportPhone !== ''): ?>
+        <p>Телефон поддержки: <a href="tel:<?= e(preg_replace('/[^+0-9]/', '', $supportPhone)) ?>"><?= e($supportPhone) ?></a></p>
+    <?php endif; ?>
+    <p id="intakeOriginal" class="text-break"></p>
+    <dl id="intakeFacts" class="row"></dl>
     <div id="intakeClarification" hidden>
     <h3 class="h6">Уточняющие вопросы</h3><ul id="intakeQuestions"></ul>
     <label for="intakeAnswer" class="form-label">Ответ на уточнение</label>
@@ -36,8 +42,7 @@
     <button type="button" id="intakeClarify" class="btn btn-outline-primary mt-2">Ответить</button>
     </div>
     <div id="intakeReview" class="mt-4" hidden>
-      <h3 class="h5">Проверка диспетчером</h3>
-      <p class="text-muted">Поля и приоритет можно изменить. Подтверждение создаёт реальную заявку.</p>
+      <div id="intakeEditable" hidden>
       <div class="mb-2"><label for="reviewSubject" class="form-label">Тема</label><input id="reviewSubject" maxlength="255" class="form-control"></div>
       <div class="mb-2"><label for="reviewDescription" class="form-label">Описание</label><textarea id="reviewDescription" class="form-control" rows="3"></textarea></div>
       <div class="row g-2">
@@ -60,7 +65,8 @@
       </div>
       <div class="mt-2"><label for="reviewReason" class="form-label">Причина ручного подтверждения/изменения аварийного приоритета</label><textarea id="reviewReason" class="form-control" maxlength="500" rows="2"></textarea></div>
       </details>
-      <div class="form-check my-2"><input id="reviewAcknowledge" class="form-check-input" type="checkbox"><label for="reviewAcknowledge" class="form-check-label">Я проверил данные, права назначения и потенциальные риски</label></div>
+      </div>
+      <button type="button" id="intakeEdit" class="btn btn-outline-primary" aria-expanded="false" aria-controls="intakeEditable">Редактировать</button>
       <button type="button" id="reviewConfirm" class="btn btn-success">Подтвердить и создать заявку</button>
     </div>
     <p id="intakeCreated" class="mt-3" hidden></p>

@@ -25,7 +25,7 @@ unset($__s);
         <h2 class="fw-bold mb-1">Мои обращения</h2>
         <p>Опишите проблему, чтобы отправить её в поддержку.</p>
     </div>
-    <a href="/portal/tickets/create" id="tour-portal-new-ticket" class="btn text-white" style="background:var(--ld-primary);">
+    <a href="/intake" id="tour-portal-new-ticket" class="btn text-white" style="background:var(--ld-primary);">
         <i class="bi bi-plus-circle me-1"></i><?= e(label('portal.action.new', 'New Help Request')) ?>
     </a>
 </div>

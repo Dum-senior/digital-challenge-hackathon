@@ -77,21 +77,9 @@ return [
         ],
 
         /* ── Staff navigation ─────────────────────────────────────── */
-        'nav.dashboard' => [
-            'group' => 'staff_nav',
-            'where' => 'Admin icon rail — first item.',
-        ],
         'nav.tickets' => [
             'group' => 'staff_nav',
             'where' => 'Admin icon rail — second item.',
-        ],
-        'nav.settings' => [
-            'group' => 'staff_nav',
-            'where' => 'Icon rail — the Settings cog, on both the admin and the staff rail.',
-        ],
-        'nav.docs' => [
-            'group' => 'staff_nav',
-            'where' => 'Admin icon rail — the Docs question mark.',
         ],
         'nav.users' => [
             'group' => 'staff_nav',
@@ -109,10 +97,6 @@ return [
             'group' => 'staff_nav',
             'where' => 'Icon rail — the Inventory item (admin and staff rails), plus the heading, page titles '
                      . 'and breadcrumbs of the Inventory list, asset, add/edit and Audit mode pages.',
-        ],
-        'agent.nav.dashboard' => [
-            'group' => 'staff_nav',
-            'where' => 'Staff (non-admin) icon rail — first item.',
         ],
         'agent.nav.tickets' => [
             'group' => 'staff_nav',

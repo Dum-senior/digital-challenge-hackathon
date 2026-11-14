@@ -8245,19 +8245,16 @@ function adminSidebar(string $active = ''): array
     // configuration area (Users, Ticket Forms, KB management, Recurring Tickets,
     // Audit Log, Reports, …) is reached through the Settings page's left nav.
     return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), [
-        ['icon' => 'bi-speedometer2',    'label' => label('nav.dashboard'),     'url' => '/admin',            'key' => 'dashboard'],
         ['icon' => 'bi-ticket-detailed', 'label' => label('nav.tickets'),       'url' => '/admin/tickets',    'key' => 'tickets'],
+        ['icon' => 'bi-book', 'label' => 'База знаний', 'url' => '/agent/kb', 'key' => 'kb'],
         ['icon' => 'bi-mic', 'label' => 'Приём обращений', 'url' => '/intake', 'key' => 'intake'],
-        ['icon' => 'bi-pc-display',      'label' => label('nav.inventory', 'Inventory'), 'url' => '/inventory', 'key' => 'inventory'],
-        ['icon' => 'bi-sliders',         'label' => label('nav.settings'),      'url' => '/admin/settings',   'key' => 'settings'],
-        ['icon' => 'bi-question-circle', 'label' => label('nav.docs'),          'url' => '/admin/docs',       'key' => 'docs'],
     ]);
 }
 
 function portalSidebar(string $active = ''): array
 {
     return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), [
-        ['icon' => 'bi-speedometer2',    'label' => label('portal.nav.dashboard'),     'url' => '/portal',         'key' => 'dashboard'],
+        ['icon' => 'bi-mic', 'label' => 'Обращения', 'url' => '/intake', 'key' => 'intake'],
         ['icon' => 'bi-ticket-detailed', 'label' => label('portal.nav.my_tickets'),    'url' => '/portal/tickets', 'key' => 'tickets'],
         ['icon' => 'bi-book',            'label' => label('portal.nav.knowledge_base'), 'url' => '/portal/kb',     'key' => 'kb'],
     ]);
@@ -8274,26 +8271,10 @@ function portalSidebar(string $active = ''): array
 function staffSidebar(string $active = ''): array
 {
     $items = [
-        ['icon' => 'bi-speedometer2',     'label' => label('agent.nav.dashboard'),      'url' => '/agent',                  'key' => 'dashboard'],
         ['icon' => 'bi-ticket-detailed',  'label' => label('agent.nav.tickets'),        'url' => '/agent/tickets',          'key' => 'tickets'],
         ['icon' => 'bi-mic', 'label' => 'Приём обращений', 'url' => '/intake', 'key' => 'intake'],
-        ['icon' => 'bi-grid-1x2',         'label' => 'Floor mode',                      'url' => '/agent/floor',            'key' => 'floor', 'touchOnly' => true],
         ['icon' => 'bi-book',             'label' => label('agent.nav.knowledge_base'), 'url' => '/agent/kb',               'key' => 'kb'],
     ];
-    if (Assets::canView()) {
-        $items[] = ['icon' => 'bi-pc-display', 'label' => label('nav.inventory', 'Inventory'), 'url' => '/inventory', 'key' => 'inventory'];
-    }
-    // Canned Responses (personal reply snippets) now lives on the profile page
-    // for every staff member — see templates/pages/profile/edit.php.
-    // Status Banners moved to the Settings area (Operations group) — it's open
-    // to all staff, so canAccessSettingsArea() now admits every staff role.
-
-    if (canAccessSettingsArea()) {
-        $items[] = ['icon' => 'bi-sliders', 'label' => label('nav.settings'), 'url' => '/admin/settings', 'key' => 'settings'];
-    }
-
-    $items[] = ['icon' => 'bi-question-circle', 'label' => 'Help', 'url' => '/agent/help', 'key' => 'help'];
-
     return array_map(fn($item) => array_merge($item, ['active' => $item['key'] === $active]), $items);
 }
 
