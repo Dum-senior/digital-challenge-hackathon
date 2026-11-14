@@ -272,9 +272,9 @@ function csrfField(): string
     return '<input type="hidden" name="_token" value="' . e(csrfToken()) . '">';
 }
 
-function verifyCsrf(?string $token): bool
+function verifyCsrf(mixed $token): bool
 {
-    if ($token === null || $token === '') {
+    if (!is_string($token) || $token === '') {
         return false;
     }
     // Fail closed when this session has never been issued a token. Without this,

@@ -1,0 +1,52 @@
+name: OpenHelpDesk QA
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_FILE: compose.test.yaml
+      COMPOSE_PROJECT_NAME: hackathon-qa
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate OpenAPI
+        run: pipx run --spec openapi-spec-validator==0.7.2 openapi-spec-validator openapi.json
+      - name: Build and seed isolated test database
+        run: |
+          touch .env
+          docker compose build app
+          docker compose up -d db
+          docker compose run --rm -T app composer install --no-interaction --prefer-dist
+          docker compose run --rm -T app sh -ec '
+            export SEED_ADMIN_PASSWORD=$(php -r "echo bin2hex(random_bytes(16));")
+            export SEED_AGENT_PASSWORD=$(php -r "echo bin2hex(random_bytes(16));")
+            export SEED_USER_PASSWORD=$(php -r "echo bin2hex(random_bytes(16));")
+            php database/seed.php
+          '
+      - name: Lint PHP
+        run: docker compose run --rm -T app sh -ec 'find src templates database config public scripts tests -name "*.php" -print0 | xargs -0 -n 1 php -l'
+      - name: Start app and run QA smoke tests
+        run: |
+          docker compose up -d app
+          curl --retry 20 --retry-connrefused --retry-delay 1 --fail --silent --show-error http://127.0.0.1:8085/health
+          docker compose exec -T app vendor/bin/phpunit --filter 'AttachmentAccessIntegrationTest|ApiSecurityIntegrationTest|EngineerAssistant|FormBuilderCsrfTest|CsrfKbFeedbackTest|AttachmentImagePreviewTest|AuthTest'
+      - name: Check repeat migrations and app restart
+        run: |
+          docker compose exec -T app php database/migrate.php
+          docker compose exec -T app php database/migrate.php
+          docker compose restart app
+          curl --retry 20 --retry-connrefused --retry-delay 1 --fail --silent --show-error http://127.0.0.1:8085/health
+          docker compose exec -T app vendor/bin/phpunit --filter 'AttachmentAccessIntegrationTest|ApiSecurityIntegrationTest|EngineerAssistantHttpTest'
+      - name: Audit locked dependencies
+        if: success() || failure()
+        run: docker compose run --rm -T app composer audit --locked
+      - name: Remove CI containers and ephemeral database
+        if: always()
+        run: docker compose down --volumes
