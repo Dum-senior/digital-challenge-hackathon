@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <meta name="description" content="Диспетчер ИИ — система интеллектуальной обработки обращений" />
+  <title>Диспетчер ИИ — Frontend V4.3</title>
+  
+  <style>
+:root{--bg:#f5f7fb;--surface:#fff;--surface-alt:#f9fbff;--border:#e6eaf1;--text:#18243b;--muted:#8290a3;--primary:#2864e8;--primary-soft:#edf3ff;--shadow:0 5px 20px rgba(29,49,83,.025);--radius:13px;--danger:#c73f37;--ok:#23815b;--warn:#ae6a16;--side:225px;--font:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+*{box-sizing:border-box}html{min-height:100%;scroll-behavior:smooth}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:14px/1.5 var(--font)}button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.53}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #acc6ff;outline-offset:2px}a{text-decoration:none;color:var(--primary)}h1,h2,h3,h4,p{margin-top:0}svg{display:block} .boot{display:grid;place-items:center;height:100vh;color:var(--muted)}
+.shell{display:grid;grid-template-columns:var(--side) minmax(0,1fr);min-height:100vh}.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:26px 13px 20px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;z-index:5}.brand{display:flex;align-items:center;gap:10px;padding:0 10px;margin-bottom:28px}.brand-icon{height:37px;width:37px;background:var(--primary);border-radius:11px;display:grid;place-items:center;color:white;font-size:19px;flex:0 0 auto}.brand-title{font-weight:800;font-size:16px;letter-spacing:-.6px}.brand-note{color:#a2abba;font-weight:700;text-transform:uppercase;letter-spacing:1px;font-size:9px}.nav-caption{text-transform:uppercase;letter-spacing:1.1px;color:#a2adbf;font-size:10px;margin:13px 12px 11px;font-weight:700}.sidebar nav{display:flex;flex-direction:column;gap:4px}.nav-item{width:100%;background:transparent;color:#69788e;border:none;border-radius:9px;display:flex;align-items:center;gap:12px;padding:12px 13px;font-size:13px;font-weight:650;text-align:left;transition:background .12s}.nav-item svg{height:18px;width:18px;flex:none}.nav-item:hover{background:#f5f8fc}.nav-item.active{background:#edf3ff;color:#235bcf}.sidebar-footer{margin-top:auto;color:#93a0af;border-top:1px solid #edf0f5;padding:17px 10px 0;font-size:11px;line-height:1.7}.sidebar-footer .dot{display:inline-block;background:#3aaa78;height:7px;width:7px;border-radius:50%;margin-right:6px}.content{min-width:0;padding:28px clamp(17px,3.2vw,45px) 60px}.container{max-width:1110px;margin:0 auto}.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:30px}.breadcrumbs{font-size:12px;color:#99a5b6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.account-area{display:flex;align-items:center;gap:10px;flex-shrink:0}.mode{border:1px solid #dcebe4;background:#eef9f2;color:#2f8c64;padding:6px 9px;border-radius:7px;font-size:10px;font-weight:770;white-space:nowrap}.mode.api{border-color:#dce7f7;background:#eff5ff;color:#356ac0}.role-choice{border:1px solid #e0e6ef;padding:8px 29px 8px 11px;border-radius:9px;background:#fff;color:#40516c;font-size:12px;max-width:180px}.avatar{background:#e8effc;color:#4265ac;font-weight:750;display:grid;place-items:center;width:33px;height:33px;border-radius:50%;font-size:11px}.intro{margin:0 0 25px}.intro h1{font-size:clamp(25px,2.7vw,31px);letter-spacing:-1.05px;line-height:1.22;margin:0 0 7px;font-weight:780}.intro p{font-size:13px;color:var(--muted);margin:0}.surface{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}.card{padding:23px}.section-heading{display:flex;justify-content:space-between;align-items:center;gap:15px;margin:0 0 15px}.section-heading h2{font-size:16px;font-weight:750;margin:0}.section-heading p{color:var(--muted);font-size:12px;margin:3px 0 0}.card + .card{margin-top:17px}.divider{height:1px;background:#edf0f5;margin:19px 0}.mini-title{display:flex;align-items:center;gap:9px;font-weight:730;font-size:14px;margin-bottom:16px}.num{border-radius:7px;background:#ebf1ff;color:#356bdb;display:grid;place-items:center;height:26px;width:26px;font-size:11px;font-weight:800}.textarea,input[type=text],input[type=email],input[type=password],input[type=search],input[type=number],input[type=datetime-local],select,textarea{width:100%;border:1px solid #e1e7f0;border-radius:9px;background:#fbfcff;padding:11px 13px;color:#2d3e59;outline:none;min-height:43px}.textarea,textarea{height:110px;resize:vertical;line-height:1.65}textarea:focus,input:focus,select:focus{border-color:#82a7f3;box-shadow:0 0 0 3px rgba(40,100,232,.08)}::placeholder{color:#a3aec0}.form-actions{display:flex;gap:9px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-top:13px}.form-actions.end{justify-content:flex-end}.button{border:1px solid #dfe5ee;background:#fff;color:#40536c;padding:10px 15px;min-height:41px;border-radius:9px;font-weight:700;font-size:12px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:filter .12s,background .12s;white-space:nowrap}.button:hover:not(:disabled){filter:brightness(.97)}.button svg{height:16px;width:16px}.button.primary{background:var(--primary);border-color:var(--primary);color:#fff}.button.dark{background:#172b4c;border-color:#172b4c;color:#fff}.button.soft{background:#f3f7ff;border-color:#e0eaff;color:#3568c7}.button.danger{color:#bf4439;background:#fff5f3;border-color:#f4ded9}.button.small{padding:7px 11px;min-height:33px;font-size:11px}.button.link{border:0;background:transparent;color:var(--primary);padding:5px 0;min-height:25px}.button.push{margin-left:auto}.examples{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:17px}.hint{font-size:11px;color:#95a1b0}.chip{border:1px solid #e8edf5;background:#f6f8fc;color:#61728a;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:600}.chip:hover{color:#2a60d2;background:#edf3ff;border-color:#dce7ff}.result-area{margin-top:19px}.empty{text-align:center;padding:47px 25px}.empty-icon{margin:auto auto 11px;border-radius:13px;background:#f2f6ff;display:grid;place-items:center;height:46px;width:46px;color:#7fa4ea}.empty-icon svg{height:22px;width:22px}.empty h3{font-size:14px;margin:0 0 6px}.empty p{color:#98a4b5;font-size:12px;max-width:390px;line-height:1.7;margin:auto}.result-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid #edf0f5}.result-head strong{display:flex;gap:10px;align-items:center;font-size:15px}.result-head svg{color:#4573db;width:17px;height:17px}.pill{font-size:10px;font-weight:780;border-radius:6px;padding:6px 9px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.pill.low{color:#248659;background:#eaf8f0}.pill.medium{color:#326abf;background:#eaf1ff}.pill.high{color:#a66716;background:#fff3e2}.pill.critical{color:#c44337;background:#fff0ed}.pill.new,.pill.open{background:#edf3ff;color:#3769c1}.pill.in_progress{background:#eef4ff;color:#356cba}.pill.resolved,.pill.closed{background:#ecf8f0;color:#287c57}.pill.needs_clarification{background:#fff3e2;color:#a66716}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.field-label{display:block;color:#8997ac;font-size:10px;font-weight:700;margin-bottom:5px}.field-value{font-size:12px;color:#30425a;line-height:1.55;overflow-wrap:anywhere}.form-field{display:block;margin-bottom:14px}.form-field > span{display:block;font-size:11px;font-weight:700;color:#62748c;margin-bottom:7px}.form-field small{display:block;font-size:10px;color:#95a2b4;margin-top:5px}.advice{padding:16px;border-radius:10px;background:#f5f8ff;border:1px solid #e0eafb;margin-top:17px}.advice.danger{background:#fff6f4;border-color:#f3ded8}.advice h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:8px}.advice p{margin:0 0 10px;color:#53657e;font-size:12px;line-height:1.65}.advice ul,.advice ol{margin:6px 0 0 18px;padding:0;color:#53657e;font-size:12px;line-height:1.85}.notice{background:#f7f9fd;border:1px solid #e6edf7;padding:13px 15px;border-radius:10px;color:#6d7d94;font-size:12px;line-height:1.65}.notice.warning{background:#fff8ee;color:#8c672c;border-color:#f5e8ce}.notice.danger{background:#fff4f2;color:#ad5149;border-color:#f3ddd9}.notice.success{background:#effaf3;color:#397e5c;border-color:#dbeee3}.notice + .notice{margin-top:10px}.question{padding:10px 12px;background:#fff;border:1px solid #e5eaf3;border-radius:8px;font-size:12px;margin-top:8px;color:#5b6d83}.table-wrap{overflow-x:auto;width:100%}.table{border-collapse:collapse;width:100%;font-size:12px;min-width:570px}.table th{background:#fbfcfe;color:#91a0b2;text-transform:uppercase;letter-spacing:.45px;font-size:10px;font-weight:700;padding:15px 17px;text-align:left;border-bottom:1px solid var(--border)}.table td{padding:15px 17px;border-bottom:1px solid #edf0f5;color:#4c5d73;vertical-align:middle;max-width:320px}.table tr:last-child td{border-bottom:0}.table tbody tr:hover{background:#fbfcff}.table .primary-text{font-weight:680;color:#304159}.table button.link{padding:0;min-height:0}.filters{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:16px}.filters input,.filters select{min-height:39px;flex:1;min-width:130px;background:white}.filters input{flex:2;min-width:220px}.table-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 20px;border-bottom:1px solid #edf0f5}.table-head strong{font-size:13px}.table-head small{color:#99a5b4}.ticket-head{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:15px}.ticket-head h2{font-size:20px;line-height:1.35;margin:8px 0 0}.back{border:0;background:none;color:#5279bd;padding:0 0 15px;font-weight:710;font-size:12px}.back:hover{text-decoration:underline}.ticket-desc{font-size:13px;line-height:1.75;color:#52637b;border-left:3px solid #dce8ff;padding-left:13px;margin:14px 0 19px}.ticket-tools{display:flex;gap:10px;flex-wrap:wrap}.kb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.kb-card{padding:19px;display:flex;flex-direction:column;gap:8px}.kb-card h3{font-size:14px;margin:0;line-height:1.5}.kb-card p{color:#7e8ba0;font-size:12px;line-height:1.6;margin:0;flex:1}.kb-card .meta{font-size:10px;color:#a0abbb;margin-top:6px}.kb-card button{align-self:flex-start}.steps{padding-left:21px;color:#53637b;font-size:13px;line-height:1.85}.steps li{padding-bottom:9px}.panel-heading{font-size:14px;font-weight:740;margin:0 0 13px}.split{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(270px,1fr);gap:16px;align-items:start}.stat{padding:19px}.stat-label{font-size:11px;color:#8a9aaf}.stat-value{font-size:27px;font-weight:800;letter-spacing:-.9px;margin-top:7px}.stat-foot{font-size:11px;color:#8d9ab0;margin-top:4px}.profile-line{display:flex;align-items:center;gap:10px}.profile-line .avatar{height:34px;width:34px;flex:none}.muted{color:var(--muted)}.small{font-size:11px}.top-gap{margin-top:18px}.view-label{font-size:10px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;color:#9ba9bd;margin-bottom:13px}.footer-note{color:#a2afbe;font-size:11px;text-align:center;margin:32px 0 0}.toast-wrap{position:fixed;bottom:22px;right:22px;z-index:100;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 44px))}.toast{padding:12px 16px;background:#192e4e;color:white;box-shadow:0 10px 35px #192e4e2e;border-radius:9px;font-size:12px;line-height:1.6}.toast.error{background:#9e3b3b}.toast.success{background:#1e6a52}.modal-backdrop{position:fixed;inset:0;background:#12213884;z-index:40;display:grid;place-items:center;padding:18px}.modal{width:min(520px,100%);background:white;border-radius:14px;border:1px solid #e4e9f1;box-shadow:0 18px 70px #10223b35;padding:24px}.modal h2{font-size:18px;margin:0 0 8px}.modal p{font-size:12px;color:#76869a;line-height:1.6}.login-wrap{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{max-width:450px;width:100%;padding:29px}.login-card .brand{padding:0;margin:0 0 28px}.login-card h1{font-size:25px;letter-spacing:-.7px;margin-bottom:7px}.login-card p{font-size:13px;color:#8593a6}.login-card .button{width:100%}.login-card .notice{margin:15px 0}.role-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:15px}.role-tile{border:1px solid #e4eaf2;background:#fff;text-align:left;border-radius:9px;padding:13px;font-size:12px;font-weight:700;color:#45566e;line-height:1.5}.role-tile:hover{background:#f3f7ff;border-color:#bacff8}.spinner{height:15px;width:15px;border:2px solid #d0ddf9;border-top-color:var(--primary);border-radius:100%;animation:spin .75s linear infinite;display:inline-block;vertical-align:middle}@keyframes spin{to{transform:rotate(360deg)}}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:980px){.split{grid-template-columns:1fr}.grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.shell{display:block}.sidebar{position:static;height:auto;padding:13px 14px 11px;border-right:0;border-bottom:1px solid var(--border)}.sidebar .brand{padding:0;margin-bottom:12px}.sidebar .nav-caption,.sidebar-footer{display:none}.sidebar nav{flex-direction:row;gap:4px;overflow-x:auto}.nav-item{width:auto;white-space:nowrap;padding:9px 11px;font-size:11px}.nav-item svg{height:16px;width:16px}.content{padding:19px 15px 35px}.topbar{margin-bottom:23px}.role-choice{max-width:146px;font-size:11px}.avatar{display:none}.intro{margin-bottom:20px}.card{padding:17px}.grid-2{gap:13px}.kb-grid{grid-template-columns:1fr}.filters input{min-width:100%}.filters select{min-width:calc(50% - 5px)}.button.push{margin-left:0}.form-actions .button{flex:1}.table-head{padding:13px 15px}.ticket-head{flex-wrap:wrap}.grid-3{grid-template-columns:1fr}.role-tiles{grid-template-columns:1fr 1fr}}
+@media(max-width:380px){.role-choice{max-width:120px}.account-area{gap:5px}.mode{font-size:9px}.grid-2{grid-template-columns:1fr}}
+/* V2: minimal role-focused interface */
+.work-focus{max-width:920px}
+.ticket-title-link{display:block;text-align:left;border:0;background:transparent;color:#304159;font-weight:690;font-size:12px;padding:1px 0 5px;white-space:normal;cursor:pointer}
+.ticket-title-link:hover{color:var(--primary)}
+.source-line{display:flex;gap:7px;align-items:center;padding:5px 0;color:#6280ae}
+.source-line .button.link{min-height:26px;white-space:normal;text-align:left;line-height:1.5}
+.source-preview{background:#f5f8ff;border:1px solid #e4ebf8;border-radius:9px;padding:14px;color:#53647e;font-size:13px;line-height:1.8;max-height:310px;overflow-y:auto;white-space:normal}
+.kb-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.kb-actions .button{white-space:normal}
+.admin-actions{justify-content:flex-start;margin:0 0 8px}
+.stats-filters{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.stats-filters .form-field{margin-bottom:0;min-width:180px;flex:1}
+.stats-filters .button{min-height:43px}
+.stat-line{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #edf0f5;gap:14px}
+.stat-line:last-child{border:0}
+input[type=date],input[type=url]{width:100%;border:1px solid #e1e7f0;border-radius:9px;background:#fbfcff;padding:11px 13px;color:#2d3e59;outline:none;min-height:43px}
+input[type=date]:focus,input[type=url]:focus{border-color:#82a7f3;box-shadow:0 0 0 3px rgba(40,100,232,.08)}
+.modal{max-height:calc(100vh - 44px);overflow-y:auto}
+.role-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:700px){.role-tiles{grid-template-columns:1fr}.stats-filters .form-field{min-width:calc(50% - 6px)}.stats-filters .button{width:100%}.admin-actions .button{flex:1}.work-focus{max-width:100%}}
+
+/* V3: actions live in each engineer queue row, not in a separate ticket card. */
+.engineer-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:195px}
+.engineer-actions .button{min-height:33px;padding:7px 10px;font-size:11px;white-space:nowrap}
+.engineer-actions .button:disabled{opacity:.38;cursor:not-allowed;filter:none}
+@media(max-width:700px){.engineer-actions{min-width:180px}.engineer-actions .button{flex:0 0 auto}}
+
+/* V4 — AI case requirements: critical engineer alert, SLA, explainability, reporting */
+.urgent-banner{background:linear-gradient(100deg,#fff2ef 0%,#fff9f7 100%);border:2px solid #dd5647;border-radius:12px;padding:19px 20px;display:flex;align-items:center;gap:17px;box-shadow:0 6px 20px rgba(202,61,46,.08);margin:0 0 16px;animation:urgentPanelPulse 2s ease-in-out infinite}
+.urgent-banner>div:nth-child(2){min-width:0;flex:1}
+.urgent-banner-icon{color:#cd332e;background:#ffe5e1;height:48px;width:48px;border-radius:12px;display:grid;place-items:center;flex:none;animation:urgentIconBlink 1s steps(2,end) infinite}
+.urgent-head{font-size:16px;line-height:1.4;letter-spacing:.1px;font-weight:850;color:#b62a25;animation:urgentTextBlink 1s ease-in-out infinite}
+.urgent-details{font-size:12px;line-height:1.6;margin-top:4px;color:#8c4a44}
+.urgent-quick{border:1px solid #c93830;background:#c93830;color:white;font-weight:780;white-space:normal;flex:0 0 auto}
+.urgent-row-caption{color:#c53129;font-size:10px;font-weight:850;margin-top:7px;display:flex;align-items:center;gap:4px;animation:urgentTextBlink 1.1s ease-in-out infinite}
+.table tbody tr.urgent-ticket-row{background:#fff9f8;border-left:4px solid #dc493c}
+.table tbody tr.urgent-ticket-row:hover{background:#fff3f0}
+.urgent-highlight{outline:3px solid #e2513d;outline-offset:-3px}
+.engineer-actions .button.urgent-accept{color:#fff;background:#c62b24;border-color:#bd241e;font-size:11px;font-weight:900;box-shadow:0 0 0 0 rgba(220,51,38,.42);animation:urgentButtonBlink 1s ease-in-out infinite}
+.engineer-actions .button.urgent-accept:hover{filter:none;background:#981a17}
+.sla-text{display:inline-block;margin-top:3px;font-size:11px;color:#96682e;font-weight:700;font-variant-numeric:tabular-nums}
+.sla-text.overdue{color:#b82923}
+.row-sla{margin-top:5px;min-height:20px}
+.demo-help{margin:0 0 15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.demo-help .button{font-size:11px}
+.extract-details{border:1px solid #e6ecf5;border-radius:9px;background:#fbfcff;padding:12px 14px;margin:14px 0}
+.extract-details summary{font-weight:750;color:#3f5b85;font-size:12px;cursor:pointer;line-height:1.65;list-style-position:inside}
+.extract-details .form-field{margin-bottom:11px}
+.extract-details[open] summary{margin-bottom:10px}
+.ai-assessment{display:grid;grid-template-columns:1fr 1fr;gap:12px;background:#f5f8ff;border:1px solid #e5ebfa;border-radius:9px;padding:12px 14px;margin:12px 0}
+.progress-row{margin:12px 0 17px}
+.progress-label{display:flex;justify-content:space-between;color:#4b5f7b;font-size:12px;gap:14px;margin-bottom:7px}
+.progress-label strong{color:#253750;font-variant-numeric:tabular-nums}
+.progress-track{height:8px;background:#ecf0f7;border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;border-radius:99px;background:#749cec;min-width:0}
+.progress-fill.low{background:#4aaf83}.progress-fill.medium{background:#7b9deb}.progress-fill.high{background:#e8a34c}.progress-fill.critical{background:#e36359}
+.metric-card{display:flex;align-items:center;gap:16px;padding:14px;background:#f5f8ff;border-radius:10px;margin-top:12px;flex-wrap:wrap}
+.metric-time{font-size:27px;font-weight:800;letter-spacing:.5px;font-variant-numeric:tabular-nums;color:#1e4fb5}
+.metric-context{color:#657890;font-size:12px}
+@keyframes urgentButtonBlink{0%,100%{background:#b82420;box-shadow:0 0 0 0 rgba(222,52,43,.34)}50%{background:#f14837;box-shadow:0 0 0 6px rgba(231,60,48,.19)}}
+@keyframes urgentTextBlink{0%,100%{color:#a92420;opacity:1}50%{color:#f03529;opacity:.55}}
+@keyframes urgentIconBlink{0%,100%{background:#ffe5e1;color:#b72b24}50%{background:#e54b3b;color:#fff}}
+@keyframes urgentPanelPulse{0%,100%{border-color:#df594c;box-shadow:0 6px 20px rgba(202,61,46,.08)}50%{border-color:#f29a87;box-shadow:0 5px 27px rgba(220,61,44,.18)}}
+@media(max-width:840px){.urgent-banner{flex-wrap:wrap}.urgent-quick{width:100%}}
+@media(max-width:700px){.urgent-banner{padding:13px;gap:10px}.urgent-banner-icon{height:39px;width:39px}.urgent-head{font-size:13px}.urgent-details{font-size:11px}.engineer-actions .button.urgent-accept{white-space:normal}.ai-assessment{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.urgent-banner,.urgent-banner-icon,.urgent-head,.urgent-row-caption,.engineer-actions .button.urgent-accept{animation:none!important}.engineer-actions .button.urgent-accept{background:#bd221c;outline:2px solid #f09a8c}.urgent-head,.urgent-row-caption{color:#b62620!important;opacity:1!important}}
+
+/* V4.1: an unaccepted critical engineer ticket has exactly one visible urgency indicator/action.
+   Priority and status columns are visually combined with Actions until accepted. */
+.urgent-only-cell{vertical-align:middle!important;padding:16px 20px!important}
+.urgent-only-cell .engineer-actions{justify-content:flex-start;gap:12px}
+.urgent-only-cell .urgent-accept{font-size:12px;min-height:42px;padding:11px 15px}
+@media(max-width:700px){.urgent-only-cell{padding:12px!important}.urgent-only-cell .engineer-actions{flex-wrap:wrap}}
+
+
+/* V4.2: Small status illustrations for the engineer. Each row gets ONE
+   workflow/repair visual. Critical unaccepted rows keep ONLY the urgent action. */
+.work-badge{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid transparent;border-radius:9px;font-size:11px;font-weight:760;line-height:1.3;white-space:normal;max-width:170px}
+.work-badge svg{height:17px;width:17px;flex:0 0 17px}
+.work-pending{background:#f3f5f9;border-color:#e5eaf1;color:#65758a}
+.work-working{background:#edf4ff;border-color:#d8e6fc;color:#285daf}
+.work-working svg{transform-origin:50% 50%;animation:workToolMove 1.7s ease-in-out infinite}
+.work-repair{background:#fff6e9;border-color:#f6e4c3;color:#a5681d}
+.work-repair svg{transform-origin:50% 50%;animation:repairToolMove 2.4s ease-in-out infinite}
+.work-done{background:#ebf8f1;border-color:#d3eddf;color:#237f56}
+@keyframes workToolMove{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(12deg)}}
+@keyframes repairToolMove{0%,100%{transform:rotate(0deg)}50%{transform:rotate(9deg)}}
+@media(prefers-reduced-motion:reduce){.work-badge svg{animation:none!important}}
+
+/* V4.3 — Administrator: engineers and their active assignments */
+.engineers-search{margin:18px 0 16px}.engineers-search input{background:#fff;max-width:720px}
+.engineer-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-top:16px}
+.engineer-stat{padding:18px 20px;display:flex;flex-direction:column;gap:7px}
+.engineer-stat span{font-size:11px;color:#8191a6;font-weight:650}
+.engineer-stat strong{font-size:26px;line-height:1.1;color:#243e6d;font-variant-numeric:tabular-nums}
+.engineers-list{display:grid;gap:16px}
+.engineer-card{overflow:hidden;padding:20px 22px}
+.engineer-profile{display:flex;align-items:center;justify-content:space-between;gap:15px}
+.engineer-profile-meta{display:flex;align-items:center;gap:13px;min-width:0}
+.engineer-avatar{width:44px;height:44px;border-radius:13px;background:#eaf1ff;color:#3067d3;display:grid;place-items:center;flex:0 0 44px;font-weight:850;font-size:14px}
+.engineer-profile h2{font-size:16px;line-height:1.3;margin:0 0 4px;overflow-wrap:anywhere}
+.engineer-profile p{font-size:11px;color:#8292a6;margin:0}
+.engineer-workload{text-align:right;display:flex;flex-direction:column;min-width:100px}
+.engineer-workload strong{color:#2864e8;font-weight:800;font-size:25px;line-height:1.1}
+.engineer-workload span{font-size:10px;color:#8493a8}
+.engineer-skill-row{margin-top:18px}
+.engineer-skills{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.engineer-skill{border:1px solid #dfe9fd;background:#f0f5ff;color:#3263bd;font-size:11px;font-weight:680;border-radius:7px;padding:6px 10px}
+.engineer-loadline{display:flex;gap:18px;flex-wrap:wrap;padding:14px 0;margin:15px 0;border-top:1px solid #edf0f5;border-bottom:1px solid #edf0f5;color:#8290a3;font-size:11px}
+.engineer-loadline strong{color:#3c526f}
+.engineer-task-head{font-weight:740;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.engineer-task-head span{background:#edf3ff;color:#4670b3;border-radius:7px;font-size:11px;padding:3px 7px}
+.engineer-task-table{min-width:550px}.engineer-task-table th{padding:12px 14px}.engineer-task-table td{padding:12px 14px}.engineer-task-table td strong{font-size:12px;color:#3c4d63;font-weight:660}
+.engineer-no-tasks{background:#f8fafc;border:1px dashed #e1e7f0;color:#8191a6;font-size:12px;padding:18px;border-radius:9px;text-align:center}
+@media(max-width:700px){.engineer-summary{grid-template-columns:1fr 1fr}.engineer-card{padding:16px}.engineer-stat{padding:14px}.engineer-profile{align-items:flex-start}.engineer-workload{min-width:70px}.engineer-loadline{gap:8px;justify-content:space-between}}
+@media(max-width:430px){.engineer-summary{grid-template-columns:1fr}.engineer-profile{flex-wrap:wrap}.engineer-workload{margin-left:57px;text-align:left;flex-direction:row;gap:7px;align-items:baseline}.engineer-avatar{width:39px;height:39px;flex-basis:39px}.engineer-profile h2{font-size:14px}}
+
+</style>
+</head>
+<body>
+  <div id="app"><div class="boot">Загрузка интерфейса…</div></div>
+  <script>
+/**
+ * Frontend-only configuration. In PHP integration, inject this object BEFORE api.js.
+ * mode: 'demo' uses localStorage only; 'api' makes real HTTP requests.
+ * NEVER inject admin/service credentials into a browser bundle.
+ */
+window.DISPATCH_CONFIG = Object.assign({
+  mode: 'demo',
+  apiBase: '/api/v1',
+  csrfToken: null,
+  token: null,
+  currentUser: null,
+  maxAudioBytes: 15 * 1024 * 1024
+}, window.DISPATCH_CONFIG || {});
+
+</script>
+  <script>
+(function(global){
+  'use strict';
+  const cfg = global.DISPATCH_CONFIG;
+  const KEY = 'dispatcher_ii_demo_v4_2'; // Keep existing demo data across frontend updates.
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const upcomingDeadline = (minutes) => new Date(Date.now()+minutes*60000).toISOString();
+  const copy = x => JSON.parse(JSON.stringify(x));
+
+  const seed = () => ({
+    ticketSeq: 1049,
+    noteSeq: 10,
+    pendingSeq: 201,
+    pending: [],
+    tickets: [
+      {id:1048,subject:'Принтер не печатает и дымится',description:'Принтер не печатает, из него идёт дым и пахнет гарью. Кабинет 205.',priority:'critical',category:'Оргтехника / безопасность',status:'open',source:'text',reporterId:4,reporterName:'Алексей Смирнов',assigneeId:2,assigneeName:'Мария Иванова',location:'Кабинет 205',createdAt:new Date().toISOString(),responseDueAt:upcomingDeadline(9),notes:[{author:'Диспетчер',text:'Передано ответственному по безопасности.',time:'08:48'}]},
+      {id:1047,subject:'Не работают 100 принтеров',description:'На двух этажах одновременно перестали работать примерно 100 принтеров. Возможно, проблема с сервером печати.',priority:'high',category:'Инфраструктура',status:'in_progress',source:'voice',reporterId:5,reporterName:'Елена Ким',assigneeId:3,assigneeName:'Олег Петров',location:'Офис, этажи 2–3',createdAt:new Date().toISOString(),responseDueAt:upcomingDeadline(24),notes:[]},
+      {id:1046,subject:'В принтере закончился тонер',description:'Принтер в кабинете 214 сообщает, что закончился тонер.',priority:'low',category:'Оргтехника',status:'open',source:'text',reporterId:4,reporterName:'Алексей Смирнов',assigneeId:2,assigneeName:'Мария Иванова',location:'Кабинет 214',createdAt:new Date().toISOString(),responseDueAt:upcomingDeadline(90),notes:[]},
+      {id:1045,subject:'Не удаётся подключиться к VPN',description:'Не подключается корпоративный VPN, ошибка аутентификации.',priority:'medium',category:'Доступ и сети',status:'resolved',source:'public',reporterId:5,reporterName:'Елена Ким',assigneeId:3,assigneeName:'Олег Петров',location:'Удалённо',createdAt:'2026-11-13T13:18:00',notes:[{author:'Олег Петров',text:'Обновлены настройки профиля, подключение восстановлено.',time:'14:03'}]},
+      {id:1043,subject:'Восстанавливается приложение на рабочей станции',description:'После обновления программа перестала запускаться; инженер выполняет восстановление.',priority:'medium',category:'ПО и учётные записи',status:'in_progress',source:'text',reporterId:4,reporterName:'Алексей Смирнов',assigneeId:2,assigneeName:'Мария Иванова',location:'Кабинет 214',createdAt:new Date().toISOString(),notes:[]},
+      {id:1042,subject:'Поврежден кабель принтера — требуется ремонт',description:'У принтера повреждён кабель подключения, требуется осмотр и ремонт уполномоченным специалистом.',priority:'medium',category:'Оргтехника',status:'open',repairRequired:true,source:'text',reporterId:5,reporterName:'Елена Ким',assigneeId:2,assigneeName:'Мария Иванова',location:'Кабинет 207',createdAt:new Date().toISOString(),responseDueAt:upcomingDeadline(80),notes:[]},
+      {id:1044,subject:'Проблема со входом в приложение',description:'При авторизации появляется ошибка доступа.',priority:'medium',category:'ПО и учётные записи',status:'closed',source:'text',reporterId:4,reporterName:'Алексей Смирнов',assigneeId:2,assigneeName:'Мария Иванова',location:'Офис',createdAt:'2026-11-12T10:30:00',notes:[]}
+    ],
+    users: [
+      {id:1,name:'Ирина Соколова',email:'admin@example.test',role:'admin',status:'active'},
+      {id:2,name:'Мария Иванова',email:'m.ivanova@example.test',role:'engineer',status:'active',department:'Поддержка рабочих мест',competencies:['Принтеры и МФУ','Оргтехника','Рабочие станции','Установка ПО']},
+      {id:3,name:'Олег Петров',email:'o.petrov@example.test',role:'engineer',status:'active',department:'Сети и инфраструктура',competencies:['Сети и VPN','Сервер печати','Сетевая диагностика','Серверы']},
+      {id:4,name:'Алексей Смирнов',email:'a.smirnov@example.test',role:'reporter',status:'active'},
+      {id:5,name:'Елена Ким',email:'e.kim@example.test',role:'reporter',status:'active'},
+      {id:6,name:'Анна Белова',email:'a.belova@example.test',role:'dispatcher',status:'active'}
+    ],
+    articles: [
+      {id:1,title:'Замена картриджа и проверка тонера',category:'Оргтехника',description:'Инструкция для случая, когда закончился тонер или краска.',content:['Проверьте сообщение на панели принтера и уровень расходных материалов.','Уточните модель устройства и подходящий картридж.','Организуйте безопасную замену согласно инструкции производителя.','Если сообщение сохраняется, передайте заявку специалисту по оргтехнике.']},
+      {id:2,title:'Массовый отказ принтеров: первичная диагностика',category:'Инфраструктура',description:'Когда одновременно недоступно много устройств, проверяем общие зависимости.',content:['Уточните количество затронутых устройств, площадки и время начала сбоя.','Проверьте доступность серверов печати и сегментов сети штатными средствами мониторинга.','Проверьте наличие общих ошибок в очередях печати.','Эскалируйте массовый инцидент инженерам инфраструктуры; не объявляйте причину установленной без проверки.']},
+      {id:3,title:'Дым или запах гари от офисного оборудования',category:'Безопасность',description:'Первичные действия при потенциально опасной неисправности.',content:['Немедленно прекратите эксплуатацию оборудования.','При угрозе людям действуйте согласно инструкциям пожарной безопасности объекта и уведомите ответственных.','Не перезапускайте и не разбирайте дымящееся оборудование.','Передайте инцидент уполномоченным специалистам.']},
+      {id:4,title:'Диагностика подключения к VPN',category:'Сети',description:'Безопасная проверка учётной записи и соединения.',content:['Проверьте состояние подключения и текст ошибки.','Уточните время возникновения проблемы и доступность других сервисов.','Проверьте действительность учётных данных через утверждённую процедуру.','Передайте системному администратору при отсутствии решения.']},
+      {id:5,title:'Не получается войти в приложение',category:'Учётные записи',description:'Что проверить при ошибке доступа к сервису.',content:['Уточните название сервиса и точное сообщение об ошибке.','Проверьте корректность имени пользователя и сетевого подключения.','Убедитесь, что есть право доступа через штатный канал поддержки.','Не запрашивайте пароль пользователя в тексте заявки.']},
+      {id:6,title:'Первичная обработка обращения',category:'Общие вопросы',description:'Что уточнять, если проблема описана недостаточно подробно.',content:['Уточните объект, помещение и тип оборудования.','Спросите, когда возникла неисправность.','Выясните, сколько пользователей затронуто.','Уточните, имеются ли признаки опасности, затем назначайте исполнителя.']}
+    ],
+    categories: ['Оргтехника', 'Инфраструктура', 'ПО и учётные записи', 'Доступ и сети', 'Безопасность'],
+    audit: [
+      {when:'14.11.2026 08:48',actor:'Анна Белова',action:'Эскалация опасного обращения',target:'#1048'},
+      {when:'14.11.2026 08:21',actor:'Анна Белова',action:'Назначен инженер',target:'#1047'},
+      {when:'13.11.2026 14:03',actor:'Олег Петров',action:'Закрыта диагностика',target:'#1045'}
+    ]
+  });
+
+  function load(){
+    try { const saved = JSON.parse(localStorage.getItem(KEY)); if(saved && saved.tickets && saved.users)return saved; }
+    catch(_){}
+    const state=seed();save(state);return state;
+  }
+  function save(s){localStorage.setItem(KEY,JSON.stringify(s));}
+  function analyzeDemo(text){
+    const x=text.toLowerCase();
+    const smoke=/дым|дымит|задым|гар[ьи]|горит|пожар|искр/.test(x);
+    const mass=/\b100\b|сотн|все принтер|массов|десятки принтер|много принтер|сто принтер/.test(x);
+    const toner=/тонер|картридж|краск|чернил/.test(x);
+    const printer=/принтер|печата|картридж|тонер/.test(x);
+    let priority='medium',category='Прочее',reason='Недостаточно сведений для точной оценки; требуется уточнение.',group='Линия поддержки',assigneeId=null,assigneeName='Не выбран',questions=[];
+    if(printer){category='Оргтехника';group='Поддержка оргтехники';assigneeId=2;assigneeName='Мария Иванова';}
+    if(toner){priority='low';reason='Похоже на штатную замену расходного материала, признаки опасности не обнаружены.';}
+    if(mass){priority='high';category='Инфраструктура';reason='Затронуто большое число принтеров; возможна общая инфраструктурная причина.';group='ИТ-инфраструктура';assigneeId=3;assigneeName='Олег Петров';}
+    if(smoke){priority='critical';category='Оргтехника / безопасность';reason='Дым/запах гари означает потенциальную угрозу безопасности.';group='Ответственный за безопасность';assigneeId=null;assigneeName='Назначить после эскалации';}
+    if(!printer && !smoke){questions=['Какое именно устройство или сервис не работает?','Где возникла проблема и сколько пользователей затронуто?'];}
+    return {
+      draft_id:'demo-'+Date.now(),status:questions.length?'needs_clarification':'ready_for_review',raw_text:text,
+      extracted:{subject:text.length>72?text.slice(0,69)+'…':text,description:text,category,location_name:'',equipment:printer?'Принтер':null,object:'',floor:'',room:'',ip:'',serial_number:'',symptoms:smoke?['дым','запах гари']:mass?['массовый отказ печати']:toner?['нет тонера']:[],tags:smoke?['безопасность','оргтехника']:mass?['массовый инцидент','печать']:toner?['картридж']:[],affected_scope:mass?'~100 устройств':'не уточнено',is_potential_emergency:smoke},
+      recommendation:{priority,priority_id:null,group_name:group,assignee_id:assigneeId,assignee_name:assigneeName,reason},
+      questions,requires_human_review:true
+    };
+  }
+  function getSolution(t){
+    const d=load();const desc=(t.description+' '+t.subject).toLowerCase();
+    let ids=[];
+    if(/дым|гар[ьи]|горит/.test(desc))ids=[3];
+    else if(/100|массов|сервер.*печати|все принтер/.test(desc))ids=[2];
+    else if(/тонер|картридж|краск/.test(desc))ids=[1];
+    else if(/vpn/.test(desc))ids=[4];
+    else if(/вход|авторизац/.test(desc))ids=[5];
+    const articles=d.articles.filter(a=>ids.includes(a.id));
+    return {ticket_id:t.id,status:articles.length?'answered':'no_sources',requires_human_review:true,
+      steps:articles.flatMap(a=>a.content),sources:articles.map(a=>({type:'kb',id:a.id,title:a.title,url:'#/knowledge/'+a.id})),
+      summary:articles.length?'Рекомендации из учебной базы знаний. Не заменяют регламенты предприятия.':'Подтверждённые источники по этому обращению пока не найдены.'};
+  }
+
+  async function real(path,opts={}){
+    const headers=Object.assign({'Accept':'application/json'},opts.headers||{});
+    if(cfg.token)headers.Authorization='Bearer '+cfg.token;
+    if(cfg.csrfToken)headers['X-CSRF-Token']=cfg.csrfToken;
+    if(opts.body && !(opts.body instanceof FormData) && !headers['Content-Type'])headers['Content-Type']='application/json';
+    const res=await fetch(cfg.apiBase+path,{...opts,headers,credentials:'same-origin'});
+    let data;const txt=await res.text();try{data=txt?JSON.parse(txt):{}}catch(_){data={message:txt||'Некорректный JSON-ответ'};}
+    if(!res.ok)throw new Error(data.message||data.error||('HTTP '+res.status));
+    return data;
+  }
+  async function withDemo(fn,realCall){if(cfg.mode==='api')return realCall();await sleep(260);return fn();}
+  const API={
+    isDemo:()=>cfg.mode!=='api',
+    async listTickets(){return withDemo(()=>copy(load().tickets),()=>real('/tickets',{method:'GET'}));},
+    async getTicket(id){return withDemo(()=>copy(load().tickets.find(t=>String(t.id)===String(id))||null),()=>real('/tickets/'+encodeURIComponent(id)));},
+    async analyze(text,source='text'){return withDemo(()=>analyzeDemo(text),()=>real('/intake/analyze',{method:'POST',body:JSON.stringify({text,source})}));},
+    async clarify(draftId,answers){return withDemo(()=>analyzeDemo(answers),()=>real('/intake/drafts/'+encodeURIComponent(draftId)+'/clarify',{method:'POST',body:JSON.stringify({text:answers})}));},
+    async confirm(draftId,changes){return withDemo(()=>{
+      const d=load();const t={id:d.ticketSeq++,subject:changes.subject||changes.description.slice(0,70),description:changes.description,category:changes.category,
+        priority:changes.priority,status:'open',source:changes.source||'text',reporterId:changes.reporterId||4,reporterName:changes.reporterName||'Алексей Смирнов',
+        assigneeId:changes.assigneeId||null,assigneeName:changes.assigneeName||'Не назначен',location:changes.location||'Не указано',extracted:changes.extracted||{},createdAt:new Date().toISOString(),responseDueAt:upcomingDeadline(changes.priority==='critical'?10:changes.priority==='high'?30:120),notes:[]};
+      d.tickets.unshift(t);d.audit.unshift({when:new Date().toLocaleString('ru-RU'),actor:'Анна Белова',action:'Создана заявка',target:'#'+t.id});save(d);return {ticket_id:t.id,ticket:t};
+    },()=>real('/intake/drafts/'+encodeURIComponent(draftId)+'/confirm',{method:'POST',body:JSON.stringify(changes)}));},
+    async submitPublic(data){return withDemo(()=>{
+      const s=load();const request={id:s.pendingSeq++,description:data.description,name:data.name||'Заявитель',location:data.location||'',source:'public',reporterId:4,createdAt:new Date().toISOString()};s.pending.unshift(request);save(s);return{request_id:request.id,status:'pending_review'};
+    },()=>real('/public/tickets',{method:'POST',body:JSON.stringify(data)}));},
+    async listPending(){return withDemo(()=>copy(load().pending||[]),()=>real('/intake/submissions'));},
+    async markPendingProcessed(id,ticketId){return withDemo(()=>{const s=load();s.pending=(s.pending||[]).filter(x=>String(x.id)!==String(id));save(s);return {ticket_id:ticketId};},async()=>({ticket_id:ticketId}));},
+    async updateTicket(id,changes){return withDemo(()=>{
+      const s=load(),t=s.tickets.find(x=>String(x.id)===String(id));if(!t)throw Error('Заявка не найдена');Object.assign(t,changes);s.audit.unshift({when:new Date().toLocaleString('ru-RU'),actor:'Демо-пользователь',action:'Изменение заявки',target:'#'+id});save(s);return copy(t);
+    },()=>real('/tickets/'+encodeURIComponent(id)+'/update',{method:'POST',body:JSON.stringify(changes)}));},
+    async addNote(id,text){return withDemo(()=>{
+      const s=load(),t=s.tickets.find(x=>String(x.id)===String(id));if(!t)throw Error('Заявка не найдена');t.notes.push({author:'Текущий сотрудник',text,time:new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})});save(s);return copy(t);
+    },()=>real('/tickets/'+encodeURIComponent(id)+'/notes',{method:'POST',body:JSON.stringify({text})}));},
+    async engineerAssist(id){return withDemo(()=>{const t=load().tickets.find(x=>String(x.id)===String(id));if(!t)throw Error('Заявка не найдена');return getSolution(t);},()=>real('/tickets/'+encodeURIComponent(id)+'/engineer-assist',{method:'POST'}));},
+    async ticketStatistics({from='',to=''}={}){return withDemo(()=>{
+      const tickets=load().tickets.filter(t=>{
+        const day=(t.createdAt||'').slice(0,10);
+        return (!from||day>=from)&&(!to||day<=to);
+      });
+      const counter=(key,values)=>Object.fromEntries(values.map(v=>[v,tickets.filter(t=>t[key]===v).length]));
+      return {from,to,total:tickets.length,open:tickets.filter(t=>!['closed','resolved'].includes(t.status)).length,
+        resolved:tickets.filter(t=>['closed','resolved'].includes(t.status)).length,
+        critical:tickets.filter(t=>t.priority==='critical').length,
+        byPriority:counter('priority',['low','medium','high','critical']),
+        byStatus:counter('status',['new','open','in_progress','resolved','closed'])};
+    },()=>real('/admin/reports/tickets?'+new URLSearchParams({from,to}).toString()));},
+    async createArticle(article){return withDemo(()=>{
+      const s=load();const id=Math.max(0,...s.articles.map(a=>Number(a.id)||0))+1;
+      const created={id,...article,content:Array.isArray(article.content)?article.content:String(article.content||'').split('\n').filter(Boolean)};
+      s.articles.unshift(created);save(s);return copy(created);
+    },()=>real('/admin/kb/articles',{method:'POST',body:JSON.stringify(article)}));},
+    async updateArticle(id,changes){return withDemo(()=>{
+      const s=load(),a=s.articles.find(a=>String(a.id)===String(id));if(!a)throw Error('Статья не найдена');
+      Object.assign(a,changes);save(s);return copy(a);
+    },()=>real('/admin/kb/articles/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify(changes)}));},
+    async deleteArticle(id){return withDemo(()=>{
+      const s=load();if(!s.articles.some(a=>String(a.id)===String(id)))throw Error('Статья не найдена');
+      s.articles=s.articles.filter(a=>String(a.id)!==String(id));save(s);return {deleted:true};
+    },()=>real('/admin/kb/articles/'+encodeURIComponent(id),{method:'DELETE'}));},
+    async importWebsite(url){return withDemo(()=>{
+      const x=new URL(url);if(!['http:','https:'].includes(x.protocol))throw Error('Нужна ссылка http/https');
+      const s=load(),id=Math.max(0,...s.articles.map(a=>Number(a.id)||0))+1;
+      const item={id,title:'Источник: '+x.hostname,category:'Сайт',description:'Демо-ссылка. В режиме DEMO сайт не скачивается и не индексируется.',content:[],source_url:url,import_status:'demo_only'};
+      s.articles.unshift(item);save(s);return copy(item);
+    },()=>real('/admin/kb/import-website',{method:'POST',body:JSON.stringify({url})}));},
+    async listArticles(){return withDemo(()=>copy(load().articles),()=>real('/kb/articles'));},
+    async getArticle(id){return withDemo(()=>copy(load().articles.find(a=>String(a.id)===String(id))||null),()=>real('/kb/articles/'+encodeURIComponent(id)));},
+    async listEngineersDashboard(){return withDemo(()=>{
+      const d=load(),defaults=seed().users;
+      return {engineers:d.users.filter(u=>u.role==='engineer').map(u=>{
+        // Earlier demo releases stored users without competencies. Restore only
+        // the bundled demo-profile fields for the same seeded identities.
+        const preset=defaults.find(p=>p.id===u.id&&p.name===u.name);
+        return {id:u.id,name:u.name,department:u.department??preset?.department??null,
+          competencies:Array.isArray(u.competencies)?u.competencies:(preset?.competencies||[]),
+          tickets:copy(d.tickets.filter(t=>String(t.assigneeId)===String(u.id)))};
+      })};
+    },()=>real('/admin/engineers'));},
+    async listUsers(){return withDemo(()=>copy(load().users),()=>real('/admin/users'));},
+    async listAudit(){return withDemo(()=>copy(load().audit),()=>real('/admin/audit'));},
+    async listCategories(){return withDemo(()=>copy(load().categories),()=>real('/meta'));},
+    async health(){return withDemo(()=>({mode:'demo',status:'demo',services:[{name:'Backend API',status:'demo'},{name:'MariaDB',status:'demo'},{name:'Ollama',status:'demo'},{name:'Голосовой ИИ',status:'demo'}]}),()=>real('/health'));},
+    async uploadTicketImage(id,file){
+      if(cfg.mode!=='api')throw Error('Учебный режим не загружает изображения: файл не сохранён.');
+      const fd=new FormData();fd.append('image',file,file.name);return real('/tickets/'+encodeURIComponent(id)+'/attachments',{method:'POST',body:fd});
+    },
+    async demoCriticalTicket(assigneeId,assigneeName){
+      if(cfg.mode==='api')throw Error('Запрещено в рабочем режиме');
+      const s=load(),id=s.ticketSeq++;s.tickets.unshift({id,subject:'Принтер дымится — срочная реакция',description:'Демо-инцидент: принтер не печатает, из него идёт дым. Нужна срочная реакция.',priority:'critical',category:'Оргтехника / безопасность',status:'open',source:'text',reporterId:4,reporterName:'Алексей Смирнов',assigneeId,assigneeName,location:'Кабинет 205',createdAt:new Date().toISOString(),responseDueAt:upcomingDeadline(7),notes:[]});save(s);return {ticket_id:id};
+    },
+    async transcribe(audioBlob,filename='recording.webm'){
+      if(cfg.mode!=='api')throw new Error('В демо-режиме настоящее распознавание речи недоступно. Подключите API Вани.');
+      const fd=new FormData();fd.append('audio',audioBlob,filename);fd.append('source','browser');
+      return real('/intake/transcriptions',{method:'POST',body:fd});
+    },
+    async addUser(user){return withDemo(()=>{const s=load();const id=Math.max(...s.users.map(u=>u.id))+1;s.users.push({id,...user,status:'active'});save(s);return {id};},()=>real('/admin/users',{method:'POST',body:JSON.stringify(user)}));},
+    resetDemo(){if(cfg.mode==='api')throw Error('Нельзя сбрасывать данные через UI в API-режиме');save(seed());}
+  };
+  global.DispatchAPI=API;
+})(window);
+
+</script>
+  <script>
+(function(){
+'use strict';
+const API=window.DispatchAPI;
+const CFG=window.DISPATCH_CONFIG;
+const root=document.getElementById('app');
+const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const icons={
+ spark:'<path d="m12 3 1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8L12 3Z"/><path d="m19 19 .7 1.3L21 21l-1.3.7L19 23l-.7-1.3L17 21l1.3-.7L19 19Z"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ clipboard:'<rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 11h6M9 15h6"/>',
+ book:'<path d="M12 6c-2-2-5-2-9-1v14c4-1 7-1 9 1 2-2 5-2 9-1V5c-4-1-7-1-9 1Zm0 0v14"/>',
+ mic:'<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"/>',
+ users:'<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+ shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
+ chart:'<path d="M3 3v18h18M8 16v-4M13 16V7M18 16v-7"/>',
+ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>',
+ back:'<path d="M19 12H5m6 6-6-6 6-6"/>',
+ check:'<path d="m4 12 5 5L20 6"/>',
+ chevron:'<path d="m9 18 6-6-6-6"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/>',
+ warning:'<path d="M10.2 3.4 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.8 3.4a2 2 0 0 0-3.6 0ZM12 9v5m0 3h.01"/>',
+ file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/>',
+ gear:'<path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/><circle cx="12" cy="12" r="5"/>',
+ refresh:'<path d="M20 11a8 8 0 0 0-14-5L3 9m0-6v6h6M4 13a8 8 0 0 0 14 5l3-3m0 6v-6h-6"/>',
+ logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5m5 5H9"/>',
+ upload:'<path d="M12 16V3m-4 4 4-4 4 4M3 16v4a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-4"/>',
+ headset:'<path d="M3 14v-3a9 9 0 0 1 18 0v3M3 14h4v7H6a3 3 0 0 1-3-3v-4Zm18 0h-4v7h1a3 3 0 0 0 3-3v-4Z"/>',
+ menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+ wave:'<path d="M2 10v4M6 6v12M10 3v18M14 8v8M18 5v14M22 10v4"/>',
+ lock:'<rect x="4" y="10" width="16" height="12" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+ info:'<circle cx="12" cy="12" r="10"/><path d="M12 11v6m0-10h.01"/>',
+ pending:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ working:'<path d="m20.3 5.7-4.4 4.4-2-2 4.4-4.4a6 6 0 0 0-7.9 7.9l-7 7a2 2 0 0 0 2.8 2.8l7-7a6 6 0 0 0 7.9-7.9Z"/>',
+ repair:'<path d="m14.7 6.4 3-3a4.5 4.5 0 0 0-5.7 5.7L5 16a2.2 2.2 0 1 0 3 3l7-7a4.5 4.5 0 0 0 5.7-5.7l-3 3-3-2.9Z"/>',
+ done:'<circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/>'
+};
+function icon(name,size=18){return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[name]||icons.info}</svg>`;}
+const priorities={low:'Низкий',medium:'Средний',high:'Высокий',critical:'Критический'};
+const statuses={new:'Новая',open:'Открыта',in_progress:'В работе',resolved:'Завершена',closed:'Закрыта',needs_clarification:'Уточнение'};
+const roles={dispatcher:'Диспетчер',engineer:'Инженер',admin:'Администратор'};
+const roleAccounts={dispatcher:{id:6,name:'Анна Белова'},engineer:{id:2,name:'Мария Иванова'},admin:{id:1,name:'Ирина Соколова'}};
+const navigation={
+ dispatcher:[['/intake','Обращения','plus'],['/tickets','Заявки','clipboard']],
+ engineer:[['/assigned','Мои заявки','clipboard']],
+ admin:[['/reports','Статистика','chart'],['/engineers','Инженеры','users'],['/knowledge','База знаний','book']]
+};
+let state={role:CFG.currentUser?.role||'dispatcher',currentUser:CFG.currentUser||null,tickets:[],pending:[],pendingId:null,articles:[],users:[],engineers:[],engineersLoaded:false,engineersError:null,engineersQuery:'',audit:[],categories:[],draft:null,submissionText:'',intakeSource:'text',kbQuery:'',ticketQuery:'',ticketStatus:'all',ticketPriority:'all',assist:{},assistPending:{},stats:null,loading:false,recording:null,recorder:null,stream:null,auditLoaded:false,audit:[],metrics:{manual:null,ai:null},timerStarted:null,timerKind:null,metricsOpen:false,metricCounts:{manual:'',ai:''},attachment:null,queueSignature:null};
+if(!roles[state.role])state.role='dispatcher';
+function user(){return state.currentUser||(roleAccounts[state.role]||roleAccounts.dispatcher);}
+function route(){const h=decodeURIComponent(location.hash.replace(/^#/,''));return h.startsWith('/')?h:(navigation[state.role]||navigation.dispatcher)[0][0];}
+function navigate(path){if(location.hash==='#'+path){render();return;}location.hash='#'+path;}
+function intro(title,subtitle,action=''){return `<div class="intro"><div class="section-heading"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</div></div>`;}
+function pillPriority(val){const p=priorities[val]?val:'medium';return `<span class="pill ${p}">${p==='critical'?icon('warning',12):''}${esc(priorities[p])}</span>`;}
+function pillStatus(v){return `<span class="pill ${esc(v)}">${esc(statuses[v]||v||'Неизвестно')}</span>`;}
+// Only the engineer queue uses these visual labels. The backend retains its original
+// workflow statuses; repair_required is an optional issue flag, NOT a new status.
+function engineerStateBadge(ticket){
+ const s=ticket.status;
+ if(['resolved','closed'].includes(s))return `<span class="work-badge work-done">${icon('done',16)}<span>Выполнено</span></span>`;
+ if(s==='in_progress')return `<span class="work-badge work-working">${icon('working',16)}<span>Работа выполняется</span></span>`;
+ if(['new','open'].includes(s)&&(ticket.repairRequired===true||ticket.repair_required===true))return `<span class="work-badge work-repair">${icon('repair',16)}<span>Требует починки</span></span>`;
+ if(['new','open'].includes(s))return `<span class="work-badge work-pending">${icon('pending',16)}<span>Не выполнено</span></span>`;
+ return `<span class="work-badge work-pending">${icon('info',16)}<span>${esc(statuses[s]||s||'Неизвестно')}</span></span>`;
+}
+
+function btn(text,action,cls='button',attrs=''){return `<button type="button" class="${cls}" data-action="${action}" ${attrs}>${text}</button>`;}
+function formatDate(date){const d=new Date(date);return Number.isNaN(d.getTime())?esc(date):new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(d);}
+function heading(text){return `<div class="section-heading"><h2>${esc(text)}</h2></div>`;}
+function responseDeadline(t){return t.responseDueAt||t.response_due_at||t.slaResponseDueAt||t.sla_response_due_at||null;}
+function isAwaitingAcceptance(t){return ['new','open'].includes(t.status);}
+function isCriticalUnaccepted(t){return t.priority==='critical'&&isAwaitingAcceptance(t);}
+function slaText(deadline){
+ if(!deadline)return 'Срок реакции не указан';
+ const diff=new Date(deadline).getTime()-Date.now();
+ if(!Number.isFinite(diff))return 'Срок реакции не указан';
+ const absolute=Math.abs(diff),h=Math.floor(absolute/3600000),m=Math.floor((absolute%3600000)/60000),sec=Math.floor((absolute%60000)/1000);
+ const time=h?`${h} ч ${String(m).padStart(2,'0')} мин`:`${m} мин ${String(sec).padStart(2,'0')} сек`;
+ return diff<0?`SLA просрочен на ${time}`:`Осталось на реакцию: ${time}`;
+}
+function deadlineHtml(t){
+ if(!isAwaitingAcceptance(t))return '';
+ const iso=responseDeadline(t);if(!iso)return '<span class="sla-text muted" title="Сервер не предоставил срок реакции">SLA не задан</span>';
+ const date=new Date(iso);if(Number.isNaN(date.getTime()))return '<span class="sla-text muted">SLA не задан</span>';
+ const overdue=date.getTime()<Date.now();
+ return `<span class="sla-text ${overdue?'overdue':''}" data-sla-deadline="${esc(date.toISOString())}" title="Срок реакции: ${esc(date.toLocaleString('ru-RU'))}">${esc(slaText(iso))}</span>`;
+}
+function refreshCountdowns(){
+ root.querySelectorAll('[data-sla-deadline]').forEach(el=>{const deadline=el.dataset.slaDeadline;el.textContent=slaText(deadline);el.classList.toggle('overdue',new Date(deadline).getTime()<Date.now());});
+ const timer=root.querySelector('[data-measurement-timer]');if(timer&&state.timerStarted!==null){timer.textContent=measurementTime(Date.now()-state.timerStarted);}
+}
+function measurementTime(ms){const t=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;}
+function formValue(id){return root.querySelector('#'+id)?.value?.trim()||'';}
+
+function readOnlyMessage(){return `<div class="notice warning">Настоящие действия будут доступны после подключения API и проверки прав пользователя. В режиме DEMO изменения сохраняются только в браузере.</div>`;}
+function listIsEmpty(title,desc){return `<div class="surface empty"><div class="empty-icon">${icon('search',24)}</div><h3>${esc(title)}</h3><p>${esc(desc)}</p></div>`;}
+function resetWarn(){return API.isDemo()?'<span class="hint">Учебный режим: данные хранятся только в этом браузере.</span>':'<span class="hint">Ответы поступают от сервера.</span>';}
+function shell(page){
+ const nav=(navigation[state.role]||navigation.dispatcher).map(([path,label,ico])=>`<a class="nav-item ${page===path||((page.startsWith('/tickets/')||page==='/tickets')&&path==='/tickets')?'active':''}" href="#${path}">${icon(ico)}<span>${esc(label)}</span></a>`).join('');
+ const who=user(),current=page.split('/').filter(Boolean).join(' / ');
+ const avatar=(who.name||'Пользователь').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+ const roleSelect=API.isDemo()?`<label><span class="sr-only">Выбрать роль для демонстрации</span><select class="role-choice" id="role-select">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${state.role===k?'selected':''}>${v}</option>`).join('')}</select></label>`:`<span class="role-choice">${esc(roles[state.role]||state.role)}</span>`;
+ return `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-icon">${icon('spark',22)}</div><div><div class="brand-title">Диспетчер ИИ</div><div class="brand-note">Smart service desk</div></div></div><div class="nav-caption">Рабочее пространство</div><nav aria-label="Основные разделы">${nav}</nav><div class="sidebar-footer"><span class="dot"></span>${API.isDemo()?'Демо-режим':'Подключённый режим'}<div>${API.isDemo()?'Без настоящих API и LLM':'Данные через API'}</div><div style="margin-top:12px"><a href="#/login">${icon('logout',14)} <span style="display:inline-block;vertical-align:middle">Сменить пользователя</span></a></div></div></aside><div class="content"><div class="container"><header class="topbar"><div class="breadcrumbs">Рабочее пространство / ${esc(current||'Главная')}</div><div class="account-area"><span class="mode ${API.isDemo()?'':'api'}">${API.isDemo()?'DEMO':'API'}</span>${roleSelect}<div class="avatar" title="${esc(who.name)}">${esc(avatar)}</div></div></header><main id="view"></main><footer class="footer-note">Диспетчер ИИ · ${API.isDemo()?'Демонстрационные данные. Не подключено к рабочей базе.':'Промышленный режим: действия контролируются сервером.'}</footer></div></div></div><div class="toast-wrap" aria-live="polite"></div><div id="modal-root"></div>`;
+}
+function classifyPreview(){
+ const draft=state.draft;if(!draft)return listIsEmpty('Здесь появится результат анализа','Введите описание или выберите пример, затем нажмите «Анализировать».');
+ const ex=draft.extracted||{},r=draft.recommendation||{},priority=r.priority||r.priority_code||'medium';
+ const isSafety=priority==='critical';
+ const assigneeId=r.assignee_id||'';
+ return `<div class="surface card"><div class="result-head"><strong>${icon('spark')} Результат анализа</strong>${pillPriority(priority)}</div><div class="grid-2"><div><label class="form-field"><span>Категория</span><select id="confirm-category"><option value="${esc(ex.category||'Прочее')}">${esc(ex.category||'Прочее')}</option>${state.categories.filter(c=>c!==ex.category).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></label></div><div><label class="form-field"><span>Назначить инженера</span><select id="confirm-assignee"><option value="">Не назначать</option>${state.users.filter(u=>u.role==='engineer').map(u=>`<option value="${u.id}" ${String(assigneeId)===String(u.id)?'selected':''}>${esc(u.name)}</option>`).join('')}</select></label></div></div>
+ <label class="form-field"><span>Приоритет — диспетчер может изменить</span><select id="confirm-priority">${Object.entries(priorities).map(([k,v])=>`<option value="${k}" ${k===priority?'selected':''}>${v}</option>`).join('')}</select></label>
+ <label class="form-field"><span>Тема обращения</span><input id="confirm-subject" type="text" maxlength="200" value="${esc(ex.subject||state.submissionText.slice(0,120))}" /></label>
+ <label class="form-field"><span>Текст заявки — можно уточнить перед созданием</span><textarea id="confirm-description" maxlength="5000">${esc(ex.description||state.submissionText)}</textarea></label>
+ <label class="form-field"><span>Место / объект</span><input id="confirm-location" type="text" maxlength="160" value="${esc(ex.location_name||'')}" placeholder="Например, кабинет 205" /></label>
+ <div class="ai-assessment"><div><span class="field-label">Уверенность анализа</span><strong class="field-value">${Number.isFinite(Number(r.confidence??draft.confidence)) && (r.confidence??draft.confidence)!==null?esc(Math.round(Math.min(1,Math.max(0,Number(r.confidence??draft.confidence)))*100)+'%'):'Не указана'}</strong></div><div><span class="field-label">Проверка человеком</span><strong class="field-value">Обязательна</strong></div></div>
+ <details class="extract-details"><summary>Извлечённые поля, теги и симптомы — проверить и уточнить</summary><div class="grid-2 top-gap">
+ <label class="form-field"><span>Оборудование</span><input id="confirm-equipment" maxlength="120" value="${esc(ex.equipment||'')}" placeholder="Например: принтер" /></label>
+ <label class="form-field"><span>Объект / площадка</span><input id="confirm-object" maxlength="120" value="${esc(ex.object||ex.site||ex.facility||'')}" /></label>
+ <label class="form-field"><span>Этаж</span><input id="confirm-floor" maxlength="20" value="${esc(ex.floor||'')}" /></label>
+ <label class="form-field"><span>Кабинет</span><input id="confirm-room" maxlength="40" value="${esc(ex.room||ex.office||'')}" /></label>
+ <label class="form-field"><span>IP-адрес (если указан)</span><input id="confirm-ip" maxlength="64" value="${esc(ex.ip||ex.ip_address||'')}" /></label>
+ <label class="form-field"><span>Серийный номер</span><input id="confirm-serial" maxlength="120" value="${esc(ex.serial_number||ex.serial||'')}" /></label>
+ </div><label class="form-field"><span>Симптомы</span><input id="confirm-symptoms" maxlength="500" value="${esc(Array.isArray(ex.symptoms)?ex.symptoms.join(', '):ex.symptoms||'')}" placeholder="Через запятую" /></label>
+ <label class="form-field"><span>Теги</span><input id="confirm-tags" maxlength="300" value="${esc(Array.isArray(ex.tags)?ex.tags.join(', '):Array.isArray(draft.tags)?draft.tags.join(', '):'')}" placeholder="Через запятую" /></label>
+ <p class="hint">Пустые поля — неизвестные данные. Не заполняйте их догадками.</p></details>
+ <div><span class="field-label">Основание для приоритета</span><div class="field-value">${esc(r.reason||'Решение требуется проверить диспетчеру.')}</div></div>
+ ${isSafety?`<div class="notice danger top-gap">${icon('warning',16)} <strong>Потенциальная опасность:</strong> прекратить использование неисправного оборудования и действовать по регламенту безопасности объекта.</div>`:''}
+ ${(draft.questions||[]).length?`<div class="advice"><h3>${icon('info')} Необходимо уточнить</h3>${draft.questions.map(q=>`<div class="question">${esc(q)}</div>`).join('')}<label class="form-field" style="margin-top:12px"><span>Дополнительные сведения</span><textarea id="clarify-text" placeholder="Уточните информацию..."></textarea></label>${btn('Отправить уточнение','clarify','button soft')}</div>`:''}
+ <div class="form-actions end"><span class="hint">${icon('shield',13)} Только после подтверждения будет создана заявка.</span>${btn('Подтвердить и создать заявку '+icon('arrow',14),'confirm-draft','button dark',state.loading?'disabled':'')}</div></div>`;
+}
+function intakeView(){
+ return intro('Новое обращение','Опишите проблему — система поможет классифицировать заявку.')+`<section class="surface card"><div class="mini-title"><span class="num">01</span> Расскажите, что произошло</div><label class="sr-only" for="intake-text">Описание обращения</label><textarea id="intake-text" placeholder="Например: Не печатает принтер в кабинете 205, из него идёт дым...">${esc(state.submissionText)}</textarea><div class="form-actions"><div style="display:flex;gap:9px;flex-wrap:wrap">${btn(icon('mic')+' Записать голос','voice-start')}${btn(icon('upload')+' Загрузить аудио','upload-audio')}${btn(icon('file')+' Скриншот','select-image','button')}</div>${btn(icon('spark')+' Анализировать','analyze','button primary',state.loading?'disabled':'')}</div><input id="audio-file" class="sr-only" type="file" accept="audio/*" /><input id="incident-image" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp" /><div id="attachment-label" class="hint top-gap">${state.attachment?'Выбран скриншот: '+esc(state.attachment.name)+(API.isDemo()?' (в демо не загружается)':''):''}</div><div class="examples"><span class="hint">Примеры:</span>${btn('Нет краски','example','chip','data-example="toner"')}${btn('100 принтеров','example','chip','data-example="mass"')}${btn('Принтер дымится','example','chip','data-example="smoke"')}</div></section><section class="result-area" id="analysis-result">${classifyPreview()}</section>${state.pending.length?`<section class="surface card top-gap"><h2 class="panel-heading">Ожидают обработки (${state.pending.length})</h2>${state.pending.map(p=>`<div class="question"><div class="field-value"><strong>${esc(p.name)}</strong> · ${esc(p.location||'Место не указано')}</div><div style="margin:7px 0">${esc(p.description)}</div>${btn('Взять в обработку '+icon('arrow',13),'load-pending','button small soft','data-id="'+esc(p.id)+'"')}</div>`).join('')}</section>`:''}`;
+}
+function reporterForm(){return intro('Сообщить о проблеме','Оставьте обращение — служба поддержки примет его в работу.')+`<div class="surface card" style="max-width:740px"><form id="reporter-form"><label class="form-field"><span>Что произошло? *</span><textarea required name="description" minlength="8" placeholder="Опишите проблему простыми словами. Не указывайте пароли."></textarea></label><div class="grid-2"><label class="form-field"><span>Где возникла проблема?</span><input name="location" maxlength="160" placeholder="Кабинет / площадка" /></label><label class="form-field"><span>Ваше имя</span><input name="name" value="${esc(user().name)}" maxlength="80" /></label></div><div class="notice">Не нужно определять приоритет самостоятельно. Диспетчер проверит детали обращения и при необходимости задаст вопросы.</div><div class="form-actions end"><button class="button primary" type="submit">${icon('plus')} Отправить обращение</button></div></form></div>`;}
+function ticketsForRole(){
+ let list=[...state.tickets];
+ if(state.role==='engineer')list=list.filter(t=>String(t.assigneeId)===String(user().id));
+ return list;
+}
+function ticketsView(assigned=false){
+ const isEngineer=state.role==='engineer';
+ const rows=ticketsForRole().filter(t=>{
+  const q=state.ticketQuery.toLowerCase();
+  return (!q||(String(t.id)+' '+(t.subject||'')+' '+(t.description||'')).toLowerCase().includes(q)) &&
+   (state.ticketStatus==='all'||t.status===state.ticketStatus);
+ });
+ const controls=t=>{
+  const canAccept=['new','open'].includes(t.status);
+  const canFinish=t.status==='in_progress';
+  const attrs='data-id="'+esc(t.id)+'"';
+  // For a newly arrived critical incident there is exactly ONE visible action.
+  // Don't show even the disabled «Выполнено» until the engineer accepts it.
+  if(isCriticalUnaccepted(t))return `<div class="engineer-actions" aria-label="Срочно принять заявку #${esc(t.id)}">${btn(icon('warning',15)+' СРОЧНО ПРИНЯТЬ','start-ticket','button small urgent-accept',attrs)}</div>`;
+  return `<div class="engineer-actions" aria-label="Действия по заявке #${esc(t.id)}">
+   ${btn('Принять','start-ticket','button small primary',attrs+(canAccept?'':' disabled title="Сначала должна быть новая или открытая заявка"'))}
+   ${btn('Выполнено','finish-ticket','button small dark',attrs+(canFinish?'':' disabled title="Доступно после принятия заявки"'))}
+  </div>`;
+ };
+ const urgent=ticketsForRole().filter(isCriticalUnaccepted);
+ const banner=isEngineer&&urgent.length?`<div class="urgent-banner" role="status" aria-label="Критические заявки ожидают реакции"><span class="urgent-banner-icon">${icon('warning',25)}</span><div><div class="urgent-head">СРОЧНО! ОЖИДАЮТ ПРИНЯТИЯ: ${urgent.length}</div><div class="urgent-details">Критическая заявка #${esc(urgent[0].id)} · ${esc(urgent[0].subject)} · ${deadlineHtml(urgent[0])}</div></div>${btn('Перейти к заявке '+icon('arrow',15),'focus-urgent','button urgent-quick','data-id="'+esc(urgent[0].id)+'"')}</div>`:'';
+ return intro(assigned?'Мои заявки':'Заявки',assigned?'Ваши обращения. Примите заявку, затем отметьте её выполнение прямо в списке.':'Просмотр, статусы и корректировка текста обращений.')+banner+
+ (isEngineer&&API.isDemo()?`<div class="demo-help">Демо: ${btn(icon('warning',13)+' Создать новую тревогу','demo-critical','button small soft')} ${btn(icon('refresh',13)+' Проверить обновления','refresh-queue','button small soft')}</div>`:isEngineer?`<div class="demo-help">${btn(icon('refresh',13)+' Проверить новые заявки','refresh-queue','button small soft')}</div>`:'')+
+ `<div class="filters"><input id="ticket-search" type="search" placeholder="Поиск по номеру или тексту" value="${esc(state.ticketQuery)}"/><select id="ticket-filter-status"><option value="all">Все статусы</option>${Object.entries(statuses).filter(([k])=>k!=='needs_clarification').map(([k,v])=>`<option value="${k}" ${state.ticketStatus===k?'selected':''}>${v}</option>`).join('')}</select></div>
+ <section class="surface"><div class="table-head"><strong>Список заявок</strong><small>${rows.length} из ${ticketsForRole().length}</small></div><div class="table-wrap"><table class="table"><thead><tr><th>№</th><th>Обращение</th><th>Приоритет</th><th>Статус</th>${isEngineer?'<th>Действия</th>':'<th>Исполнитель</th><th>Действие</th>'}</tr></thead><tbody>
+ ${rows.length?rows.map(t=>`<tr class="${isEngineer&&isCriticalUnaccepted(t)?'urgent-ticket-row':''}" data-ticket-row="${esc(t.id)}"><td><button class="button link" data-action="open-ticket" data-id="${esc(t.id)}">#${esc(t.id)}</button></td><td><button class="ticket-title-link" data-action="open-ticket" data-id="${esc(t.id)}">${esc(t.subject)}</button><div class="small muted">${esc(t.location||'Место не указано')}</div>${isEngineer?`<div class="row-sla">${deadlineHtml(t)}</div>`:''}</td>${isEngineer&&isCriticalUnaccepted(t)?`<td colspan="3" class="urgent-only-cell">${controls(t)}</td>`:`<td>${pillPriority(t.priority)}</td><td>${isEngineer?engineerStateBadge(t):pillStatus(t.status)}</td>${isEngineer?`<td>${controls(t)}</td>`:`<td>${esc(t.assigneeName||'Не назначен')}</td><td>${btn(icon('file')+' Изменить','edit-ticket','button small soft','data-id="'+esc(t.id)+'"')}</td>`}`}</tr>`).join(''):`<tr><td colspan="${isEngineer?5:6}" class="muted" style="text-align:center;padding:30px">Нет подходящих заявок</td></tr>`}</tbody></table></div></section>`;
+}
+function ticketView(ticket){
+ if(!ticket)return listIsEmpty('Заявка не найдена','Вернитесь к списку.');
+ const isEngineer=state.role==='engineer';
+ const assist=state.assist[ticket.id];
+ const detailFields=`<div><div class="field-label">Статус</div>${isEngineer?engineerStateBadge(ticket):pillStatus(ticket.status)}</div>${isEngineer?'':`<div><div class="field-label">Исполнитель</div><div class="field-value">${esc(ticket.assigneeName||'Не назначен')}</div></div>`}<div><div class="field-label">Объект / кабинет</div><div class="field-value">${esc(ticket.location||'Не указан')}</div></div><div><div class="field-label">Категория</div><div class="field-value">${esc(ticket.category||'Не определена')}</div></div>`;
+ const information=`<div class="surface card"><div class="ticket-head"><div><div class="view-label">ЗАЯВКА #${esc(ticket.id)}</div><h2>${esc(ticket.subject)}</h2></div>${pillPriority(ticket.priority)}</div><div class="ticket-desc">${esc(ticket.description)}</div><div class="grid-2">${detailFields}</div>${ticket.extracted?.equipment||ticket.extracted?.ip||ticket.extracted?.tags?.length?`<details class="extract-details top-gap"><summary>Дополнительные данные заявки</summary><div class="grid-2 top-gap">${Object.entries(ticket.extracted).filter(([k,v])=>['equipment','ip','floor','room','object','serial_number','symptoms','tags'].includes(k)&&v).map(([k,v])=>`<div><span class="field-label">${esc(({equipment:'Оборудование',ip:'IP',floor:'Этаж',room:'Кабинет',object:'Объект',serial_number:'Серийный номер',symptoms:'Симптомы',tags:'Теги'})[k]||k)}</span><span class="field-value">${esc(Array.isArray(v)?v.join(', '):v)}</span></div>`).join('')}</div></details>`:''}</div>`;
+ if(isEngineer)return `<button class="back" data-action="back-tickets">${icon('back',15)} Мои заявки</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Предложенное решение</h2></div><div id="assist-container">${assist?assistHtml(assist):'<div class="notice"><span class="spinner"></span> Загружаем рекомендации и источники…</div>'}</div></div><p class="hint top-gap">Чтобы принять или завершить заявку, используйте кнопки напротив неё в списке «Мои заявки».</p></div>`;
+ return `<button class="back" data-action="back-tickets">${icon('back',15)} К заявкам</button><div class="work-focus">${information}<div class="surface card top-gap"><div class="section-heading"><h2>Описание заявки</h2>${btn(icon('file')+' Редактировать','edit-ticket','button soft','data-id="'+esc(ticket.id)+'"')}</div><p class="muted">Диспетчер может поправить формулировку, не меняя историю исполнения.</p></div></div>`;
+}
+function assistHtml(a){
+ const steps=Array.isArray(a.steps)?a.steps:[];
+ const sources=Array.isArray(a.sources)?a.sources:[];
+ const title=a.status==='answered'?'Рекомендованные действия':a.status==='sources_only'?'Найденные источники':'Нет подтверждённого решения';
+ return `<div class="advice ${a.emergency?'danger':''}"><h3>${icon('book',17)} ${esc(title)}</h3>${a.summary?`<p>${esc(a.summary)}</p>`:''}
+ ${steps.length?`<ol>${steps.map(x=>`<li>${esc(typeof x==='string'?x:x.text||x.description||'')}</li>`).join('')}</ol>`:''}
+ ${sources.length?`<div class="divider"></div><div class="field-label">Откуда взята информация</div>${sources.map(src=>`<div class="source-line">${icon('file',14)} <button class="button link" data-action="view-source" data-type="${esc(src.type||'kb')}" data-id="${esc(src.id??'')}" data-title="${esc(src.title||src.name||'Источник')}">${esc(src.title||src.name||'Источник')}</button></div>`).join('')}`:''}
+ ${!steps.length&&!sources.length?'<p>Достоверных рекомендаций не найдено. Уточните информацию у ответственного специалиста.</p>':''}</div><p class="hint top-gap">Рекомендация носит справочный характер. Решение принимает инженер.</p>`;
+}
+function knowledgeView(){
+ const docs=state.articles.filter(d=>((d.title||'')+' '+(d.description||'')+' '+(d.category||'')).toLowerCase().includes(state.kbQuery.toLowerCase()));
+ return intro('База знаний','Управление статьями и подключение новых источников.')+
+ `<div class="form-actions admin-actions">${btn(icon('plus')+' Добавить статью','add-article','button primary')}${btn(icon('upload')+' Добавить сайт по ссылке','import-website','button soft')}</div>
+ <input id="kb-search" type="search" placeholder="Поиск по статьям…" value="${esc(state.kbQuery)}" style="margin:16px 0;background:#fff"/>
+ <div class="kb-grid">${docs.map(d=>`<article class="surface kb-card"><span class="view-label">${esc(d.category||'Без категории')}</span><h3>${esc(d.title)}</h3><p>${esc(d.description||'')}</p>${d.source_url?`<span class="meta">Сайт: ${esc(d.source_url)}</span>`:''}
+ <div class="kb-actions">${btn('Просмотр','open-article','button small soft','data-id="'+esc(d.id)+'"')}${btn('Изменить','edit-article','button small','data-id="'+esc(d.id)+'"')}${btn('Удалить','delete-article','button small danger','data-id="'+esc(d.id)+'"')}</div></article>`).join('')}</div>
+ ${!docs.length?listIsEmpty('Статей нет','Добавьте статью или ссылку на источник.'):''}`;
+}
+function articleView(article){
+ if(!article)return listIsEmpty('Статья не найдена','Вернитесь к списку.');
+ const lines=Array.isArray(article.content)?article.content:String(article.content||'').split(/\n+/).filter(Boolean);
+ return `<button class="back" data-action="back-kb">${icon('back',15)} К базе знаний</button><article class="surface card work-focus"><div class="section-heading"><h2>${esc(article.title)}</h2>${btn('Изменить','edit-article','button soft','data-id="'+esc(article.id)+'"')}</div><p class="muted">${esc(article.description||'')}</p><div class="divider"></div><ol class="steps">${lines.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`;
+}
+function progressLine(title,value,total,colour){const count=Math.max(0,Number(value||0)),max=Math.max(1,total);return `<div class="progress-row"><div class="progress-label"><span>${esc(title)}</span><strong>${count}</strong></div><div class="progress-track"><div class="progress-fill ${colour}" style="width:${Math.min(100,count/max*100)}%"></div></div></div>`;}
+function auditWidget(){
+ if(!state.auditLoaded)return `<div class="section-heading"><h2>Журнал действий</h2>${btn('Загрузить журнал','load-audit','button small soft')}</div><p class="hint">Создание и изменение заявок, переходы статусов, решения диспетчера.</p>`;
+ return `<div class="section-heading"><h2>Журнал действий</h2>${btn(icon('refresh',13)+' Обновить','load-audit','button small soft')}</div><div class="table-wrap"><table class="table"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Объект</th></tr></thead><tbody>${state.audit.length?state.audit.slice(0,20).map(x=>`<tr><td>${esc(x.when||x.created_at||'—')}</td><td>${esc(x.actor||x.user||'—')}</td><td>${esc(x.action||'—')}</td><td>${esc(x.target||'—')}</td></tr>`).join(''):'<tr><td colspan="4" class="muted">Нет записей или API вернул пустой журнал</td></tr>'}</tbody></table></div>`;
+}
+function timingWidget(){
+ const manual=state.metrics.manual,ai=state.metrics.ai;
+ const m=manual?.ms,a=ai?.ms;
+ return `<details class="extract-details top-gap" ${state.metricsOpen?'open':''}><summary>Измерение времени: вручную и с ИИ</summary><p class="hint top-gap">Засеките фактическое время на одинаковом обращении. Это секундомер демонстрации, не прогноз и не статистика из БД.</p><div class="metric-card"><span class="metric-time" data-measurement-timer>${state.timerStarted!==null?measurementTime(Date.now()-state.timerStarted):'00:00'}</span><span class="metric-context">${state.timerKind==='manual'?'Ручной сценарий':state.timerKind==='ai'?'С ИИ':'Выберите сценарий'}</span></div><div class="form-actions">${btn('▶ Без ИИ','measure-manual','button small soft',state.timerStarted!==null?'disabled':'')}${btn('▶ С ИИ','measure-ai','button small soft',state.timerStarted!==null?'disabled':'')}${btn('■ Остановить','measure-stop','button small primary',state.timerStarted===null?'disabled':'')}</div><div class="grid-2 top-gap"><div class="notice">Без ИИ: <strong>${m!=null?measurementTime(m):'не измерено'}</strong></div><div class="notice">С ИИ: <strong>${a!=null?measurementTime(a):'не измерено'}</strong></div></div><div class="grid-2 top-gap"><label class="form-field"><span>Количество действий без ИИ</span><input id="manual-action-count" type="number" min="0" max="999" value="${esc(state.metricCounts.manual)}" placeholder="Измерьте вручную" /></label><label class="form-field"><span>Количество действий с ИИ</span><input id="ai-action-count" type="number" min="0" max="999" value="${esc(state.metricCounts.ai)}" placeholder="Измерьте вручную" /></label></div>${state.metricCounts.manual!==''&&state.metricCounts.ai!==''?`<div class="notice">Ручных действий: ${esc(state.metricCounts.manual)}; с ИИ: ${esc(state.metricCounts.ai)}. Разница: ${Number(state.metricCounts.manual)-Number(state.metricCounts.ai)}.</div>`:''}${m!=null&&a!=null?`<p class="hint top-gap">Разница измерений: ${esc(measurementTime(Math.abs(m-a)))} ${a<m?'быстрее с ИИ':a>m?'быстрее без ИИ':'— одинаково'} (один пробный замер, не средний результат).</p>`:''}</details>`;
+}
+function reportsView(){
+ const stats=state.stats;
+ const total=Number(stats?.total||0),unresolved=Number(stats?.open||0),resolved=Number(stats?.resolved||0),critical=Number(stats?.critical||0);
+ const byPriority=stats?.byPriority||{};const byStatus=stats?.byStatus||{};
+ const sla=stats?.sla||stats?.slaSummary||null;
+ return intro('Статистика заявок','Запросите сводку за выбранный период из базы данных.')+
+ `<section class="surface card"><form id="stats-form"><div class="stats-filters"><label class="form-field"><span>Дата с</span><input name="from" type="date" value="${esc(state.statsFrom||'')}" /></label><label class="form-field"><span>Дата по</span><input name="to" type="date" value="${esc(state.statsTo||'')}" /></label><button type="submit" class="button primary">${icon('chart')} Запросить статистику</button></div></form></section>
+ ${stats?`<div class="grid-3 stats-cards top-gap"><div class="surface stat"><div class="stat-label">Всего заявок</div><div class="stat-value">${total}</div></div><div class="surface stat"><div class="stat-label">В работе и ожидают</div><div class="stat-value">${unresolved}</div></div><div class="surface stat"><div class="stat-label">Завершены</div><div class="stat-value">${resolved}</div></div></div>
+ <div class="grid-2 top-gap"><section class="surface card"><h2 class="panel-heading">По приоритетам</h2>${Object.entries(priorities).map(([k,v])=>progressLine(v,byPriority[k],total,k)).join('')}</section><section class="surface card"><h2 class="panel-heading">По статусам</h2>${Object.entries(statuses).filter(([k])=>['new','open','in_progress','resolved','closed'].includes(k)).map(([k,v])=>progressLine(v,byStatus[k],total,'medium')).join('')}</section></div>
+ <section class="surface card top-gap"><h2 class="panel-heading">SLA и риски</h2>${sla?`<div class="grid-2"><div class="notice warning">Риск нарушения: <strong>${Number(sla.atRisk??sla.at_risk??0)}</strong></div><div class="notice danger">Просрочено: <strong>${Number(sla.breached??0)}</strong></div></div>`:'<div class="notice">Сервер ещё не передал статистику по SLA. Показатели не рассчитываем из догадок.</div>'}</section>`:listIsEmpty('Статистика ещё не запрошена','Выберите период и нажмите «Запросить статистику».')}
+ <section class="surface card top-gap">${auditWidget()}</section><section class="surface card top-gap"><h2 class="panel-heading">Показать эффект автоматизации</h2>${timingWidget()}</section>`;
+}
+// Read-only administrator overview. In API mode, all records come from
+// /admin/engineers; the browser never connects directly to MariaDB.
+function engineersView(){
+ const all=state.engineers.filter(e=>!e.role||e.role==='engineer');
+ const query=state.engineersQuery.trim().toLocaleLowerCase('ru-RU');
+ const matches=all.filter(e=>{
+   const skills=Array.isArray(e.competencies)?e.competencies:(Array.isArray(e.skills)?e.skills:[]);
+   const assigned=Array.isArray(e.tickets)?e.tickets:(Array.isArray(e.active_tickets)?e.active_tickets:(Array.isArray(e.assigned_tickets)?e.assigned_tickets:[]));
+   const searchable=[e.name||'',e.department||'',...skills.map(x=>typeof x==='string'?x:(x?.name||'')),...assigned.map(t=>[t.id,t.subject||t.title||'',t.category||''].join(' '))].join(' ').toLocaleLowerCase('ru-RU');
+   return !query||searchable.includes(query);
+ });
+ const activeStatuses=new Set(['new','open','in_progress','needs_clarification']);
+ const assignedTo=e=>{
+   const list=Array.isArray(e.tickets)?e.tickets:(Array.isArray(e.active_tickets)?e.active_tickets:(Array.isArray(e.assigned_tickets)?e.assigned_tickets:[]));
+   return list.filter(t=>activeStatuses.has(t.status));
+ };
+ const activeTotal=all.reduce((sum,e)=>sum+assignedTo(e).length,0);
+ const criticalTotal=all.reduce((sum,e)=>sum+assignedTo(e).filter(t=>t.priority==='critical').length,0);
+ const warning=state.engineersError?`<div class="notice warning top-gap" role="alert">Не удалось получить список инженеров из API: ${esc(state.engineersError)}. Проверьте права администратора и маршрут GET /api/v1/admin/engineers.</div>`:'';
+ const header=intro('Инженеры','Компетенции сотрудников и заявки, которые сейчас закреплены за ними.',btn(icon('refresh',15)+' Обновить','refresh-engineers','button soft'));
+ const summary=state.engineersLoaded&&!state.engineersError?`<div class="engineer-summary"><div class="surface engineer-stat"><span>Инженеров</span><strong>${all.length}</strong></div><div class="surface engineer-stat"><span>Назначенных активных заявок</span><strong>${activeTotal}</strong></div><div class="surface engineer-stat"><span>Критических активных</span><strong>${criticalTotal}</strong></div></div>`:'';
+ const search=`<div class="engineers-search"><label class="sr-only" for="engineers-search">Поиск инженера или компетенции</label><input id="engineers-search" type="search" placeholder="Поиск по инженеру, компетенции или заявке…" value="${esc(state.engineersQuery)}" /></div>`;
+ const cards=matches.map(e=>{
+   const skills=(Array.isArray(e.competencies)?e.competencies:(Array.isArray(e.skills)?e.skills:[])).map(x=>typeof x==='string'?x:x?.name).filter(Boolean);
+   const tasks=assignedTo(e).sort((a,b)=>({critical:0,high:1,medium:2,low:3}[a.priority]??4)-({critical:0,high:1,medium:2,low:3}[b.priority]??4));
+   const started=tasks.filter(t=>t.status==='in_progress').length;
+   const awaiting=tasks.length-started;
+   const openTable=tasks.length?`<div class="table-wrap"><table class="table engineer-task-table"><thead><tr><th>№</th><th>Заявка</th><th>Приоритет</th><th>Статус</th></tr></thead><tbody>${tasks.map(t=>`<tr><td class="primary-text">#${esc(t.id)}</td><td><strong>${esc(t.subject||t.title||'Без названия')}</strong>${t.location?`<div class="small muted">${esc(t.location)}</div>`:''}</td><td>${pillPriority(t.priority)}</td><td>${pillStatus(t.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="engineer-no-tasks">Нет активных заявок</div>';
+   const declaredCount=Number(e.active_count??e.activeCount);
+   const incomplete=!tasks.length&&Number.isFinite(declaredCount)&&declaredCount>0;
+   return `<section class="surface engineer-card"><div class="engineer-profile"><div class="engineer-profile-meta"><div class="engineer-avatar">${esc(String(e.name||'?').trim().split(/\s+/).slice(0,2).map(x=>x.slice(0,1)).join('').toUpperCase())}</div><div><h2>${esc(e.name||'Имя не указано')}</h2><p>${esc(e.department||'Инженер технической поддержки')}</p></div></div><div class="engineer-workload"><strong>${tasks.length}</strong><span>активных заявок</span></div></div><div class="engineer-skill-row"><span class="field-label">Компетенции</span><div class="engineer-skills">${skills.length?skills.map(s=>`<span class="engineer-skill">${esc(s)}</span>`).join(''):'<span class="muted small">Компетенции не указаны в БД</span>'}</div></div><div class="engineer-loadline"><span>Ожидают принятия: <strong>${awaiting}</strong></span><span>В работе: <strong>${started}</strong></span></div><div class="engineer-task-head">Закреплённые заявки <span>${tasks.length}</span></div>${incomplete?'<div class="notice warning">API передал количество заявок, но не их список. Для просмотра необходим массив tickets.</div>':''}${openTable}</section>`;
+ }).join('');
+ const status=state.engineersError?'':!state.engineersLoaded?'<div class="surface card">Загружаем список инженеров…</div>':!all.length?listIsEmpty('Инженеры не найдены','В БД пока нет доступных записей об инженерах.'):!matches.length?listIsEmpty('Совпадений нет','Измените поисковый запрос.'):cards;
+ return header+warning+summary+search+`<div class="engineers-list">${status}</div>`+(API.isDemo()?'<p class="hint top-gap">ДЕМО: компетенции и распределение заявок учебные. В рабочем режиме раздел получает сведения из MariaDB через защищённый API.</p>':'');
+}
+function usersView(){return intro('Сотрудники','Учётные записи и роли в системе.')+`<section class="surface"><div class="table-head"><strong>Пользователи</strong>${btn(icon('plus')+' Добавить','show-user-modal','button primary small')}</div><div class="table-wrap"><table class="table"><thead><tr><th>Имя</th><th>Email</th><th>Роль</th><th>Статус</th></tr></thead><tbody>${state.users.map(u=>`<tr><td class="primary-text">${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(roles[u.role]||u.role)}</td><td>${pillStatus(u.status==='active'?'resolved':'closed')}</td></tr>`).join('')}</tbody></table></div></section>`;}
+function auditView(){return intro('Журнал действий','Основные события, изменения и подтверждения.')+`<section class="surface"><div class="table-wrap"><table class="table"><thead><tr><th>Дата</th><th>Кто</th><th>Действие</th><th>Объект</th></tr></thead><tbody>${state.audit.map(x=>`<tr><td>${esc(x.when)}</td><td>${esc(x.actor)}</td><td class="primary-text">${esc(x.action)}</td><td>${esc(x.target)}</td></tr>`).join('')}</tbody></table></div></section>`;}
+function systemView(){return intro('Состояние системы','Диагностика подключений и основных сервисов.')+`<div class="surface card"><h2 class="panel-heading">Подключение</h2><div class="grid-2"><div><span class="field-label">Режим интерфейса</span><strong>${API.isDemo()?'Демонстрационный':'Подключение к API'}</strong></div><div><span class="field-label">Адрес API</span><code>${esc(CFG.apiBase)}</code></div></div><div class="divider"></div><div id="health-list">${btn(icon('refresh')+' Проверить сервисы','health','button soft')}</div>${API.isDemo()?'<div class="notice warning top-gap">В демо-режиме статус сервисов нельзя считать настоящей проверкой сервера.</div>':''}<div class="form-actions end top-gap">${API.isDemo()?btn('Сбросить учебные данные','reset-demo','button danger'):''}</div></div>`;}
+function publicView(){return `<div class="login-wrap"><div class="surface login-card" style="max-width:600px"><div class="brand"><div class="brand-icon">${icon('spark')}</div><div><div class="brand-title">Диспетчер ИИ</div><div class="brand-note">Форма обращения</div></div></div><h1>Сообщить о проблеме</h1><p>Заполните заявку, и диспетчер передаст её нужному специалисту.</p><form id="public-form"><label class="form-field"><span>Как к вам обращаться? *</span><input required name="name" maxlength="80" placeholder="Имя и фамилия" /></label><label class="form-field"><span>Где возникла проблема?</span><input name="location" maxlength="160" placeholder="Площадка, кабинет" /></label><label class="form-field"><span>Опишите проблему *</span><textarea required minlength="8" name="description" placeholder="Например: принтер перестал печатать..."></textarea></label><button class="button primary" style="width:100%" type="submit">${icon('arrow')} Отправить обращение</button></form><div class="notice top-gap">Не передавайте пароли и персональные данные в описании.</div><div style="margin-top:16px;text-align:center"><a href="#/login">Войти как сотрудник</a></div></div></div><div class="toast-wrap" aria-live="polite"></div>`;}
+function loginView(){return `<div class="login-wrap"><div class="surface login-card"><div class="brand"><div class="brand-icon">${icon('spark')}</div><div><div class="brand-title">Диспетчер ИИ</div><div class="brand-note">Рабочее пространство</div></div></div><h1>Выберите роль</h1><p>Три рабочих интерфейса. В демонстрационном режиме выбор роли не заменяет авторизацию.</p>
+ ${API.isDemo()?`<div class="role-tiles">${Object.entries(roles).map(([k,v])=>`<button class="role-tile" type="button" data-action="login-demo" data-role="${k}">${icon(k==='dispatcher'?'headset':k==='engineer'?'gear':'shield',20)}<div>${v}</div></button>`).join('')}</div>`:'<div class="notice">Вход и права сотрудников предоставляет сервер. Роль загружается из текущей сессии.</div>'}</div></div><div class="toast-wrap" aria-live="polite"></div>`;}
+function notAllowed(){return `<div class="surface empty"><div class="empty-icon">${icon('lock')}</div><h3>Раздел недоступен для текущей роли</h3><p>Выберите доступный пункт в меню. На настоящем сервере права проверяет backend.</p></div>`;}
+function permitted(r){
+ if(state.role==='dispatcher')return r==='/intake'||r==='/tickets'||r.startsWith('/tickets/');
+ if(state.role==='engineer')return r==='/assigned'||r.startsWith('/tickets/');
+ if(state.role==='admin')return r==='/reports'||r==='/engineers'||r==='/knowledge'||r.startsWith('/knowledge/');
+ return false;
+}
+function render(){
+ const p=route();document.title='Диспетчер ИИ';
+ if(p==='/login'){root.innerHTML=loginView();return;}
+ root.innerHTML=shell(p);
+ let html;
+ if(!permitted(p))html=notAllowed();
+ else if(p==='/intake')html=intakeView();
+ else if(p==='/tickets'||p==='/assigned')html=ticketsView(p==='/assigned');
+ else if(p.startsWith('/tickets/')){
+  const ticket=state.tickets.find(t=>String(t.id)===p.split('/')[2]);
+  if(ticket&&state.role==='engineer'&&String(ticket.assigneeId)!==String(user().id))html=notAllowed();
+  else html=ticketView(ticket);
+ }
+ else if(p==='/knowledge')html=knowledgeView();
+ else if(p.startsWith('/knowledge/'))html=articleView(state.articles.find(a=>String(a.id)===p.split('/')[2]));
+ else if(p==='/reports')html=reportsView();
+ else if(p==='/engineers')html=engineersView();
+ else html=notAllowed();
+ document.getElementById('view').innerHTML=html;
+ // Engineer sees proposal automatically; no additional knowledge-base navigation or button.
+ if(state.role==='engineer'&&p.startsWith('/tickets/')){
+  const ticket=state.tickets.find(t=>String(t.id)===p.split('/')[2]);
+  if(ticket&&String(ticket.assigneeId)===String(user().id)&&!state.assist[ticket.id]&&!state.assistPending[ticket.id])findSolution(ticket.id);
+ }
+}
+function toast(text,type=''){const wrap=root.querySelector('.toast-wrap');if(!wrap)return;const el=document.createElement('div');el.className='toast '+type;el.textContent=text;wrap.appendChild(el);setTimeout(()=>el.remove(),5000);}
+function setLoading(on){state.loading=on;}
+function normList(v,keys=[]){if(Array.isArray(v))return v;for(const k of keys)if(Array.isArray(v?.[k]))return v[k];return [];}
+async function loadData(){
+ try{
+  const queries=state.role==='dispatcher'?{
+   tickets:API.listTickets(),users:API.listUsers(),categories:API.listCategories(),pending:API.listPending()
+  }:state.role==='engineer'?{
+   tickets:API.listTickets()
+  }:{articles:API.listArticles(),engineers:API.listEngineersDashboard()};
+  const keys=Object.keys(queries),values=await Promise.allSettled(Object.values(queries));
+  const convert=(v,keys)=>normList(v,keys);
+  keys.forEach((key,i)=>{
+   if(values[i].status!=='fulfilled'){
+    if(key==='engineers'){state.engineersLoaded=true;state.engineersError=values[i].reason.message;state.engineers=[];}
+    toast('Ошибка загрузки данных: '+values[i].reason.message,'error');return;
+   }
+   const v=values[i].value;
+   if(key==='tickets')state.tickets=convert(v,['tickets','data','items']);
+   if(key==='users')state.users=convert(v,['users','data','items']);
+   if(key==='pending')state.pending=convert(v,['items','requests','data']);
+   if(key==='articles')state.articles=convert(v,['articles','data','items']);
+   if(key==='engineers'){state.engineers=convert(v,['engineers','data','items']);state.engineersLoaded=true;state.engineersError=null;}
+   if(key==='categories')state.categories=Array.isArray(v)?v:v.categories||v.types||[];
+  });
+  if(state.role==='engineer')state.queueSignature=JSON.stringify(state.tickets.map(t=>[t.id,t.status,t.priority,t.responseDueAt,t.response_due_at]));
+ }catch(e){toast('Ошибка загрузки: '+e.message,'error');}
+ render();
+}
+async function analyze(){const field=root.querySelector('#intake-text');const text=(field?.value||state.submissionText).trim();if(text.length<8){toast('Опишите проблему подробнее (от 8 символов).','error');field?.focus();return;}
+ state.submissionText=text;state.draft=null;setLoading(true);const out=root.querySelector('#analysis-result');if(out)out.innerHTML='<div class="surface card"><span class="spinner"></span> Анализируем обращение…</div>';
+ try{state.draft=await API.analyze(text,state.intakeSource);render();toast('Черновик готов. Проверьте поля перед созданием.','success');}catch(e){toast('Анализ не выполнен: '+e.message,'error');render();}finally{setLoading(false);}}
+function previewText(key){const x={toner:'В принтере закончилась краска, нужно заменить картридж.',mass:'Одновременно перестали работать 100 принтеров в офисе.',smoke:'Принтер не печатает, из него идёт дым и пахнет гарью.'};state.submissionText=x[key]||'';state.pendingId=null;state.draft=null;state.intakeSource='text';render();root.querySelector('#intake-text')?.focus();}
+async function confirmDraft(){if(!state.draft){toast('Сначала выполните анализ.','error');return;}const value=id=>root.querySelector('#'+id)?.value?.trim()||'';
+ const assigneeId=value('confirm-assignee');const person=state.users.find(u=>String(u.id)===assigneeId);
+ const payload={description:value('confirm-description')||state.submissionText,subject:value('confirm-subject')||state.submissionText.slice(0,80),category:value('confirm-category'),priority:value('confirm-priority'),assigneeId:assigneeId?Number(assigneeId):null,assigneeName:person?.name||'Не назначен',location:value('confirm-location'),source:state.intakeSource,extracted:{equipment:value('confirm-equipment'),object:value('confirm-object'),floor:value('confirm-floor'),room:value('confirm-room'),ip:value('confirm-ip'),serial_number:value('confirm-serial'),symptoms:value('confirm-symptoms').split(',').map(x=>x.trim()).filter(Boolean),tags:value('confirm-tags').split(',').map(x=>x.trim()).filter(Boolean)}};
+ try{const response=await API.confirm(state.draft.draft_id,payload);const createdId=response.ticket_id||response.id||response.ticket?.id;let attachmentError=null;if(state.attachment&&createdId){try{await API.uploadTicketImage(createdId,state.attachment);}catch(e){attachmentError=e.message;}}state.attachment=null;if(state.pendingId){await API.markPendingProcessed(state.pendingId,response.ticket_id||response.id);state.pendingId=null;}state.draft=null;state.submissionText='';await loadData();toast(attachmentError?'Заявка создана, но изображение не загружено: '+attachmentError:'Заявка создана после подтверждения.',attachmentError?'error':'success');navigate('/tickets/'+(response.ticket_id||response.id||response.ticket?.id));}catch(e){toast('Не удалось создать заявку: '+e.message,'error');}}
+async function clarify(){const value=root.querySelector('#clarify-text')?.value.trim();if(!value){toast('Укажите дополнительные сведения.','error');return;}
+ try{state.submissionText+='\nДополнение: '+value;state.draft=await API.clarify(state.draft.draft_id,value);render();}catch(e){toast('Ошибка уточнения: '+e.message,'error');}}
+async function submitPublic(form){const fd=new FormData(form),data={name:String(fd.get('name')||''),location:String(fd.get('location')||''),description:String(fd.get('description')||'')};if(data.description.trim().length<8){toast('Описание слишком короткое.','error');return;}
+ try{const result=await API.submitPublic(data);form.reset();toast('Обращение №'+(result.request_id||result.id)+' получено. Ожидает проверки диспетчером.','success');if(route()!=='/public'){await loadData();navigate('/my-tickets');}}catch(e){toast('Не удалось отправить обращение: '+e.message,'error');}}
+async function findSolution(id){if(state.assistPending[id])return;state.assistPending[id]=true;const node=root.querySelector('#assist-container');if(node)node.innerHTML='<div class="notice"><span class="spinner"></span> Ищем решения в базе знаний…</div>';
+ try{state.assist[id]=await API.engineerAssist(id);const next=root.querySelector('#assist-container');if(next)next.innerHTML=assistHtml(state.assist[id]);}
+ catch(e){const next=root.querySelector('#assist-container');if(next)next.innerHTML='<div class="notice danger">'+esc('Ошибка поиска: '+e.message)+'</div>';}finally{delete state.assistPending[id];}}
+async function updateStatus(form){const id=form.dataset.id,status=form.elements.status.value;try{await API.updateTicket(id,{status});await loadData();navigate('/tickets/'+id);toast('Статус обновлён','success');}catch(e){toast('Ошибка сохранения: '+e.message,'error');}}
+async function addNote(form){const id=form.dataset.id,text=String(new FormData(form).get('text')||'').trim();if(!text)return;try{await API.addNote(id,text);await loadData();navigate('/tickets/'+id);toast('Комментарий добавлен','success');}catch(e){toast('Ошибка комментария: '+e.message,'error');}}
+
+async function loadAudit(){
+ try{const out=await API.listAudit();state.audit=normList(out,['events','audit','data','items']);state.auditLoaded=true;render();}
+ catch(e){toast('Не удалось загрузить журнал: '+e.message,'error');}
+}
+async function refreshEngineerQueue(manual=false){
+ if(state.role!=='engineer'||route()!=='/assigned')return;
+ try{
+  const v=await API.listTickets();const tickets=normList(v,['tickets','data','items']);
+  const oldIds=new Set(state.tickets.filter(t=>String(t.assigneeId)===String(user().id)&&isCriticalUnaccepted(t)).map(t=>String(t.id)));
+  const newlyCritical=tickets.filter(t=>String(t.assigneeId)===String(user().id)&&isCriticalUnaccepted(t)&&!oldIds.has(String(t.id)));
+  const signature=JSON.stringify(tickets.map(t=>[t.id,t.status,t.priority,t.responseDueAt,t.response_due_at]));
+  const changed=state.queueSignature!==signature;state.queueSignature=signature;state.tickets=tickets;
+  if(changed&&(!root.querySelector('#ticket-search:focus')&&!root.querySelector('.modal-backdrop')))render();
+  if(newlyCritical.length){toast('ТРЕВОГА! Новая критическая заявка №'+newlyCritical[0].id,'error');}
+  else if(manual)toast('Список заявок обновлён','success');
+ }catch(e){if(manual)toast('Не удалось обновить заявки: '+e.message,'error');}
+}
+async function setEngineerStatus(id,status){
+ if(state.role!=='engineer')return;
+ const ticket=state.tickets.find(t=>String(t.id)===String(id));
+ if(!ticket||String(ticket.assigneeId)!==String(user().id))return toast('Заявка не назначена вам.','error');
+ if(status==='in_progress'&&!['new','open'].includes(ticket.status))return toast('Эту заявку нельзя принять повторно.','error');
+ if(status==='resolved'&&ticket.status!=='in_progress')return toast('Сначала примите заявку.','error');
+ try{await API.updateTicket(id,{status});await loadData();navigate('/assigned');toast(status==='in_progress'?'Заявка принята':'Заявка выполнена','success');}
+ catch(e){toast('Не удалось обновить статус: '+e.message,'error');}
+}
+function showEditTicket(id){
+ if(state.role!=='dispatcher')return;
+ const t=state.tickets.find(x=>String(x.id)===String(id));if(!t)return;
+ modal(`<h2>Редактировать заявку #${esc(t.id)}</h2><p>Поправьте текст обращения. Изменения сохраняются через API заявок.</p>
+ <form id="edit-ticket-form" data-id="${esc(t.id)}"><label class="form-field"><span>Заголовок</span><input name="subject" maxlength="200" required value="${esc(t.subject)}" /></label>
+ <label class="form-field"><span>Текст заявки</span><textarea name="description" maxlength="5000" required>${esc(t.description)}</textarea></label>
+ <div class="form-actions end">${btn('Отмена','close-modal')}<button class="button primary" type="submit">Сохранить</button></div></form>`);
+}
+function articleForm(id=null){
+ if(state.role!=='admin')return;
+ const item=id!==null?state.articles.find(a=>String(a.id)===String(id)):null;
+ const content=item?(Array.isArray(item.content)?item.content.join('\n'):String(item.content||'')):'';
+ modal(`<h2>${item?'Изменить статью':'Новая статья'}</h2><p>Изменения будут применены к базе знаний после сохранения.</p>
+ <form id="article-form" data-id="${esc(item?.id??'')}"><label class="form-field"><span>Название *</span><input name="title" maxlength="180" required value="${esc(item?.title||'')}" /></label>
+ <label class="form-field"><span>Категория</span><input name="category" maxlength="80" value="${esc(item?.category||'')}" /></label>
+ <label class="form-field"><span>Краткое описание</span><textarea name="description" maxlength="1000" style="height:75px">${esc(item?.description||'')}</textarea></label>
+ <label class="form-field"><span>Содержание (каждый шаг с новой строки)</span><textarea name="content" maxlength="20000" style="height:160px">${esc(content)}</textarea></label>
+ <div class="form-actions end">${btn('Отмена','close-modal')}<button class="button primary" type="submit">Сохранить</button></div></form>`);
+}
+function websiteForm(){
+ if(state.role!=='admin')return;
+ modal(`<h2>Добавить сайт в базу знаний</h2><p>Укажите URL. В рабочем режиме сервер должен безопасно загрузить и проиндексировать содержимое. В DEMO сохраняется только ссылка.</p>
+ <form id="website-form"><label class="form-field"><span>Адрес сайта *</span><input name="url" type="url" maxlength="2000" required placeholder="https://example.org/manual" /></label>
+ <div class="form-actions end">${btn('Отмена','close-modal')}<button class="button primary" type="submit">Добавить источник</button></div></form>`);
+}
+async function showSource(button){
+ const id=button.dataset.id,type=button.dataset.type||'kb';
+ let article=['kb','article','knowledge'].includes(type)?state.articles.find(x=>String(x.id)===String(id)):null;
+ if(!article&&id&&['kb','article','knowledge'].includes(type)){
+  try{article=await API.getArticle(id);}catch(_e){}
+ }
+ const name=button.dataset.title||article?.title||'Источник';
+ const content=article?(Array.isArray(article.content)?article.content.join('\n'):String(article.content||'')):'';
+ modal(`<h2>${esc(name)}</h2><p>${article?esc(article.description||'Источник из базы знаний'):'Ссылка на источник рекомендации. Для открытия полного текста требуется доступ через сервер.'}</p>
+ ${content?`<div class="source-preview">${esc(content).replace(/\n/g,'<br>')}</div>`:''}<div class="form-actions end">${btn('Закрыть','close-modal')}</div>`);
+}
+async function requestStats(form){
+ if(state.role!=='admin')return;
+ const fd=new FormData(form),from=String(fd.get('from')||''),to=String(fd.get('to')||'');
+ if(from&&to&&from>to)return toast('Дата начала больше даты окончания.','error');
+ try{const data=await API.ticketStatistics({from,to});state.stats=data;state.statsFrom=from;state.statsTo=to;render();toast('Статистика загружена','success');}
+ catch(e){toast('Не удалось запросить статистику: '+e.message,'error');}
+}
+async function saveArticle(form){
+ if(state.role!=='admin')return;
+ const fd=new FormData(form),id=form.dataset.id,article={title:String(fd.get('title')||'').trim(),category:String(fd.get('category')||'').trim(),description:String(fd.get('description')||'').trim(),content:String(fd.get('content')||'').split(/\n+/).map(s=>s.trim()).filter(Boolean)};
+ if(!article.title)return toast('Укажите название.','error');
+ try{if(id)await API.updateArticle(id,article);else await API.createArticle(article);closeModal();await loadData();toast('База знаний обновлена','success');}
+ catch(e){toast('Ошибка сохранения: '+e.message,'error');}
+}
+async function deleteArticle(id){
+ if(state.role!=='admin'||!confirm('Удалить статью из базы знаний?'))return;
+ try{await API.deleteArticle(id);await loadData();toast('Статья удалена','success');}
+ catch(e){toast('Ошибка удаления: '+e.message,'error');}
+}
+async function importWebsite(form){
+ if(state.role!=='admin')return;
+ const url=String(new FormData(form).get('url')||'').trim();
+ try{const u=new URL(url);if(!['https:','http:'].includes(u.protocol))throw Error('Нужен HTTP(S)-адрес');
+   const out=await API.importWebsite(url);closeModal();await loadData();toast(API.isDemo()?'Ссылка добавлена. Содержимое сайта в DEMO не загружается.':'Задание на загрузку сайта отправлено','success');
+ }catch(e){toast('Не удалось добавить источник: '+e.message,'error');}
+}
+
+function modal(content){const place=root.querySelector('#modal-root');if(place)place.innerHTML=`<div class="modal-backdrop" data-action="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="Диалог">${content}</div></div>`;}
+function closeModal(){const place=root.querySelector('#modal-root');if(place)place.innerHTML='';}
+function showAddUser(){modal(`<h2>Новый сотрудник</h2><p>Добавление в учебный список или через API администратора.</p><form id="add-user-form"><label class="form-field"><span>Имя и фамилия</span><input name="name" required maxlength="100" /></label><label class="form-field"><span>Почта</span><input name="email" type="email" required /></label><label class="form-field"><span>Роль</span><select name="role">${Object.entries(roles).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label><div class="form-actions end">${btn('Отмена','close-modal')}<button class="button primary" type="submit">Создать</button></div></form>`);}
+async function health(){const node=root.querySelector('#health-list');if(node)node.innerHTML='<span class="spinner"></span> Проверка…';try{const result=await API.health();const items=result.services||[];node.innerHTML=`<div class="notice ${API.isDemo()?'warning':'success'}">${esc(API.isDemo()?'Демо-статусы. Настоящая инфраструктура не проверена.':result.status||'Ответ получен от сервера.')}</div>${items.map(s=>`<div class="question">${esc(s.name)}: <strong>${esc(s.status)}</strong></div>`).join('')}`;}catch(e){if(node)node.innerHTML='<div class="notice danger">'+esc(e.message)+'</div>';}}
+async function transcribe(blob,filename){if(blob.size>CFG.maxAudioBytes){toast('Аудиофайл слишком большой.','error');return;}
+ toast('Отправляем аудио на распознавание…');try{const result=await API.transcribe(blob,filename);const text=result.text||result.transcript||result.transcription||'';if(!text)throw Error('Сервис вернул пустую расшифровку');state.submissionText=text;state.intakeSource='voice';state.draft=null;render();toast('Речь распознана. Проверьте текст.','success');}catch(e){toast('Распознавание не выполнено: '+e.message,'error');}}
+async function startVoice(){if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){toast('Микрофон недоступен в этом браузере/контексте.','error');return;}
+ if(API.isDemo()){toast('Распознавание микрофона доступно после подключения API Вани. В демо используйте текст или примеры.');return;}
+ try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const chunks=[];const rec=new MediaRecorder(stream);state.recorder=rec;state.stream=stream;
+ rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());state.recorder=null;state.stream=null;transcribe(new Blob(chunks,{type:rec.mimeType}),`voice.${rec.mimeType.includes('ogg')?'ogg':'webm'}`)};rec.start();modal(`<h2>${icon('mic',21)} Идёт запись</h2><p>Говорите чётко, затем нажмите «Остановить». После этого аудио отправится в ваш локальный сервис распознавания.</p><div class="notice">${icon('wave',24)} Запись микрофона активна</div><div class="form-actions end">${btn('Остановить запись','voice-stop','button primary')}</div>`);
+ }catch(e){toast('Не удалось получить доступ к микрофону: '+e.message,'error');}}
+function stopVoice(){const rec=state.recorder;closeModal();if(rec&&rec.state==='recording')rec.stop();}
+function attach(){
+ root.addEventListener('click',async e=>{
+  const target=e.target.closest('[data-action]');if(!target)return;
+  const act=target.dataset.action;if(act==='close-modal'&&e.target.closest('.modal')&&e.target!==target)return;
+  if(act==='example')previewText(target.dataset.example);
+  else if(act==='load-pending'){const p=state.pending.find(x=>String(x.id)===target.dataset.id);if(p){state.pendingId=p.id;state.submissionText=p.description;state.draft=null;state.intakeSource=p.source||'public';render();root.querySelector('#intake-text')?.focus();}}
+  else if(act==='analyze')await analyze();
+  else if(act==='confirm-draft')await confirmDraft();
+  else if(act==='clarify')await clarify();
+  else if(act==='open-ticket')navigate('/tickets/'+target.dataset.id);
+  else if(act==='back-tickets')navigate(state.role==='engineer'?'/assigned':'/tickets');
+  else if(act==='focus-urgent'){const id=target.dataset.id;const row=[...root.querySelectorAll('[data-ticket-row]')].find(el=>el.dataset.ticketRow===id);row?.scrollIntoView({behavior:'smooth',block:'center'});row?.classList.add('urgent-highlight');setTimeout(()=>row?.classList.remove('urgent-highlight'),2000);}
+  else if(act==='refresh-queue')await refreshEngineerQueue(true);
+  else if(act==='demo-critical'&&API.isDemo()&&state.role==='engineer'){await API.demoCriticalTicket(user().id,user().name);await loadData();toast('ДЕМО: появилась критическая заявка.','success');}
+  else if(act==='load-audit'&&state.role==='admin')await loadAudit();
+  else if(act==='refresh-engineers'&&state.role==='admin'){try{const data=await API.listEngineersDashboard();state.engineers=normList(data,['engineers','data','items']);state.engineersLoaded=true;state.engineersError=null;render();toast('Данные инженеров обновлены','success');}catch(err){state.engineers=[];state.engineersLoaded=true;state.engineersError=err.message;render();toast('Ошибка загрузки инженеров: '+err.message,'error');}}
+  else if(act==='measure-manual'||act==='measure-ai'){if(state.role==='admin'&&state.timerStarted===null){state.timerStarted=Date.now();state.timerKind=act==='measure-manual'?'manual':'ai';state.metricsOpen=true;render();}}
+  else if(act==='measure-stop'&&state.role==='admin'&&state.timerStarted!==null){state.metrics[state.timerKind]={ms:Date.now()-state.timerStarted};state.timerStarted=null;state.timerKind=null;state.metricsOpen=true;render();}
+  else if(act==='find-solution')await findSolution(target.dataset.id);
+  else if(act==='start-ticket')await setEngineerStatus(target.dataset.id,'in_progress');
+  else if(act==='finish-ticket')await setEngineerStatus(target.dataset.id,'resolved');
+  else if(act==='edit-ticket')showEditTicket(target.dataset.id);
+  else if(act==='view-source')await showSource(target);
+  else if(act==='open-article'&&state.role==='admin')navigate('/knowledge/'+target.dataset.id);
+  else if(act==='add-article')articleForm();
+  else if(act==='edit-article')articleForm(target.dataset.id);
+  else if(act==='delete-article')await deleteArticle(target.dataset.id);
+  else if(act==='import-website')websiteForm();
+  else if(act==='back-kb')navigate('/knowledge');
+  else if(act==='login-demo'){if(!roles[target.dataset.role])return;state.role=target.dataset.role;state.currentUser=null;navigate(navigation[state.role][0][0]);await loadData();}
+  else if(act==='voice-start')await startVoice();
+  else if(act==='voice-stop')stopVoice();
+  else if(act==='upload-audio')root.querySelector('#audio-file')?.click();
+  else if(act==='select-image')root.querySelector('#incident-image')?.click();
+  else if(act==='show-user-modal')showAddUser();
+  else if(act==='close-modal')closeModal();
+  else if(act==='health')await health();
+  else if(act==='reset-demo'){if(confirm('Сбросить только учебные данные этого браузера?')){API.resetDemo();state.draft=null;state.assist={};await loadData();toast('Учебные данные восстановлены','success');}}
+ });
+ root.addEventListener('submit',async e=>{
+  const f=e.target;if(!f.id)return;e.preventDefault();
+  if(f.id==='public-form'||f.id==='reporter-form')await submitPublic(f);
+  else if(f.id==='stats-form')await requestStats(f);
+  else if(f.id==='article-form')await saveArticle(f);
+  else if(f.id==='website-form')await importWebsite(f);
+  else if(f.id==='edit-ticket-form'){if(state.role==='dispatcher'){const fd=new FormData(f);try{await API.updateTicket(f.dataset.id,{subject:String(fd.get('subject')||'').trim(),description:String(fd.get('description')||'').trim()});closeModal();await loadData();toast('Текст заявки сохранён','success');}catch(e){toast('Ошибка редактирования: '+e.message,'error');}}}
+  else if(f.id==='note-form')await addNote(f);
+  else if(f.id==='add-user-form'){const x=new FormData(f);try{await API.addUser({name:String(x.get('name')),email:String(x.get('email')),role:String(x.get('role'))});closeModal();await loadData();toast('Сотрудник добавлен','success');}catch(e){toast(e.message,'error');}}
+ });
+ root.addEventListener('input',e=>{
+  if(e.target.id==='intake-text')state.submissionText=e.target.value;
+  if(e.target.id==='ticket-search'){state.ticketQuery=e.target.value;render();root.querySelector('#ticket-search')?.focus();root.querySelector('#ticket-search')?.setSelectionRange(state.ticketQuery.length,state.ticketQuery.length);}
+  if(e.target.id==='kb-search'){state.kbQuery=e.target.value;render();root.querySelector('#kb-search')?.focus();root.querySelector('#kb-search')?.setSelectionRange(state.kbQuery.length,state.kbQuery.length);}
+  if(e.target.id==='engineers-search'&&state.role==='admin'){state.engineersQuery=e.target.value;render();const field=root.querySelector('#engineers-search');field?.focus();field?.setSelectionRange(state.engineersQuery.length,state.engineersQuery.length);}
+ });
+ root.addEventListener('change',async e=>{
+  if(e.target.id==='role-select'&&API.isDemo()){if(!roles[e.target.value])return;state.role=e.target.value;state.currentUser=null;state.ticketQuery='';state.kbQuery='';state.draft=null;navigate(navigation[state.role][0][0]);await loadData();}
+  if(e.target.id==='ticket-filter-status'){state.ticketStatus=e.target.value;render();}
+  if(e.target.id==='ticket-filter-priority'){state.ticketPriority=e.target.value;render();}
+  if(e.target.id==='manual-action-count'||e.target.id==='ai-action-count'){const key=e.target.id==='manual-action-count'?'manual':'ai';state.metricCounts[key]=e.target.value;state.metricsOpen=true;render();}
+  if(e.target.id==='audio-file'&&e.target.files?.[0]){const file=e.target.files[0];await transcribe(file,file.name);}
+  if(e.target.id==='incident-image'&&e.target.files?.[0]){const file=e.target.files[0];if(file.size>5*1024*1024||!['image/png','image/jpeg','image/webp'].includes(file.type))return toast('Поддерживаются PNG/JPG/WebP до 5 МБ','error');state.attachment=file;const node=root.querySelector('#attachment-label');if(node)node.textContent='Выбрано изображение: '+file.name+(API.isDemo()?' (демо: загрузка на сервер недоступна)':'');}
+ });
+ window.addEventListener('hashchange',render);
+}
+attach();
+loadData();
+setInterval(()=>{
+ refreshCountdowns();
+},1000);
+setInterval(()=>{
+ if(CFG.mode==='api'&&state.role==='engineer'&&route()==='/assigned'&&document.visibilityState==='visible'&&!root.querySelector('.modal-backdrop'))refreshEngineerQueue(false);
+},15000);
+})();
+
+</script>
+</body>
+</html>
