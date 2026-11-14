@@ -43,7 +43,16 @@ def upload(client, path, field, fixture, csrf):
 
 def sign_in(role):
     client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    form = request(client, "/login")
+    if os.environ.get("TEST_DEMO_ROLES") == "1":
+        page = request(client, "/workspace")
+        config = json.loads(re.search(r"window.DISPATCH_CONFIG=({.*?});", page)[1])
+        if config["currentUser"]["role"] != role:
+            request(client, "/workspace/api/demo-role", {"role": role}, config["csrfToken"])
+            page = request(client, "/workspace")
+            config = json.loads(re.search(r"window.DISPATCH_CONFIG=({.*?});", page)[1])
+        assert config["currentUser"]["role"] == role
+        return client, config["csrfToken"]
+    form = request(client, "/login?next=/workspace")
     nonce = re.search(r'name="_token"\s+value="([^"]+)"', form)[1]
     page = request(client, "/login", {"_token": nonce, "email": role + "@demo.test",
                    "password": os.environ["RELEASE_" + role.upper() + "_PASSWORD"]}, form=True)
