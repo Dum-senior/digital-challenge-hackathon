@@ -34,7 +34,6 @@
     getDraft: draft => request('/intake/drafts/'+id(draft)),
     listCategories: () => request('/intake/meta'),
     analyze: (text,source) => post('/intake/analyze',{text,source,request_id:crypto.randomUUID()}),
-    clarify: (draft,revision,answer) => post('/intake/drafts/'+id(draft)+'/clarify',{revision,answer}),
     confirm: (draft,body) => post('/intake/drafts/'+id(draft)+'/confirm',body),
     updateTicket: (ticket,body) => post(api+'/tickets/'+id(ticket)+'/update',body),
     draftAssist: draft => post(api+'/drafts/'+id(draft)+'/assist'),

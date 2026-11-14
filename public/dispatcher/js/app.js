@@ -105,10 +105,9 @@ function shell(page){
 function classifyPreview() {
  const draft=state.draft;
  if(!draft)return listIsEmpty('Здесь появится результат анализа','Введите описание и нажмите «Анализировать».');
- const ex=draft.extracted||{}, a=draft.approved||{}, info=a.fields||ex, meta=state.meta||{};
+ const ex=draft.extracted||{}, a=draft.approved||{}, meta=state.meta||{};
  const options=(items,selected)=>'<option value="">Не выбрано</option>'+items.map(item=>
    `<option value="${esc(item.id)}" ${String(item.id)===String(selected)?'selected':''}>${esc(item.name)}</option>`).join('');
- const text=(key,label,value)=>`<label class="form-field"><span>${label}</span><input id="confirm-${key}" value="${esc(value||'')}" /></label>`;
  const adviceKey='draft:'+draft.draft_id+':'+draft.revision;
  const advice=state.assist[adviceKey];
  const engineers=(meta.agents||[]).map(e=>({id:e.group_id+':'+e.id,name:e.first_name+' '+e.last_name}));
@@ -119,17 +118,10 @@ function classifyPreview() {
  <label class="form-field"><span>Место</span><select id="confirm-location">${options(places,a.location_id)}</select></label>
  <label class="form-field"><span>Инженер</span><select id="confirm-assignee">${options(engineers,a.group_id+':'+a.assigned_to)}</select></label></div>
  <p>${esc(ex.severity_reason||'')} ${esc(draft.recommendation?.reason||'')}</p>
- ${text('subject','Тема',a.subject||ex.subject)}
+ <label class="form-field"><span>Тема</span><textarea id="confirm-subject" maxlength="255">${esc(a.subject||ex.subject)}</textarea></label>
  <label class="form-field"><span>Описание</span><textarea id="confirm-description">${esc(a.description||ex.description)}</textarea></label>
- <details open><summary>Полезная информация</summary><div class="grid-2">
- ${text('object','Название',info.object)}${text('meter','Счётчик',info.meter_number)}
- ${text('start','Начало (ЧЧ:ММ)',info.started_at||info.incident_time)}${text('room','Кабинет',info.room)}
- </div><label class="form-field"><span>Важное</span><textarea id="confirm-notes">${esc(info.useful_notes||'')}</textarea></label></details>
  <label class="form-field"><span>Теги</span><select id="confirm-tags" multiple>${(meta.tags||[]).map(tag=>
  `<option value="${esc(tag.id)}" ${(a.tag_ids||[]).includes(Number(tag.id))?'selected':''}>${esc(tag.name)}</option>`).join('')}</select></label>
- ${(draft.questions||[]).map(q=>`<p>${esc(q)}</p>`).join('')}
- ${(draft.questions||[]).length?`<label class="form-field"><span>Уточнение</span><textarea id="clarify-text"></textarea></label>${btn('Отправить уточнение','clarify')}`:''}
- <label class="form-field"><span>Обоснование ручного решения, если требуется</span><textarea id="confirm-reason" maxlength="500"></textarea></label>
  <section class="top-gap"><h3>Предложенное решение</h3><div id="assist-container" data-assist-key="${esc(adviceKey)}">${advice?assistHtml(advice):'<p>Ищем решение в базе знаний…</p>'}</div></section>
  ${btn('Подтвердить и создать заявку','confirm-draft','button primary',state.loading?'disabled':'')}</div>`;
 }
@@ -336,18 +328,22 @@ async function confirmDraft() {
  const approved={subject:value('subject'),description:value('description'),type_id:Number(value('category'))||null,
   priority_id:Number(value('priority')),location_id:Number(value('location'))||null,
   group_id:group||null,assigned_to:engineer||null,
-  tag_ids:[...root.querySelector('#confirm-tags').selectedOptions].map(t=>Number(t.value)),
-  fields:{...draft.approved?.fields,object:value('object')||null,meter_number:value('meter')||null,
-    started_at:value('start')||null,incident_time:null,room:value('room')||null,useful_notes:value('notes')||null}};
+  tag_ids:[...root.querySelector('#confirm-tags').selectedOptions].map(t=>Number(t.value))};
+ const emergencyOverride=draft.extracted?.is_potential_emergency&&draft.recommendation?.priority_id!=null
+  && Number(draft.recommendation.priority_id)!==approved.priority_id;
+ const needsManualReview=draft.status!=='awaiting_review'||emergencyOverride;
+ const reviewMessage=emergencyOverride
+  ?'Подтверждаю изменение приоритета потенциальной аварии после ручной проверки.'
+  :'Подтверждаю создание заявки после ручной проверки данных.';
+ if(needsManualReview&&!window.confirm(reviewMessage))return;
  state.loading=true;
  try {
-  const result=await API.confirm(draft.draft_id,{revision:draft.revision,approve:true,approved,manual_review_reason:value('reason')});
+  const result=await API.confirm(draft.draft_id,{revision:draft.revision,approve:true,approved,
+   ...(needsManualReview?{manual_review_reason:reviewMessage}:{})});
   state.draft=null;state.submissionText='';await loadData();navigate('/tickets/'+result.ticket_id);toast('Заявка создана','success');
  } catch (error) {toast(error.message,'error');}
  finally {state.loading=false;}
 }
-async function clarify(){const value=root.querySelector('#clarify-text')?.value.trim();if(!value){toast('Укажите дополнительные сведения.','error');return;}
- try{state.submissionText+='\nДополнение: '+value;state.draft=await API.clarify(state.draft.draft_id,state.draft.revision,value);render();}catch(e){toast('Ошибка уточнения: '+e.message,'error');}}
 async function findSolution(key, request=()=>API.engineerAssist(key)){
  if(state.assistPending[key])return;
  state.assistPending[key]=true;
@@ -427,7 +423,6 @@ function attach(){
   else if(act==='load-pending'){try{state.draft=await API.getDraft(target.dataset.id);state.submissionText=state.draft.raw_text;render();}catch(error){toast(error.message,'error');}}
   else if(act==='analyze')await analyze();
   else if(act==='confirm-draft')await confirmDraft();
-  else if(act==='clarify')await clarify();
   else if(act==='open-ticket')navigate('/tickets/'+target.dataset.id);
   else if(act==='back-tickets')navigate(state.role==='engineer'?'/assigned':'/tickets');
   else if(act==='focus-urgent'){const id=target.dataset.id;const row=[...root.querySelectorAll('[data-ticket-row]')].find(el=>el.dataset.ticketRow===id);row?.scrollIntoView({behavior:'smooth',block:'center'});row?.classList.add('urgent-highlight');setTimeout(()=>row?.classList.remove('urgent-highlight'),2000);}
