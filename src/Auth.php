@@ -40,6 +40,9 @@ class Auth
 
     public static function check(): bool
     {
+        if (isset($_SESSION['dispatcher_demo_role']) && env('DISPATCHER_DEMO_ROLES') !== '1') {
+            $_SESSION = [];
+        }
         return isset($_SESSION['user']);
     }
 

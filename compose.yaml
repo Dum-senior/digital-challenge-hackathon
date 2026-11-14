@@ -39,6 +39,7 @@ services:
     restart: unless-stopped
     environment:
       <<: *database
+      DISPATCHER_DEMO_ROLES: ${DISPATCHER_DEMO_ROLES:-0}
       DB_MIGRATE_ON_REQUEST: "false"
       APP_URL: ${APP_URL:-http://localhost:8080}
       MAIL_ENABLED: "false"

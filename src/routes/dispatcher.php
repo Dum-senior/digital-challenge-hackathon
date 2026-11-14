@@ -10,7 +10,7 @@ function dispatcherRole(array $user): string
 /** Explicit demo deployment only: select existing seeded accounts, never arbitrary users. */
 function dispatcherDemoEnabled(): bool
 {
-    return true;
+    return env('DISPATCHER_DEMO_ROLES') === '1';
 }
 function dispatcherDemoSelect(string $role): void
 {
@@ -21,7 +21,7 @@ function dispatcherDemoSelect(string $role): void
     $user=$stmt->fetch(PDO::FETCH_ASSOC);
     if (!$user || dispatcherRole($user)!==$role) _apiJson(['error'=>'Демо-аккаунт не подготовлен'],503);
     session_regenerate_id(true);
-    $_SESSION['user']=$user;
+    $_SESSION = ['user' => $user, 'dispatcher_demo_role' => $role];
     $_SESSION['user']['id']=(int)$user['id'];
 }
 $router->post('/workspace/api/demo-role', static function (): void {
@@ -84,7 +84,7 @@ function dispatcherEngineers(PDO $db): array
 }
 
 $router->get('/workspace', static function (): void {
-    if (dispatcherDemoEnabled() && !Auth::check()) dispatcherDemoSelect('dispatcher');
+    if (dispatcherDemoEnabled() && (!Auth::check() || !isset($_SESSION['dispatcher_demo_role']))) dispatcherDemoSelect('dispatcher');
     Auth::requireStaff();
     header('Cache-Control: private, no-store');
     $actor=Auth::user();
