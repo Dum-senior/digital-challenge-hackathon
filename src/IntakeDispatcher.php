@@ -157,11 +157,12 @@ final class IntakeDispatcher
         $modelDescription = $model['description'] ?? null;
         if (!$failure && is_string($modelSubject) && trim($modelSubject) !== '' && mb_strlen($modelSubject) <= 140
             && preg_match('/[а-яё]/iu', $modelSubject)
+            && !preg_match('/[a-z]/i', $modelSubject)
             && !in_array(mb_strtolower(trim($modelSubject)), self::CATEGORIES, true)) {
             $subject = preg_replace('/\s+/u', ' ', trim($modelSubject));
         }
         $description = !$failure && is_string($modelDescription) && trim($modelDescription) !== ''
-            && mb_strlen($modelDescription) <= 6000 ? trim($modelDescription) : $text;
+            && mb_strlen($modelDescription) <= 6000 && !preg_match('/[a-z]/i', $modelDescription) ? trim($modelDescription) : $text;
         return [
             'subject' => $subject, 'description' => $description, 'raw_text' => $text, 'category' => $category,
             'type_id' => $typeId, 'tags' => [], 'tag_ids' => [], 'location_name' => $location['name'],
