@@ -3,3 +3,7 @@
 vendor
 storage
 **/__pycache__
+
+**/._*
+.DS_Store
+**/.DS_Store

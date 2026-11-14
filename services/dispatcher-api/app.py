@@ -224,7 +224,7 @@ def incident_details(text):
 
 def build_index():
     chunks = []
-    for path in sorted((ROOT / "kb").glob("*.md")):
+    for path in sorted((ROOT / "kb").glob("[a-z]*.md")):
         title, *sections = re.split(r"^## ", path.read_text(), flags=re.M)
         for number, section in enumerate(sections, 1):
             heading, _, body = section.partition("\n")
