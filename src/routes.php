@@ -1395,10 +1395,9 @@ $router->get('/', function () {
             }
             unset($_SESSION['sso_needs_location']);
         }
-        // Send each role to its configured landing area (admin/agent/portal).
-        redirect(roleLandingPath(Auth::role()));
+        redirect('/intake');
     }
-    render('home');
+    redirect('/login');
 });
 
 /* ------------------------------------------------------------------
@@ -1444,18 +1443,18 @@ $router->post('/login', function () {
     $token    = $_POST['_token'] ?? '';
 
     if (!verifyCsrf($token)) {
-        render('login', ['error' => 'Invalid request. Please try again.']);
+        render('login', ['error' => 'Запрос устарел. Повторите попытку.']);
     }
 
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
     if (!is_string($email) || !is_string($password)) {
-        render('login', ['error' => 'Invalid request. Please try again.']);
+        render('login', ['error' => 'Запрос устарел. Повторите попытку.']);
     }
     $email = trim($email);
 
     if ($email === '' || $password === '') {
-        render('login', ['error' => 'Please enter both email and password.', 'email' => $email]);
+        render('login', ['error' => 'Введите почту и пароль.', 'email' => $email]);
     }
 
     $db = Database::connect();
@@ -1479,7 +1478,7 @@ $router->post('/login', function () {
         || (int) $byIp->fetchColumn() >= _WEB_LOGIN_MAX_FAILURES_PER_IP) {
         logAudit('auth.login_throttled', null, null, 'email=' . $email);
         render('login', [
-            'error' => 'Too many failed login attempts. Please wait a few minutes and try again.',
+            'error' => 'Слишком много попыток входа. Подождите несколько минут.',
             'email' => $email,
         ]);
     }
@@ -1516,7 +1515,7 @@ $router->post('/login', function () {
     $targetUid = $uidStmt->fetchColumn() ?: null;
     logAudit('auth.login_failed', null, null, 'email=' . $email, $targetUid ? (int) $targetUid : null);
 
-    render('login', ['error' => 'Invalid email or password.', 'email' => $email]);
+    render('login', ['error' => 'Неверная почта или пароль.', 'email' => $email]);
 });
 
 $router->get('/logout', function () {

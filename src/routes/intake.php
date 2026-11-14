@@ -365,7 +365,41 @@ $router->post('/intake/drafts/{draft_id}/confirm', $intakeConfirm);
 /** The session UI uses the same shared controller and current logged-in user. */
 $router->get('/intake', static function (): void {
     Auth::requireAuth();
-    render('agent/ai-intake', ['pageTitle' => 'ИИ-диспетчер — проверка обращений']);
+    $db = Database::connect();
+    $actor = Auth::user();
+    $staff = roleIsStaff($actor['role'] ?? null);
+    $visibility = $staff
+        ? ticketStaffVisibilitySql($db, (int) $actor['id'], $actor['role'])
+        : ['sql' => 't.created_by = ?', 'params' => [(int) $actor['id']]];
+    if (Auth::isAdmin()) {
+        $groupIds = userGroupIds($db, (int) $actor['id']);
+        $groupFilter = $groupIds ? implode(',', array_fill(0, count($groupIds), '?')) : 'NULL';
+        $visibility = [
+            'sql' => "NOT EXISTS (
+                SELECT 1 FROM ticket_types tt WHERE tt.id = t.type_id AND tt.is_confidential = 1
+                AND tt.group_id IS NOT NULL AND (tt.group_id IN ($groupFilter)) IS NOT TRUE
+            )",
+            'params' => $groupIds,
+        ];
+    }
+    $stmt = $db->prepare("SELECT t.id, t.subject, t.status, t.sla_state,
+        COALESCE(t.due_date, t.resolution_due_at) AS due_date,
+        CONCAT_WS(' ', u.first_name, u.last_name) AS assignee
+        FROM tickets t LEFT JOIN users u ON u.id = t.assigned_to
+        WHERE {$visibility['sql']} ORDER BY t.updated_at DESC, t.id DESC LIMIT 12");
+    $stmt->execute($visibility['params']);
+    $statusLabels = [
+        'open' => 'Открыта', 'new' => 'Новая', 'in_progress' => 'В работе',
+        'pending' => 'Ожидает ответа', 'resolved' => 'Решена', 'closed' => 'Закрыта',
+        'on_hold' => 'Приостановлена', 'cancelled' => 'Отменена',
+    ] + ticketStatusLabelMap();
+    $ticketPrefix = Auth::isAdmin() ? '/admin/tickets/' : ($staff ? '/agent/tickets/' : '/portal/tickets/');
+    header('Cache-Control: private, no-store');
+    render('agent/ai-intake', [
+        'tickets' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+        'statusLabels' => $statusLabels,
+        'ticketPrefix' => $ticketPrefix,
+    ]);
 });
 
 $router->get('/intake/meta', static function (): void {
