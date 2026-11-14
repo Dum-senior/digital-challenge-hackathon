@@ -67,6 +67,10 @@
         {
             "name": "Push",
             "description": "Register device tokens for native push notifications"
+        },
+        {
+            "name": "AI Intake",
+            "description": "Human-reviewed Russian intake drafts"
         }
     ],
     "components": {
@@ -689,6 +693,69 @@
                     },
                     "last_page": {
                         "type": "integer"
+                    }
+                }
+            },
+            "IntakeDraft": {
+                "type": "object",
+                "required": [
+                    "draft_id",
+                    "revision",
+                    "status",
+                    "raw_text",
+                    "requires_human_review"
+                ],
+                "properties": {
+                    "draft_id": {
+                        "type": "integer"
+                    },
+                    "revision": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "needs_clarification",
+                            "awaiting_review",
+                            "failed",
+                            "created"
+                        ]
+                    },
+                    "source": {
+                        "type": "string",
+                        "enum": [
+                            "text",
+                            "voice",
+                            "phone"
+                        ]
+                    },
+                    "raw_text": {
+                        "type": "string"
+                    },
+                    "extracted": {
+                        "type": "object"
+                    },
+                    "recommendation": {
+                        "type": "object"
+                    },
+                    "missing_fields": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "questions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "requires_human_review": {
+                        "type": "boolean"
+                    },
+                    "ticket_id": {
+                        "type": "integer",
+                        "nullable": true
                     }
                 }
             }
@@ -2519,6 +2586,289 @@
                     },
                     "403": {
                         "$ref": "#/components/responses/Forbidden"
+                    }
+                }
+            }
+        },
+        "/intake/analyze": {
+            "post": {
+                "tags": [
+                    "AI Intake"
+                ],
+                "summary": "Analyze Russian text into a persisted draft, no ticket created",
+                "description": "Bearer token required. text|voice|phone use the same intake route. Caller-provided request_id makes requests idempotent per user. Requires local private AI service for rich extraction; on failure persists safe manual draft.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                    "text",
+                                    "source"
+                                ],
+                                "properties": {
+                                    "text": {
+                                        "type": "string",
+                                        "minLength": 3,
+                                        "maxLength": 4000
+                                    },
+                                    "source": {
+                                        "type": "string",
+                                        "enum": [
+                                            "text",
+                                            "voice",
+                                            "phone"
+                                        ]
+                                    },
+                                    "request_id": {
+                                        "type": "string",
+                                        "maxLength": 128
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Persisted draft (NOT a ticket)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IntakeDraft"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Idempotent replay"
+                    },
+                    "401": {
+                        "description": "Auth required"
+                    },
+                    "409": {
+                        "description": "Request key conflict"
+                    },
+                    "422": {
+                        "description": "Invalid JSON/fields"
+                    },
+                    "503": {
+                        "description": "Draft database unavailable"
+                    }
+                }
+            }
+        },
+        "/intake/drafts": {
+            "get": {
+                "tags": [
+                    "AI Intake"
+                ],
+                "summary": "List own drafts, or staff dispatcher review queue",
+                "responses": {
+                    "200": {
+                        "description": "List with draft ids and status"
+                    }
+                }
+            }
+        },
+        "/intake/drafts/{draft_id}": {
+            "get": {
+                "tags": [
+                    "AI Intake"
+                ],
+                "summary": "Get an authorized draft",
+                "parameters": [
+                    {
+                        "name": "draft_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Draft",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IntakeDraft"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Draft inaccessible"
+                    }
+                }
+            }
+        },
+        "/intake/drafts/{draft_id}/clarify": {
+            "post": {
+                "tags": [
+                    "AI Intake"
+                ],
+                "summary": "Clarify or edit a versioned draft without creating a ticket",
+                "parameters": [
+                    {
+                        "name": "draft_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                    "revision"
+                                ],
+                                "properties": {
+                                    "revision": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    },
+                                    "answer": {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                    },
+                                    "edits": {
+                                        "type": "object",
+                                        "description": "Dispatcher-only allowlisted edited ticket fields"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated draft",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IntakeDraft"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Edits require dispatcher"
+                    },
+                    "404": {
+                        "description": "Private draft"
+                    },
+                    "409": {
+                        "description": "Stale revision / already created"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/intake/drafts/{draft_id}/confirm": {
+            "post": {
+                "tags": [
+                    "AI Intake"
+                ],
+                "summary": "Human confirmation creates exactly one OpenHelpDesk ticket",
+                "parameters": [
+                    {
+                        "name": "draft_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "description": "Only configured staff dispatcher role/admin. Validates current database IDs, group membership, type-priority compatibility and revision in a transaction. Invokes existing OpenHelpDesk SLA and post-create hooks AFTER human approval; does not call engineer-assist automatically.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                    "revision",
+                                    "approve"
+                                ],
+                                "properties": {
+                                    "revision": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    },
+                                    "approve": {
+                                        "type": "boolean",
+                                        "enum": [
+                                            true
+                                        ]
+                                    },
+                                    "approved": {
+                                        "type": "object"
+                                    },
+                                    "manual_review_reason": {
+                                        "type": "string",
+                                        "maxLength": 500
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created exactly one ticket",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "created"
+                                            ]
+                                        },
+                                        "ticket_id": {
+                                            "type": "integer"
+                                        },
+                                        "requires_human_review": {
+                                            "type": "boolean"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Idempotent replay of already confirmed ticket"
+                    },
+                    "403": {
+                        "description": "Dispatcher required"
+                    },
+                    "404": {
+                        "description": "Draft not found"
+                    },
+                    "409": {
+                        "description": "Stale revision"
+                    },
+                    "422": {
+                        "description": "Invalid approval"
                     }
                 }
             }

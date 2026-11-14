@@ -3643,3 +3643,6 @@ require ROOT_DIR . '/src/routes/kanban.php';
  * Mobile REST API
  * ------------------------------------------------------------------ */
 require ROOT_DIR . '/src/routes/api.php';
+
+/* Dispatcher AI intake, 02_дем */
+require ROOT_DIR . '/src/routes/intake.php';
