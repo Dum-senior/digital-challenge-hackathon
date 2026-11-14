@@ -44,6 +44,9 @@
             };
             status.textContent = messages[data.status] || 'Поиск временно недоступен.';
             const sources = new Map(data.sources.map(source => [source.id, source]));
+            if (data.safety) {
+                result.append(element('h6', 'Безопасность — действуйте сразу'));
+            }
             if (data.steps.length) {
                 const list = document.createElement('ol');
                 for (const step of data.steps) {

@@ -21,8 +21,8 @@ try {
         throw new RuntimeException('Initialize test users and statuses first');
     }
     $rows = file(__DIR__ . '/engineer-demo.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    if (count($rows) !== 20) {
-        throw new RuntimeException('Expected 20 demo articles');
+    if (count($rows) !== 24) {
+        throw new RuntimeException('Expected 24 demo articles');
     }
     $db->beginTransaction();
     $db->exec("INSERT INTO kb_categories (name, slug) VALUES ('Учебная база инженера', 'engineer-demo')
@@ -46,7 +46,7 @@ try {
             . implode("\n- ", explode(';', $steps))
             . "\n\nЭскалация: $escalation\n\nКлючевые слова: $keywords";
         $article->execute([$findFolder->fetchColumn(),$title,'engineer-demo-' . ($i + 1),$body,$author]);
-        if (!in_array($i, [0,2,5,6,10,11,13,17], true)) {
+        if (!in_array($i, [0,2,5,6,10,11,13,17,20,21,22,23], true)) {
             continue;
         }
         $subject = '[Демо] ' . $title;
@@ -60,7 +60,7 @@ try {
         $mark->execute([$db->lastInsertId(),$id]);
     }
     $db->commit();
-    echo "Demo seed complete: 20 articles, 8 closed cases.\n";
+    echo "Demo seed complete: 24 articles, 12 closed cases.\n";
 } finally {
     if ($db->inTransaction()) {
         $db->rollBack();
