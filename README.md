@@ -28,7 +28,7 @@
 
 - [Контракт веб- и ИИ-API](docs/DISPATCHER_API.md)
 - [Документация ИИ-сервиса](services/dispatcher-api/README.md)
-- [Лицензия](LICENSE) и [уведомления об авторстве](THIRD-PARTY-NOTICES.md)
+- [Лицензия](LICENSE)
 
 ## Демонстрация без входа
 
