@@ -62,7 +62,7 @@ def sign_in(role):
     return client, config["csrfToken"]
 
 with concurrent.futures.ThreadPoolExecutor() as pool:
-    (dispatcher, csrf), (engineer, eng_csrf), (admin, _) = pool.map(sign_in, ("dispatcher", "engineer", "admin"))
+    (dispatcher, csrf), (engineer, eng_csrf), (admin, admin_csrf) = pool.map(sign_in, ("dispatcher", "engineer", "admin"))
 
 request(dispatcher, "/workspace/api/engineers", expected=403)
 request(engineer, "/workspace/api/engineers", expected=403)
@@ -145,4 +145,17 @@ assert report["byCategory"] and report["byEngineer"] and report["byLocation"]
 assert report["timing"]["response_count"] >= 1
 assert request(admin, "/workspace/api/audit")
 assert len(request(admin, "/workspace/api/articles")) >= 78
+kb_path = "/workspace/api/articles"
+sample = {"title": "Проверка редактора", "category": "Демо", "content": "**Проверки.** Проверить тестовую очередь."}
+request(dispatcher, kb_path, sample, csrf, expected=403)
+new_article = request(admin, kb_path, sample, admin_csrf)
+new_path = kb_path + "/" + new_article["id"]
+assert request(admin, new_path)["content"] == sample["content"]
+sample["content"] = "**Решение и эскалация.** Передать тестовую заявку."
+request(admin, kb_path, {**sample, "id": new_article["id"]}, admin_csrf)
+assert request(admin, new_path)["content"] == sample["content"]
+request(admin, new_path + "/remove", {}, admin_csrf)
+request(admin, new_path, expected=404)
+assert all(row["id"] != new_article["id"] for row in request(admin, kb_path))
+print("PASS knowledge create, update, delete and role access")
 print("PASS roles, emergency, edited draft, idempotency, engineer workflow, reports, audit and knowledge base")

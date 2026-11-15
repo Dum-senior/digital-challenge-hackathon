@@ -7,16 +7,19 @@ import secrets
 import subprocess
 import tempfile
 import threading
+from uuid import uuid4
 from pathlib import Path
 from typing import Annotated, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.json"
+KNOWLEDGE_EDITS = Path(os.environ.get("DISPATCHER_KB_EDITS", str(ROOT / "knowledge-edits.json")))
+KNOWLEDGE_LOCK = threading.Lock()
 LLAMA = os.environ.get("DISPATCHER_LLAMA")
 CHAT_URL = os.environ.get("DISPATCHER_CHAT_URL", "http://127.0.0.1:11436")
 EMBED_URL = os.environ.get("DISPATCHER_EMBED_URL", "http://127.0.0.1:11437")
@@ -246,18 +249,99 @@ def build_index():
     print(f"Indexed {len(chunks)} sections")
 
 
-ARTICLE_OVERRIDES = Path("/app/storage/dispatcher-kb")
+class KnowledgeChange(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    action: Literal["list", "get", "save", "delete"]
+    id: str | None = Field(default=None, pattern=r"^[a-z]+(?:-[a-z0-9]+)+$", max_length=80)
+    title: str = Field(default="", max_length=180)
+    category: str = Field(default="", max_length=100)
+    content: str = Field(default="", max_length=6000)
 
 
-def custom_source(path):
-    article = json.loads(path.read_text(encoding="utf-8"))
-    return {"id": article["id"], "document": article["category"], "title": article["category"],
-            "section": article["title"], "text": article["content"]}
+def knowledge_edits() -> dict:
+    if not KNOWLEDGE_EDITS.exists():
+        return {}
+    return json.loads(KNOWLEDGE_EDITS.read_text(encoding="utf-8"))
+
+
+LEGACY_KNOWLEDGE = Path("/app/storage/dispatcher-kb")
+
+
+def legacy_article(article_id: str) -> dict | None:
+    path = LEGACY_KNOWLEDGE / f"article-{article_id}.json"
+    if not path.is_file():
+        return None
+    row = json.loads(path.read_text(encoding="utf-8"))
+    return {"id": article_id, "document": f"{article_id.rsplit('-', 1)[0]}.md",
+            "section": row["title"], "title": row["category"], "text": row["content"]}
 
 
 @lru_cache(maxsize=128)
-def article_vector(title, category, content):
-    return embed([f"{category} / {title}\n{content}"])[0]
+def legacy_vector(title: str, section: str, text: str) -> list:
+    return embed([f"{title} / {section}\n{text}"])[0]
+
+
+def active_knowledge() -> dict:
+    if not INDEX.exists():
+        raise HTTPException(503, "Index unavailable")
+    articles = {row["id"]: row for row in json.loads(INDEX.read_text(encoding="utf-8"))}
+    for path in LEGACY_KNOWLEDGE.glob("article-*.json"):
+        article_id = path.stem.removeprefix("article-")
+        if row := legacy_article(article_id):
+            articles[article_id] = row
+    for article_id, edit in knowledge_edits().items():
+        if edit is None:
+            articles.pop(article_id, None)
+        else:
+            articles[article_id] = edit
+    return articles
+
+
+def article_view(row: dict, *, content: bool = False) -> dict:
+    result = {"id": row["id"], "title": row["section"], "category": row["title"]}
+    if content:
+        result["content"] = row["text"]
+    return result
+
+
+@app.post("/knowledge")
+def edit_knowledge(change: KnowledgeChange):
+    if change.action in ("list", "get"):
+        articles = active_knowledge()
+        if change.action == "list":
+            return {"articles": [article_view(row) for row in articles.values()]}
+        row = articles.get(change.id)
+        if row is None:
+            raise HTTPException(404, "Статья не найдена")
+        return {"article": article_view(row, content=True)}
+
+    if change.action == "save":
+        if not change.title or not change.category or not change.content:
+            raise HTTPException(422, "Заполните название, категорию и инструкцию")
+        if "\n" in change.title or "\n" in change.category:
+            raise HTTPException(422, "Название и категория должны занимать одну строку")
+        if not source_actions({"text": change.content}):
+            raise HTTPException(422, "Добавьте строку «**Проверки.**» или «**Решение и эскалация.**» с действиями")
+        vector = embed([f"{change.category} / {change.title}\n{change.content}"])[0]
+
+    with KNOWLEDGE_LOCK:
+        articles = active_knowledge()
+        if change.id and change.id not in articles:
+            raise HTTPException(404, "Статья не найдена")
+        if change.action == "delete" and not change.id:
+            raise HTTPException(422, "Выберите статью")
+        article_id = change.id or f"custom-{uuid4().hex}"
+        edits = knowledge_edits()
+        if change.action == "delete":
+            edits[article_id] = None
+        else:
+            row = {"id": article_id, "document": articles[article_id]["document"] if change.id else "custom.md",
+                   "title": change.category, "section": change.title, "text": change.content, "vector": vector}
+            edits[article_id] = row
+        pending = KNOWLEDGE_EDITS.with_suffix(".tmp")
+        pending.write_text(json.dumps(edits, ensure_ascii=False), encoding="utf-8")
+        pending.replace(KNOWLEDGE_EDITS)
+    return {"id": article_id}
 
 
 @app.post("/retrieve")
@@ -267,12 +351,10 @@ def retrieve(incident: Incident):
     vector = embed([incident.text])[0]
     query_terms = set(re.findall(r"[\w-]{3,}", incident.text.lower()))
     candidates = []
-    chunks = {row["id"]: row for row in json.loads(INDEX.read_text(encoding="utf-8"))}
-    for path in ARTICLE_OVERRIDES.glob("article-*.json"):
-        raw = custom_source(path)
-        chunks[raw["id"]] = {**raw, "vector": article_vector(raw["section"], raw["title"], raw["text"])}
-    for raw in chunks.values():
-        other = raw.pop("vector")
+    for raw in active_knowledge().values():
+        other = raw.pop("vector", None)
+        if other is None:
+            other = legacy_vector(raw["title"], raw["section"], raw["text"])
         dot = sum(a * b for a, b in zip(vector, other, strict=True))
         norms = (sum(a * a for a in vector) * sum(b * b for b in other)) ** 0.5
         score = dot / norms if norms else 0
@@ -307,10 +389,13 @@ def emergency_section(text: str) -> str | None:
     return None
 
 
-def knowledge_section(section_id: str) -> dict:
-    override = ARTICLE_OVERRIDES / f"article-{section_id}.json"
-    if override.is_file():
-        return custom_source(override)
+def knowledge_section(section_id: str) -> dict | None:
+    edits = knowledge_edits()
+    if section_id in edits:
+        edit = edits[section_id]
+        return {key: value for key, value in edit.items() if key != "vector"} if edit else None
+    if legacy := legacy_article(section_id):
+        return legacy
     document, number = section_id.rsplit("-", 1)
     path = ROOT / "kb" / f"{document}.md"
     title, *sections = re.split(r"^## ", path.read_text(encoding="utf-8"), flags=re.M)
@@ -353,7 +438,10 @@ def resolve(incident: Incident):
     hazard = emergency_section(incident.text)
     if hazard:
         source = knowledge_section(hazard)
-        return reviewed_plan(source, emergency=True)
+        if source:
+            return reviewed_plan(source, emergency=True)
+        return {"status": "suggested", "emergency": True, "take": [], "sources": [],
+                "steps": ["Покиньте опасную зону по плану объекта. Из безопасного места вызовите 112 и сообщите диспетчеру."]}
     text = incident.text.casefold()
     if re.fullmatch(
         r"\s*(?:помогите[!,. ]+)?(?:ничего не работает|вс[её] сломалось|"
@@ -364,10 +452,13 @@ def resolve(incident: Incident):
         r"(?:нескольк\w*|много|все|\b(?:[2-9]|\d{2,})\b)\s+принтер|"
         r"принтер\w*[^.!?]{0,30}у всех|массов\w* сбой печати", text
     ):
-        return reviewed_plan(knowledge_section("printing-14"))
+        source = knowledge_section("printing-14")
+        if source:
+            return reviewed_plan(source)
     if re.search(r"принтер|печать|картридж|тонер", text) and CONSUMABLE.search(text):
         source = knowledge_section("printing-11")
-        return reviewed_plan(source)
+        if source:
+            return reviewed_plan(source)
     try:
         sources = [source for source in retrieve(incident)["sources"]
                    if source.get("document") != "emergency.md"

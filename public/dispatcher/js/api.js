@@ -43,8 +43,9 @@
     ticketStatistics: range => request(api+'/reports?'+new URLSearchParams(range)),
     listAudit: () => request(api+'/audit'),
     listEngineersDashboard: () => request(api+'/engineers'),
-    saveArticle: article => post(api+'/articles',article),
     listArticles: () => request(api+'/articles'),
+    saveArticle: body => post(api+'/articles',body),
+    removeArticle: article => post(api+'/articles/'+id(article)+'/remove',{}),
     getArticle: article => request(api+'/articles/'+id(article)),
     transcribe: (file,name) => multipart('/intake/transcriptions','audio',file,name),
     ocr: file => multipart(api+'/ocr','file',file,file.name)

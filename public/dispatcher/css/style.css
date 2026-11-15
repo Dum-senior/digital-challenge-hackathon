@@ -139,3 +139,10 @@ input[type=date]:focus,input[type=url]:focus{border-color:#82a7f3;box-shadow:0 0
 .assignment-risk[hidden]{display:none}
 .stats-table th,.stats-table td{white-space:normal}
 @media(prefers-reduced-motion:reduce){.sla-rail i,.sla-rail::before{transition:none}}
+.sla-overview{margin:0 0 18px}.sla-overview h2{margin:0;font-size:17px}
+.sla-clock-shared{max-width:100%;min-height:94px}.sla-clock-shared .sla-clock-time{font-size:clamp(18px,3vw,27px);line-height:1.2}
+.sla-clock-shared .sla-clock-title{font-size:12px}.sla-clock-shared .button.link{justify-self:start;padding:4px 0}
+.urgent-flash{color:#a71931;animation:emergency-flash 1.5s ease-in-out infinite}
+@keyframes emergency-flash{0%,100%{opacity:1}50%{opacity:.38}}
+@media(prefers-reduced-motion:reduce){.urgent-flash{animation:none}}
+.kb-article-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}

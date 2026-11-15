@@ -25,6 +25,6 @@ COPY services/dispatcher-api/requirements.txt .
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 COPY --chown=inference:inference services/dispatcher-api/app.py .
 COPY --chown=inference:inference services/dispatcher-api/kb ./kb
-RUN chown inference:inference /inference
+RUN mkdir -p /inference/knowledge-data && chown inference:inference /inference /inference/knowledge-data
 USER inference
 CMD ["sh","-ec","python3 app.py && exec uvicorn app:app --host 0.0.0.0 --port 8092 --limit-concurrency 24"]

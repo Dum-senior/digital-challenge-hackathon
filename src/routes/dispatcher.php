@@ -417,62 +417,47 @@ function dispatcherResolve(string $text): never
     _apiJson($result);
 }
 
-/** Serve the same Markdown sections used to build the embedding index. */
-function dispatcherArticles(): array
+function dispatcherKnowledge(array $payload): array
 {
-    $articles=[];
-    foreach (glob(ROOT_DIR.'/services/dispatcher-api/kb/*.md') as $file) {
-        $sections=preg_split('/^## /m',file_get_contents($file));
-        $category=trim(ltrim(array_shift($sections),'# '));
-        foreach ($sections as $i=>$section) {
-            [$name,$content]=explode("\n",$section,2);
-            $id=basename($file,'.md').'-'.($i+1);
-            $articles[$id]=['id'=>$id,'title'=>trim($name),'category'=>$category,'content'=>trim($content)];
-        }
+    $token = env('INTAKE_SERVICE_TOKEN');
+    $url = rtrim(env('DISPATCHER_INFERENCE_URL', 'http://127.0.0.1:8092'), '/') . '/knowledge';
+    $context = stream_context_create(['http'=>['method'=>'POST','timeout'=>60,'follow_location'=>0,'ignore_errors'=>true,
+        'header'=>"Content-Type: application/json\r\nAuthorization: Bearer {$token}\r\n",
+        'content'=>IntakeDispatcher::json($payload)]]);
+    session_write_close();
+    $response = @file_get_contents($url, false, $context);
+    $result = is_string($response) ? json_decode($response, true) : null;
+    if (!is_array($result)) _apiJson(['error'=>'База знаний временно недоступна'],503);
+    if (isset($result['detail'])) {
+        $status = preg_match('/^HTTP\/\S+ (\d{3})/', $http_response_header[0] ?? '', $match) ? (int)$match[1] : 503;
+        $message = is_string($result['detail']) && in_array($status, [404,422], true)
+            ? $result['detail'] : 'Не удалось обработать статью базы знаний';
+        _apiJson(['error'=>$message], in_array($status, [404,422], true) ? $status : 503);
     }
-    foreach (glob(ROOT_DIR.'/storage/dispatcher-kb/article-*.json') as $file) {
-        $article=json_decode(file_get_contents($file),true);
-        if (is_array($article)) $articles[$article['id']]=$article;
-    }
-    return $articles;
+    return $result;
 }
+
 $router->get('/workspace/api/articles', static function (): void {
     dispatcherActor(['admin']);
-    _apiJson(array_values(dispatcherArticles()));
+    _apiJson(dispatcherKnowledge(['action'=>'list'])['articles']);
 });
 $router->get('/workspace/api/articles/{id}', static function (array $p): void {
     dispatcherActor(['admin','dispatcher','engineer']);
-    $article=dispatcherArticles()[$p['id']]??null;
-    if (!$article) _apiJson(['error'=>'Источник не найден'],404);
-    $article['content_html']=renderMarkdown($article['content']);
+    $article = dispatcherKnowledge(['action'=>'get','id'=>$p['id']])['article'];
+    $article['content_html'] = renderMarkdown($article['content']);
     _apiJson($article);
 });
-
 $router->post('/workspace/api/articles', static function (): void {
     dispatcherActor(['admin']);
-    $input=_intakeBody();
-    $id=$input['id']??null;
-    $articles=dispatcherArticles();
-    if ($id!==null && (!is_string($id) || !isset($articles[$id]))) _apiJson(['error'=>'Статья не найдена'],404);
-    $article=['id'=>$id??'custom-'.bin2hex(random_bytes(8))];
-    foreach (['title'=>160,'category'=>80,'content'=>3500] as $field=>$limit) {
-        $value=$input[$field]??null;
-        if (!is_string($value) || trim($value)==='' || mb_strlen($value)>$limit) {
-            _apiJson(['error'=>'Заполните название, раздел и текст статьи в пределах указанной длины'],422);
-        }
-        $article[$field]=trim($value);
+    $input = _intakeBody();
+    if (array_diff(array_keys($input), ['id','title','category','content']) !== []) {
+        _apiJson(['error'=>'Неизвестные поля статьи'],422);
     }
-    $dir=ROOT_DIR.'/storage/dispatcher-kb';
-    if (!is_dir($dir) && !@mkdir($dir,0755) && !is_dir($dir)) _apiJson(['error'=>'Хранилище статей недоступно'],503);
-    $temp=tempnam($dir,'pending-');
-    if ($temp===false) _apiJson(['error'=>'Хранилище статей недоступно'],503);
-    $data=IntakeDispatcher::json($article);
-    if (file_put_contents($temp,$data)!==strlen($data) || !chmod($temp,0644)
-        || !rename($temp,$dir.'/article-'.$article['id'].'.json')) {
-        unlink($temp);
-        _apiJson(['error'=>'Не удалось сохранить статью'],503);
-    }
-    _apiJson($article);
+    _apiJson(dispatcherKnowledge(['action'=>'save'] + $input));
+});
+$router->post('/workspace/api/articles/{id}/remove', static function (array $p): void {
+    dispatcherActor(['admin']);
+    _apiJson(dispatcherKnowledge(['action'=>'delete','id'=>$p['id']]));
 });
 
 $router->post('/workspace/api/ocr', static function (): void {

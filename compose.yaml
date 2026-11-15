@@ -63,8 +63,6 @@ services:
     volumes:
       - storage:/app/storage
   inference:
-    volumes:
-      - storage:/app/storage:ro
     build:
       context: .
       dockerfile: docker/web.Dockerfile
@@ -73,9 +71,13 @@ services:
     environment:
       DISPATCHER_API_TOKEN: ${DISPATCHER_API_TOKEN}
       DISPATCHER_LLAMA: "1"
+      DISPATCHER_KB_EDITS: /inference/knowledge-data/edits.json
       DISPATCHER_CHAT_URL: ${MODEL_HOST:-http://172.17.0.1}:11436
       DISPATCHER_EMBED_URL: ${MODEL_HOST:-http://172.17.0.1}:11437
       DISPATCHER_WHISPER_URL: ${MODEL_HOST:-http://172.17.0.1}:8090/inference
+    volumes:
+      - storage:/app/storage:ro
+      - knowledge:/inference/knowledge-data
     depends_on:
       db:
         condition: service_healthy
@@ -90,3 +92,4 @@ services:
 volumes:
   database:
   storage:
+  knowledge:
