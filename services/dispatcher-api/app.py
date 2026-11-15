@@ -1,3 +1,4 @@
+from functools import lru_cache
 import io
 import json
 import os
@@ -245,6 +246,20 @@ def build_index():
     print(f"Indexed {len(chunks)} sections")
 
 
+ARTICLE_OVERRIDES = Path("/app/storage/dispatcher-kb")
+
+
+def custom_source(path):
+    article = json.loads(path.read_text(encoding="utf-8"))
+    return {"id": article["id"], "document": article["category"], "title": article["category"],
+            "section": article["title"], "text": article["content"]}
+
+
+@lru_cache(maxsize=128)
+def article_vector(title, category, content):
+    return embed([f"{category} / {title}\n{content}"])[0]
+
+
 @app.post("/retrieve")
 def retrieve(incident: Incident):
     if not INDEX.exists():
@@ -252,7 +267,11 @@ def retrieve(incident: Incident):
     vector = embed([incident.text])[0]
     query_terms = set(re.findall(r"[\w-]{3,}", incident.text.lower()))
     candidates = []
-    for raw in json.loads(INDEX.read_text(encoding="utf-8")):
+    chunks = {row["id"]: row for row in json.loads(INDEX.read_text(encoding="utf-8"))}
+    for path in ARTICLE_OVERRIDES.glob("article-*.json"):
+        raw = custom_source(path)
+        chunks[raw["id"]] = {**raw, "vector": article_vector(raw["section"], raw["title"], raw["text"])}
+    for raw in chunks.values():
         other = raw.pop("vector")
         dot = sum(a * b for a, b in zip(vector, other, strict=True))
         norms = (sum(a * a for a in vector) * sum(b * b for b in other)) ** 0.5
@@ -289,6 +308,9 @@ def emergency_section(text: str) -> str | None:
 
 
 def knowledge_section(section_id: str) -> dict:
+    override = ARTICLE_OVERRIDES / f"article-{section_id}.json"
+    if override.is_file():
+        return custom_source(override)
     document, number = section_id.rsplit("-", 1)
     path = ROOT / "kb" / f"{document}.md"
     title, *sections = re.split(r"^## ", path.read_text(encoding="utf-8"), flags=re.M)

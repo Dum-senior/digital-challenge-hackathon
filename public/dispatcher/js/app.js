@@ -230,7 +230,7 @@ function ticketsView(assigned=false){
   </div>`;
  };
  const urgent=ticketsForRole().filter(isCriticalUnaccepted);
- const banner=isEngineer&&urgent.length?`<div class="urgent-banner" role="status" aria-label="Критические заявки ожидают реакции"><span class="urgent-banner-icon">${icon('warning',25)}</span><div><div class="urgent-head">СРОЧНО! ОЖИДАЮТ ПРИНЯТИЯ: ${urgent.length}</div><div class="urgent-details">Критическая заявка #${esc(urgent[0].id)} · ${esc(urgent[0].subject)} · ${deadlineHtml(urgent[0])}</div></div>${btn('Перейти к заявке '+icon('arrow',15),'focus-urgent','button urgent-quick','data-id="'+esc(urgent[0].id)+'"')}</div>`:'';
+ const banner=isEngineer&&urgent.length?`<div class="urgent-banner" role="status" aria-label="Критические заявки ожидают реакции"><span class="urgent-banner-icon">${icon('warning',25)}</span><div><div class="urgent-head">ВНИМАНИЕ! ОЖИДАЮТ ПРИНЯТИЯ: ${urgent.length}</div><div class="urgent-details">Критическая заявка #${esc(urgent[0].id)} · ${esc(urgent[0].subject)} · ${deadlineHtml(urgent[0])}</div></div>${btn('Перейти к заявке '+icon('arrow',15),'focus-urgent','button urgent-quick','data-id="'+esc(urgent[0].id)+'"')}</div>`:'';
  return intro(assigned?'Мои заявки':'Заявки',assigned?'Ваши обращения. Примите заявку, затем отметьте её выполнение прямо в списке.':'Срочные заявки поднимаются в очереди по мере истечения SLA.')+banner+
  (isEngineer&&API.isDemo()?`<div class="demo-help">Демо: ${btn(icon('warning',13)+' Создать новую тревогу','demo-critical','button small soft')} ${btn(icon('refresh',13)+' Проверить обновления','refresh-queue','button small soft')}</div>`:isEngineer?`<div class="demo-help">${btn(icon('refresh',13)+' Проверить новые заявки','refresh-queue','button small soft')}</div>`:'')+
  `<div class="filters"><input id="ticket-search" type="search" placeholder="Поиск по номеру или тексту" value="${esc(state.ticketQuery)}"/><select id="ticket-filter-status"><option value="all">Все статусы</option>${Object.entries(statuses).filter(([k])=>k!=='needs_clarification').map(([k,v])=>`<option value="${k}" ${state.ticketStatus===k?'selected':''}>${v}</option>`).join('')}</select></div>
@@ -260,7 +260,7 @@ function assistHtml(a){
 
 function knowledgeView(){
  const docs=state.articles.filter(d=>((d.title||'')+' '+(d.description||'')+' '+(d.category||'')).toLowerCase().includes(state.kbQuery.toLowerCase()));
- return intro('База знаний','Инструкции для поиска решений.')+
+ return intro('База знаний','Инструкции для поиска решений.')+btn('Добавить статью','edit-article','button primary')+
  `<input id="kb-search" type="search" placeholder="Поиск по статьям…" value="${esc(state.kbQuery)}" style="margin:16px 0;background:#fff"/>
  <div class="kb-grid">${docs.map(d=>`<article class="surface kb-card"><span class="view-label">${esc(d.category||'Без категории')}</span><h3>${esc(d.title)}</h3><p>${esc(d.description||'')}</p>${d.source_url?`<span class="meta">Сайт: ${esc(d.source_url)}</span>`:''}
  <div class="kb-actions">${btn('Просмотр','open-article','button small soft','data-id="'+esc(d.id)+'"')}</div></article>`).join('')}</div>
@@ -269,7 +269,31 @@ function knowledgeView(){
 function articleView(article){
  if(!article)return listIsEmpty('Статья не найдена','Вернитесь к списку.');
  const lines=Array.isArray(article.content)?article.content:String(article.content||'').split(/\n+/).filter(Boolean);
- return `<button class="back" data-action="back-kb">${icon('back',15)} К базе знаний</button><article class="surface card work-focus"><div class="section-heading"><h2>${esc(article.title)}</h2></div><p class="muted">${esc(article.description||'')}</p><div class="divider"></div><ol class="steps">${lines.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`;
+ return `<button class="back" data-action="back-kb">${icon('back',15)} К базе знаний</button><article class="surface card work-focus"><div class="section-heading"><h2>${esc(article.title)}</h2>${btn('Редактировать','edit-article','button soft','data-id="'+esc(article.id)+'"')}</div><p class="muted">${esc(article.description||'')}</p><div class="divider"></div><ol class="steps">${lines.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`;
+}
+function editArticle(id){
+ const article=state.articles.find(a=>String(a.id)===id);
+ modal(`<h2>${article?'Редактировать статью':'Добавить статью'}</h2>
+ <form id="edit-article-form" data-id="${esc(id||'')}">
+ <label class="form-field"><span>Название</span><input type="text" name="title" maxlength="160" required value="${esc(article?.title||'')}"></label>
+ <label class="form-field"><span>Раздел</span><input type="text" name="category" maxlength="80" required value="${esc(article?.category||'')}"></label>
+ <label class="form-field"><span>Текст статьи (Markdown)</span><textarea name="content" maxlength="3500" required>${esc(article?.content||'')}</textarea></label>
+ <div class="form-actions end">${btn('Отмена','close-modal')}<button type="submit" class="button primary">Сохранить</button></div></form>`);
+}
+async function saveArticle(form){
+ const submit=form.querySelector('[type=submit]');
+ if(submit.disabled)return;
+ submit.disabled=true;
+ try {
+  const data=Object.fromEntries(new FormData(form));
+  if(form.dataset.id)data.id=form.dataset.id;
+  const article=await API.saveArticle(data);
+  closeModal();
+  await loadData();
+  navigate('/knowledge/'+article.id);
+  toast('Статья сохранена','success');
+ }catch(e){toast(e.message,'error');}
+ finally{submit.disabled=false;}
 }
 function progressLine(title,value,total,colour){const count=Math.max(0,Number(value||0)),max=Math.max(1,total);return `<div class="progress-row"><div class="progress-label"><span>${esc(title)}</span><strong>${count}</strong></div><div class="progress-track"><div class="progress-fill ${colour}" style="width:${Math.min(100,count/max*100)}%"></div></div></div>`;}
 function auditWidget(){
@@ -599,6 +623,7 @@ function attach(){
   else if(act==='reassign-ticket')await showAssignment(target.dataset.id);
   else if(act==='edit-ticket')showEditTicket(target.dataset.id);
   else if(act==='view-source')await showSource(target);
+  else if(act==='edit-article'&&state.role==='admin')editArticle(target.dataset.id);
   else if(act==='open-article'&&state.role==='admin')navigate('/knowledge/'+target.dataset.id);
   else if(act==='back-kb')navigate('/knowledge');
   else if(act==='login-demo'){if(!roles[target.dataset.role])return;state.role=target.dataset.role;state.currentUser=null;navigate(navigation[state.role][0][0]);await loadData();}
@@ -620,6 +645,7 @@ function attach(){
    }catch(e){toast(e.message,'error');button.disabled=false;}
   }
   else if(f.id==='stats-form')await requestStats(f);
+  else if(f.id==='edit-article-form'&&state.role==='admin')await saveArticle(f);
   else if(f.id==='edit-ticket-form'){if(state.role==='dispatcher'){const fd=new FormData(f);try{await API.updateTicket(f.dataset.id,{subject:String(fd.get('subject')||'').trim(),description:String(fd.get('description')||'').trim()});closeModal();await loadData();toast('Текст заявки сохранён','success');}catch(e){toast('Ошибка редактирования: '+e.message,'error');}}}
  });
  root.addEventListener('input',e=>{

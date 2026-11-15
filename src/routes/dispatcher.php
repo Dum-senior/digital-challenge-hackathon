@@ -430,6 +430,10 @@ function dispatcherArticles(): array
             $articles[$id]=['id'=>$id,'title'=>trim($name),'category'=>$category,'content'=>trim($content)];
         }
     }
+    foreach (glob(ROOT_DIR.'/storage/dispatcher-kb/article-*.json') as $file) {
+        $article=json_decode(file_get_contents($file),true);
+        if (is_array($article)) $articles[$article['id']]=$article;
+    }
     return $articles;
 }
 $router->get('/workspace/api/articles', static function (): void {
@@ -441,6 +445,33 @@ $router->get('/workspace/api/articles/{id}', static function (array $p): void {
     $article=dispatcherArticles()[$p['id']]??null;
     if (!$article) _apiJson(['error'=>'Источник не найден'],404);
     $article['content_html']=renderMarkdown($article['content']);
+    _apiJson($article);
+});
+
+$router->post('/workspace/api/articles', static function (): void {
+    dispatcherActor(['admin']);
+    $input=_intakeBody();
+    $id=$input['id']??null;
+    $articles=dispatcherArticles();
+    if ($id!==null && (!is_string($id) || !isset($articles[$id]))) _apiJson(['error'=>'Статья не найдена'],404);
+    $article=['id'=>$id??'custom-'.bin2hex(random_bytes(8))];
+    foreach (['title'=>160,'category'=>80,'content'=>3500] as $field=>$limit) {
+        $value=$input[$field]??null;
+        if (!is_string($value) || trim($value)==='' || mb_strlen($value)>$limit) {
+            _apiJson(['error'=>'Заполните название, раздел и текст статьи в пределах указанной длины'],422);
+        }
+        $article[$field]=trim($value);
+    }
+    $dir=ROOT_DIR.'/storage/dispatcher-kb';
+    if (!is_dir($dir) && !@mkdir($dir,0755) && !is_dir($dir)) _apiJson(['error'=>'Хранилище статей недоступно'],503);
+    $temp=tempnam($dir,'pending-');
+    if ($temp===false) _apiJson(['error'=>'Хранилище статей недоступно'],503);
+    $data=IntakeDispatcher::json($article);
+    if (file_put_contents($temp,$data)!==strlen($data) || !chmod($temp,0644)
+        || !rename($temp,$dir.'/article-'.$article['id'].'.json')) {
+        unlink($temp);
+        _apiJson(['error'=>'Не удалось сохранить статью'],503);
+    }
     _apiJson($article);
 });
 

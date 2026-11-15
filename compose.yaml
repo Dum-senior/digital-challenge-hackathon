@@ -63,6 +63,8 @@ services:
     volumes:
       - storage:/app/storage
   inference:
+    volumes:
+      - storage:/app/storage:ro
     build:
       context: .
       dockerfile: docker/web.Dockerfile
